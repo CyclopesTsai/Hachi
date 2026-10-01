@@ -117,3 +117,6 @@ Phase 6：視窗狀態記憶、深色模式、快捷鍵整理、electron-builder
 - 程式碼風格：啟用 ESLint + Prettier，TypeScript strict 模式
 
 請先從 Phase 0 開始，先說明規劃（資料夾結構、IPC 設計概要、JSON schema 概要、狀態管理與 UI 元件庫的選擇），等我確認後再動手實作。
+
+【進度追蹤】
+- 開始工作前先讀 docs/progress.md（目前進度、已確認的決策、下一步）；每完成一個 Phase 或做出新決策都要更新它
