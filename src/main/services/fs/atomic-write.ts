@@ -46,6 +46,28 @@ function enqueue<T>(key: string, task: () => Promise<T>): Promise<T> {
   return next
 }
 
+async function writeUnqueued(target: string, data: string | Uint8Array): Promise<void> {
+  await mkdir(path.dirname(target), { recursive: true })
+  const tmp = tempPathFor(target)
+  let handle: FileHandle | undefined
+  try {
+    handle = await open(tmp, 'w', 0o644)
+    await handle.writeFile(data)
+    await handle.sync()
+    await handle.close()
+    handle = undefined
+    await renameWithRetry(tmp, target)
+  } catch (error) {
+    await handle?.close().catch(() => undefined)
+    await rm(tmp, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+function toJson(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`
+}
+
 /**
  * Atomically replaces `filePath` with `data`:
  * write to a temp file in the same directory → fsync → rename over the target.
@@ -53,26 +75,27 @@ function enqueue<T>(key: string, task: () => Promise<T>): Promise<T> {
  */
 export function writeFileAtomic(filePath: string, data: string | Uint8Array): Promise<void> {
   const target = path.resolve(filePath)
-  return enqueue(target, async () => {
-    await mkdir(path.dirname(target), { recursive: true })
-    const tmp = tempPathFor(target)
-    let handle: FileHandle | undefined
-    try {
-      handle = await open(tmp, 'w', 0o644)
-      await handle.writeFile(data)
-      await handle.sync()
-      await handle.close()
-      handle = undefined
-      await renameWithRetry(tmp, target)
-    } catch (error) {
-      await handle?.close().catch(() => undefined)
-      await rm(tmp, { force: true }).catch(() => undefined)
-      throw error
-    }
-  })
+  return enqueue(target, () => writeUnqueued(target, data))
 }
 
 /** Serializes `value` as pretty JSON (2 spaces, trailing newline) and writes it atomically. */
 export function writeJsonAtomic(filePath: string, value: unknown): Promise<void> {
-  return writeFileAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`)
+  return writeFileAtomic(filePath, toJson(value))
+}
+
+/**
+ * Read-modify-write of a JSON file as one queued step, so concurrent updates
+ * to the same file (e.g. from two services) cannot overwrite each other.
+ * `read` loads and validates the current content; `mutate` returns the new value.
+ */
+export function updateJsonAtomic<T>(
+  filePath: string,
+  read: () => Promise<T>,
+  mutate: (current: T) => unknown
+): Promise<void> {
+  const target = path.resolve(filePath)
+  return enqueue(target, async () => {
+    const next = mutate(await read())
+    await writeUnqueued(target, toJson(next))
+  })
 }

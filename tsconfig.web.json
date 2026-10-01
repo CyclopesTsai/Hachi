@@ -7,5 +7,5 @@
     "tsBuildInfoFile": "./node_modules/.cache/tsc/web.tsbuildinfo"
   },
   "include": ["src/renderer/src/**/*", "src/shared/**/*", "src/shared/**/*.json"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/shared/**/*.test.ts"]
 }

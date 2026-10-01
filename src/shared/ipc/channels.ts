@@ -17,7 +17,15 @@ export const INVOKE = {
   workspaceOpenWithDialog: 'workspace:openWithDialog',
   workspaceListRecent: 'workspace:listRecent',
   workspaceRemoveRecent: 'workspace:removeRecent',
-  dialogSelectDirectory: 'dialog:selectDirectory'
+  workspaceRename: 'workspace:rename',
+  workspaceDelete: 'workspace:delete',
+  dialogSelectDirectory: 'dialog:selectDirectory',
+  treeGet: 'tree:get',
+  itemCreate: 'item:create',
+  itemRename: 'item:rename',
+  itemDuplicate: 'item:duplicate',
+  itemDelete: 'item:delete',
+  itemMove: 'item:move'
 } as const
 
 export type InvokeChannel = (typeof INVOKE)[keyof typeof INVOKE]
@@ -26,7 +34,8 @@ export type InvokeChannel = (typeof INVOKE)[keyof typeof INVOKE]
 export const EVENTS = {
   menuCommand: 'menu:command',
   workspaceChanged: 'workspace:changed',
-  configChanged: 'config:changed'
+  configChanged: 'config:changed',
+  treeChanged: 'tree:changed'
 } as const
 
 export type EventChannel = (typeof EVENTS)[keyof typeof EVENTS]

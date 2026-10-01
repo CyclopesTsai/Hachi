@@ -15,8 +15,9 @@ import {
   type WorkspaceFile
 } from '@shared/schemas/workspace'
 import type { ConfigService } from './config-service'
-import { writeFileAtomic, writeJsonAtomic } from './fs/atomic-write'
-import { readVersionedJson } from './fs/json-file'
+import type { TrashFn } from './collection-service'
+import { updateJsonAtomic, writeFileAtomic, writeJsonAtomic } from './fs/atomic-write'
+import { readJsonFile, readVersionedJson } from './fs/json-file'
 
 type Listener = (workspace: WorkspaceInfo | null) => void
 
@@ -36,7 +37,8 @@ export class WorkspaceService {
 
   constructor(
     private readonly config: ConfigService,
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    private readonly trash: TrashFn = () => Promise.reject(new Error('Trash is not available'))
   ) {}
 
   getCurrent(): WorkspaceInfo | null {
@@ -144,6 +146,76 @@ export class WorkspaceService {
   }
 
   async removeRecent(dir: string): Promise<RecentWorkspaceEntry[]> {
+    await this.config.removeRecentWorkspace(dir)
+    return this.listRecent()
+  }
+
+  /** Renames the current Workspace. Only the display name changes; the folder stays put. */
+  async rename(nameInput: string): Promise<WorkspaceInfo> {
+    const current = this.current
+    if (!current) throw new HachiError('NO_WORKSPACE', 'No Workspace is open')
+    const name = nameInput.trim()
+    const file = path.join(current.path, WORKSPACE_FILE)
+    await updateJsonAtomic(
+      file,
+      async () => {
+        await readVersionedJson(file, workspaceFormat) // validate before touching it
+        return (await readJsonFile(file)) as Record<string, unknown>
+      },
+      (raw) => ({ ...raw, name })
+    )
+    if (this.current?.path !== current.path) return current
+    this.current = { ...current, name }
+    await this.config.touchRecentWorkspace(current.path, name)
+    this.emit()
+    return this.getCurrent() as WorkspaceInfo
+  }
+
+  /**
+   * Re-reads the current workspace.json (after an external edit) and emits if the
+   * name changed. Errors are ignored: the file may be mid-edit.
+   */
+  async reloadCurrent(): Promise<void> {
+    const current = this.current
+    if (!current) return
+    try {
+      const file = await readVersionedJson(path.join(current.path, WORKSPACE_FILE), workspaceFormat)
+      if (file.name !== current.name && this.current?.path === current.path) {
+        this.current = { ...current, name: file.name }
+        await this.config.touchRecentWorkspace(current.path, file.name)
+        this.emit()
+      }
+    } catch {
+      // keep the last known good state
+    }
+  }
+
+  /**
+   * Moves a Workspace folder to the system trash and forgets it.
+   * Only Workspaces Hachi knows about (current or in the recent list) and only
+   * folders that really contain a workspace.json can be deleted.
+   */
+  async delete(dirInput: string): Promise<RecentWorkspaceEntry[]> {
+    const dir = path.resolve(dirInput)
+    const known =
+      this.current?.path === dir ||
+      this.config.get().recentWorkspaces.some((r) => path.resolve(r.path) === dir)
+    if (!known) throw new HachiError('FORBIDDEN', 'Only known Workspaces can be deleted')
+    if (!(await pathExists(path.join(dir, WORKSPACE_FILE)))) {
+      throw new HachiError('NOT_A_WORKSPACE', `${dir} is not a Hachi Workspace`)
+    }
+    if (this.current?.path === dir) {
+      // Close first so the watcher and the collection tree let go of the folder.
+      this.current = null
+      this.emit()
+    }
+    try {
+      await this.trash(dir)
+    } catch (error) {
+      throw new HachiError('IO_ERROR', `Cannot move ${dir} to the trash: ${String(error)}`, {
+        cause: error
+      })
+    }
     await this.config.removeRecentWorkspace(dir)
     return this.listRecent()
   }

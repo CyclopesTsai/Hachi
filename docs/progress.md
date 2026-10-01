@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 0 已完成並經使用者確認，**下一步是 Phase 1**（尚未開始）
+- **目前階段**：Phase 1 已實作並驗證，**等待使用者確認**；確認後進入 Phase 2（HTTP 編輯器與回應檢視器）
 - **最後更新**：2026-10-01
 
 ## Phase 進度
@@ -13,8 +13,8 @@
 | Phase | 內容                                                                                                | 狀態      |
 | ----- | --------------------------------------------------------------------------------------------------- | --------- |
 | 0     | 專案骨架、視窗、原生選單、安全設定、首次啟動引導、app-config.json、docs 初版                        | ✅ 完成   |
-| 1     | Workspace 切換 + Collection / 資料夾 / 請求樹狀（新增、重新命名、複製、刪除、拖曳排序），含檔案監聽 | ⏳ 下一步 |
-| 2     | HTTP 編輯器與回應檢視器                                                                             | —         |
+| 1     | Workspace 切換 + Collection / 資料夾 / 請求樹狀（新增、重新命名、複製、刪除、拖曳排序），含檔案監聽 | 🟡 待確認 |
+| 2     | HTTP 編輯器與回應檢視器                                                                             | ⏳ 下一步 |
 | 3     | 環境變數、多分頁、歷史紀錄                                                                          | —         |
 | 4     | WebSocket 完整功能                                                                                  | —         |
 | 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | —         |
@@ -31,30 +31,51 @@
 
 **驗證方式**：`npm run verify`（型別檢查、ESLint、Prettier、62 個單元測試、授權檢查）；`xvfb-run -a npm run test:e2e`（以 Playwright 實際啟動 App，跑 9 項冒煙檢查）。macOS 尚未實機測試。
 
+### Phase 1 完成內容
+
+- Workspace：重新命名（只改顯示名稱）、刪除（整個資料夾移到垃圾桶，需二次確認），入口在標題列的 Workspace 選單與歡迎畫面的最近清單
+- `CollectionService`（main）：掃描 `collections/` 建立樹狀資料與 id → 路徑對照表；新增 / 重新命名 / 複製 / 刪除 / 移動；所有操作依序執行並使用原子寫入
+- 檔案監聽：`WorkspaceWatcher`（chokidar），忽略 `.git` 與暫存檔，事件累積 200ms 後重新掃描；樹沒有變化時不推送
+- 掃描容錯：自動接管手動建立的資料夾、修正重複的 id、損毀檔案以錯誤圖示顯示（只能刪除）
+- UI：左側樹狀清單（右鍵選單、雙擊或 F2 改名、Delete 刪除、方向鍵展開收合）、`@dnd-kit` 拖曳（同層排序、拖進資料夾、懸停自動展開）、右側項目資訊面板（編輯器留待 Phase 2 / 4）
+- 新 IPC：`tree:get`、`item:create|rename|duplicate|delete|move`、`workspace:rename|delete`；事件 `tree:changed`；錯誤碼 `NO_WORKSPACE`、`INVALID_OPERATION`
+- 修正：檔名長度改以 UTF-8 位元組計算（上限 200），避免中文長名稱超過檔案系統限制
+
+**驗證方式**：`npm run verify`（122 個單元測試）；`xvfb-run -a npm run test:e2e`（16 項冒煙檢查，包含在真正的 App 中拖曳、外部修改檔案、刪除到垃圾桶）。macOS 尚未實機測試。
+
 ## 決策紀錄（已與使用者確認）
 
-| #   | 決策          | 內容                                                                                                                                            |
-| --- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | 機密變數存放  | 存在 `<workspace>/.hachi-secrets.json`（已列入 .gitignore）；環境檔中 secret 的 value 一律留空。之後若接 Keychain，會作為可切換的另一種存放後端 |
-| 2   | 請求檔名      | 用名稱的 slug 當檔名（保留中文），檔案內另存 `id`；重新命名時一併改檔名                                                                         |
-| 3   | history.json  | 預設加入 .gitignore；只存未替換變數的原始請求與回應摘要（狀態碼、耗時、大小），不存回應 Body                                                    |
-| 4   | UI / 狀態管理 | shadcn/ui（Radix + Tailwind）、Zustand、CodeMirror 6（Phase 2 起）、lucide 圖示                                                                 |
-| 5   | 授權          | 專案採 MIT。只能使用寬鬆授權的相依套件，以 `npm run check:licenses` 檢查。複製進專案的第三方程式碼需記錄在 THIRD_PARTY_NOTICES.md               |
-| 6   | 版權人        | `Hachi contributors`（不要填 Cyclopes）                                                                                                         |
-| 7   | Bundle ID     | 暫用 `tw.com.cyclopes.hachi`，集中在 `src/shared/app-info.json`，使用者之後會換成正式的                                                         |
-| 8   | Git 流程      | 直接 commit 並 push 到 `main`，不另開分支                                                                                                       |
-| 9   | 工作流程      | 每個 Phase 完成後先實際執行驗證，簡述做了什麼與如何驗證，**等使用者確認再進下一階段**；不確定的設計決策先問使用者                               |
-| 10  | 語言          | App 介面用繁體中文；原生選單依規格用英文                                                                                                        |
-| 11  | 套件版本      | TypeScript 用 6.0（typescript-eslint 尚未支援 7）；Vite 用 7（electron-vite 5 只支援到 7）                                                      |
+| #   | 決策                | 內容                                                                                                                                            |
+| --- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 機密變數存放        | 存在 `<workspace>/.hachi-secrets.json`（已列入 .gitignore）；環境檔中 secret 的 value 一律留空。之後若接 Keychain，會作為可切換的另一種存放後端 |
+| 2   | 請求檔名            | 用名稱的 slug 當檔名（保留中文），檔案內另存 `id`；重新命名時一併改檔名                                                                         |
+| 3   | history.json        | 預設加入 .gitignore；只存未替換變數的原始請求與回應摘要（狀態碼、耗時、大小），不存回應 Body                                                    |
+| 4   | UI / 狀態管理       | shadcn/ui（Radix + Tailwind）、Zustand、CodeMirror 6（Phase 2 起）、lucide 圖示                                                                 |
+| 5   | 授權                | 專案採 MIT。只能使用寬鬆授權的相依套件，以 `npm run check:licenses` 檢查。複製進專案的第三方程式碼需記錄在 THIRD_PARTY_NOTICES.md               |
+| 6   | 版權人              | `Hachi contributors`（不要填 Cyclopes）                                                                                                         |
+| 7   | Bundle ID           | 暫用 `tw.com.cyclopes.hachi`，集中在 `src/shared/app-info.json`，使用者之後會換成正式的                                                         |
+| 8   | Git 流程            | 直接 commit 並 push 到 `main`，不另開分支                                                                                                       |
+| 9   | 工作流程            | 每個 Phase 完成後先實際執行驗證，簡述做了什麼與如何驗證，**等使用者確認再進下一階段**；不確定的設計決策先問使用者                               |
+| 10  | 語言                | App 介面用繁體中文；原生選單依規格用英文                                                                                                        |
+| 11  | 套件版本            | TypeScript 用 6.0（typescript-eslint 尚未支援 7）；Vite 用 7（electron-vite 5 只支援到 7）                                                      |
+| 12  | 刪除項目            | Collection / 資料夾 / 請求刪除時移到系統垃圾桶（`shell.trashItem`），刪除前需確認                                                               |
+| 13  | Workspace 改名      | 只改 `workspace.json` 的顯示名稱，資料夾路徑不變                                                                                                |
+| 14  | Workspace 刪除      | 提供「從清單移除」（不動檔案）與「刪除」（整個資料夾移到垃圾桶，需二次確認）                                                                    |
+| 15  | 複製命名            | `<名稱> copy`、`<名稱> copy 2`…；複製資料夾 / Collection 時所有項目都產生新 id                                                                  |
+| 16  | 檔名 slug           | 小寫、空白換成 `-`、保留中文；重名加 `-2`、`-3`（決策 2 的細節）                                                                                |
+| 17  | 資料夾層數          | 不限層數                                                                                                                                        |
+| 18  | Collection 共用設定 | Headers / Auth / 變數的欄位在 Phase 1 定義，編輯介面在 Phase 2 與請求編輯器共用元件                                                             |
+| 19  | 排序                | `order` / `collectionOrder` 存 id 而非檔名                                                                                                      |
 
-## 下一步：Phase 1 待確認事項
+## 下一步：Phase 2 待確認事項
 
-開始實作前要先向使用者說明規劃並確認，包括：
+Phase 1 確認後，開始實作前要先向使用者說明 Phase 2 的規劃並確認，預計包括：
 
-- Collection、資料夾、請求的 JSON 格式（`docs/schema.md` 的草案）定案
-- 複製時的命名規則（例如「xxx copy」）與同名衝突的處理方式
-- 刪除時要移到系統垃圾桶（`shell.trashItem`）還是永久刪除
-- 檔案監聽（chokidar）偵測到外部修改時，UI 如何同步
+- HTTP 發送用 undici 或 Node 內建 fetch、Proxy 設定的格式（`workspace.json` 的 `settings` 與請求的覆寫方式）
+- 請求檔 body 各模式（json / raw / formData / urlencoded）的欄位定案；form-data 是否支援檔案欄位
+- 回應大小上限、HTML 預覽的沙箱方式（CSP / iframe sandbox）
+- 儲存行為：自動儲存或手動（CmdOrCtrl+S）——與 Phase 3 多分頁「未儲存變更提示」相關
+- Collection 層級 Headers / Auth / 變數編輯介面的位置
 
 ## 開發環境注意事項
 

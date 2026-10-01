@@ -4,6 +4,7 @@ import { WelcomeScreen } from '@renderer/features/onboarding/WelcomeScreen'
 import { WorkspaceShell } from '@renderer/features/workspace/WorkspaceShell'
 import { useSystemTheme } from '@renderer/hooks/use-system-theme'
 import { useAppStore } from '@renderer/stores/app-store'
+import { useTreeStore } from '@renderer/stores/tree-store'
 
 function useMainProcessEvents(): void {
   useEffect(() => {
@@ -11,6 +12,7 @@ function useMainProcessEvents(): void {
     const offs = [
       window.hachi.on(EVENTS.workspaceChanged, (ws) => store().workspaceChanged(ws)),
       window.hachi.on(EVENTS.configChanged, (config) => store().configChanged(config)),
+      window.hachi.on(EVENTS.treeChanged, (tree) => useTreeStore.getState().applyTree(tree)),
       window.hachi.on(EVENTS.menuCommand, ({ command }) => {
         switch (command) {
           case 'workspace.new':
@@ -34,6 +36,14 @@ export function App() {
   useEffect(() => {
     void bootstrap()
   }, [bootstrap])
+
+  // Load the Collection tree whenever the current Workspace changes.
+  const workspaceId = currentWorkspace?.id ?? null
+  useEffect(() => {
+    const tree = useTreeStore.getState()
+    tree.reset()
+    if (workspaceId) void tree.load()
+  }, [workspaceId])
 
   if (status === 'loading') {
     return (

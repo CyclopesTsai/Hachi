@@ -1,4 +1,4 @@
-import { FolderOpen, FolderPlus, History, X } from 'lucide-react'
+import { FolderOpen, FolderPlus, History, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { sanitizeFileName } from '@shared/file-names'
 import { WORKSPACE_NAME_MAX } from '@shared/schemas/workspace'
@@ -13,6 +13,7 @@ import {
 } from '@renderer/components/ui/card'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { DeleteWorkspaceDialog } from '@renderer/features/workspace/WorkspaceDialogs'
 import { IpcError, errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from '@renderer/stores/app-store'
 
@@ -141,6 +142,7 @@ function CreateWorkspaceForm() {
 function RecentList() {
   const { recent, openWorkspace, removeRecent, currentWorkspace } = useAppStore()
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<{ name: string; path: string } | null>(null)
 
   if (recent.length === 0) {
     return <p className="text-sm text-muted-foreground">尚無最近開啟的 Workspace。</p>
@@ -179,12 +181,25 @@ function RecentList() {
                 {r.path}
               </span>
             </button>
+            {r.exists && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                title="刪除 Workspace（移到垃圾桶）"
+                aria-label={`刪除 ${r.name}`}
+                onClick={() => setDeleting(r)}
+              >
+                <Trash2 />
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-              title="從清單移除"
+              title="從清單移除（不刪除檔案）"
               aria-label={`從清單移除 ${r.name}`}
               onClick={() => void removeRecent(r.path)}
             >
@@ -193,6 +208,7 @@ function RecentList() {
           </li>
         ))}
       </ul>
+      <DeleteWorkspaceDialog target={deleting} onClose={() => setDeleting(null)} />
     </div>
   )
 }

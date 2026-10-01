@@ -1,52 +1,85 @@
-import { ArrowLeftRight, FolderTree } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, Pencil, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import type { WorkspaceInfo } from '@shared/ipc/api'
 import { AppLogo } from '@renderer/components/app-logo'
 import { Button } from '@renderer/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
+import { CollectionSidebar } from '@renderer/features/collections/CollectionSidebar'
+import { ItemDetails } from '@renderer/features/collections/ItemDetails'
 import { useAppStore } from '@renderer/stores/app-store'
+import { DeleteWorkspaceDialog, RenameWorkspaceDialog } from './WorkspaceDialogs'
 
-/**
- * Main layout once a Workspace is open. Phase 0 only shows the frame;
- * the Collection tree (Phase 1) and request editors (Phase 2+) plug in here.
- */
+/** Main layout once a Workspace is open: header, Collection tree, item panel. */
 export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
   const showWelcome = useAppStore((s) => s.showWelcome)
+  const [renaming, setRenaming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   return (
     <div className="flex h-full flex-col" data-testid="workspace-shell">
-      <header className="flex h-11 shrink-0 items-center gap-3 border-b px-3">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
         <AppLogo />
         <span className="text-muted-foreground">/</span>
-        <span className="truncate text-sm font-medium" data-testid="current-workspace-name">
-          {workspace.name}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-w-0 gap-1 px-2"
+              data-testid="workspace-menu"
+            >
+              <span className="truncate font-medium" data-testid="current-workspace-name">
+                {workspace.name}
+              </span>
+              <ChevronDown className="text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => setRenaming(true)}>
+              <Pencil />
+              重新命名 Workspace…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => showWelcome()}>
+              <ArrowLeftRight />
+              切換 Workspace…
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)}>
+              <Trash2 />
+              刪除 Workspace…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <span
+          className="hidden min-w-0 truncate font-mono text-xs text-muted-foreground lg:inline"
+          title={workspace.path}
+        >
+          {workspace.path}
         </span>
-        <div className="flex-1" />
-        <Button variant="ghost" size="sm" onClick={() => showWelcome()}>
-          <ArrowLeftRight />
-          切換 Workspace
-        </Button>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-64 shrink-0 flex-col border-r bg-muted/40">
-          <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            <FolderTree className="size-3.5" />
-            Collections
-          </div>
-          <p className="px-3 text-sm text-muted-foreground">
-            Collection 樹狀清單將於 Phase 1 加入。
-          </p>
-        </aside>
-
-        <main className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-          <p className="text-lg font-medium">Workspace 已就緒</p>
-          <p
-            className="max-w-md font-mono text-xs break-all text-muted-foreground"
-            title={workspace.path}
-          >
-            {workspace.path}
-          </p>
+        <CollectionSidebar />
+        <main className="flex min-w-0 flex-1 flex-col">
+          <ItemDetails />
         </main>
       </div>
+
+      <RenameWorkspaceDialog
+        open={renaming}
+        initialName={workspace.name}
+        onOpenChange={setRenaming}
+      />
+      <DeleteWorkspaceDialog
+        target={deleting ? workspace : null}
+        onClose={() => setDeleting(false)}
+      />
     </div>
   )
 }

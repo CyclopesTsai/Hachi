@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { BrowserWindow, app, dialog, nativeTheme } from 'electron'
+import { BrowserWindow, app, dialog, nativeTheme, shell } from 'electron'
 import { APP_NAME, WORKSPACE_DIR_NAME } from '@shared/app-info'
 import { isHachiError } from '@shared/errors'
 import type { EventPayloads, WorkspaceInfo } from '@shared/ipc/api'
@@ -10,8 +10,10 @@ import { registerIpcHandlers } from './ipc/register'
 import { installMenu, type MenuActions } from './menu'
 import { platform } from './platform'
 import { applySecurityPolicies } from './security'
+import { CollectionService, type TrashFn } from './services/collection-service'
 import { APP_CONFIG_FILE, ConfigService } from './services/config-service'
 import { WorkspaceService } from './services/workspace-service'
+import { WorkspaceWatcher } from './services/workspace-watcher'
 import { createMainWindow, getRendererUrl } from './window'
 
 app.setName(APP_NAME)
@@ -49,7 +51,30 @@ async function bootstrap(): Promise<void> {
   await config.load()
   nativeTheme.themeSource = config.get().theme
 
-  const workspaces = new WorkspaceService(config)
+  const trash: TrashFn = (absPath) => shell.trashItem(absPath)
+  const workspaces = new WorkspaceService(config, undefined, trash)
+  const collections = new CollectionService(trash)
+  const watcher = new WorkspaceWatcher((areas) => {
+    if (areas.has('collections') || areas.has('workspace')) void collections.refresh()
+    if (areas.has('workspace')) void workspaces.reloadCurrent()
+  })
+
+  // The collection tree and the file watcher follow the current Workspace.
+  let switching: Promise<void> = Promise.resolve()
+  let openedPath: string | null = null
+  workspaces.onChange((current) => {
+    if ((current?.path ?? null) === openedPath) return // e.g. a rename: same folder
+    openedPath = current?.path ?? null
+    void collections.open(current?.path ?? null, current?.id ?? null)
+    switching = switching
+      .then(async () => {
+        if (current) await watcher.start(current.path)
+        else await watcher.stop()
+      })
+      .catch((error: unknown) => console.warn(`[watcher] ${String(error)}`))
+  })
+  collections.onChange((tree) => send(EVENTS.treeChanged, tree))
+
   await workspaces.restoreLast()
 
   const defaultWorkspaceDir = path.join(app.getPath('documents'), WORKSPACE_DIR_NAME)
@@ -110,6 +135,7 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers({
     config,
     workspaces,
+    collections,
     defaultWorkspaceDir,
     getWindow: () => mainWindow,
     isTrustedSender,

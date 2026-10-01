@@ -92,3 +92,31 @@ describe('createSenderValidator', () => {
     expect(isTrusted('http://localhost:5173/')).toBe(false)
   })
 })
+
+describe('item channel validation', () => {
+  const ok = async () => ({ id: 'x', tree: { workspaceId: null, collections: [] } })
+
+  it('requires requestType when creating a request', async () => {
+    const handle = createHandler(INVOKE.itemCreate, ok)
+    await expect(handle({ parentId: 'p', kind: 'request', name: 'R' })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'VALIDATION_ERROR' }
+    })
+    await expect(
+      handle({ parentId: 'p', kind: 'request', name: 'R', requestType: 'http' })
+    ).resolves.toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['negative index', { id: 'a', parentId: 'b', index: -1 }],
+    ['fractional index', { id: 'a', parentId: 'b', index: 1.5 }],
+    ['path instead of id field', { path: '/etc', parentId: null, index: 0 }],
+    ['empty id', { id: '', parentId: null, index: 0 }]
+  ])('rejects item:move with %s', async (_label, input) => {
+    const handle = createHandler(INVOKE.itemMove, () => ({ workspaceId: null, collections: [] }))
+    await expect(handle(input)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'VALIDATION_ERROR' }
+    })
+  })
+})

@@ -4,6 +4,7 @@
  */
 import { z } from 'zod'
 import { themeSchema } from '../schemas/app-config'
+import { REQUEST_TYPES, itemNameSchema } from '../schemas/collection'
 import { workspaceNameSchema } from '../schemas/workspace'
 import type { InvokeMap } from './api'
 import { INVOKE, type InvokeChannel } from './channels'
@@ -23,6 +24,21 @@ export const absolutePathSchema = z
 
 const noInput = z.undefined()
 
+/** Item ids come from the tree the renderer received; paths are never accepted. */
+const itemIdSchema = z.string().min(1).max(1024)
+
+const itemCreateSchema = z
+  .strictObject({
+    parentId: itemIdSchema.nullable(),
+    kind: z.enum(['collection', 'folder', 'request']),
+    name: itemNameSchema,
+    requestType: z.enum(REQUEST_TYPES).optional()
+  })
+  .refine((v) => v.kind !== 'request' || v.requestType !== undefined, {
+    message: 'requestType is required for requests',
+    path: ['requestType']
+  })
+
 export const inputSchemas = {
   [INVOKE.appGetInfo]: noInput,
   [INVOKE.appGetDefaultWorkspaceDir]: noInput,
@@ -37,9 +53,21 @@ export const inputSchemas = {
   [INVOKE.workspaceOpenWithDialog]: noInput,
   [INVOKE.workspaceListRecent]: noInput,
   [INVOKE.workspaceRemoveRecent]: z.strictObject({ path: absolutePathSchema }),
+  [INVOKE.workspaceRename]: z.strictObject({ name: workspaceNameSchema }),
+  [INVOKE.workspaceDelete]: z.strictObject({ path: absolutePathSchema }),
   [INVOKE.dialogSelectDirectory]: z.strictObject({
     title: z.string().max(200).optional(),
     defaultPath: absolutePathSchema.optional()
+  }),
+  [INVOKE.treeGet]: noInput,
+  [INVOKE.itemCreate]: itemCreateSchema,
+  [INVOKE.itemRename]: z.strictObject({ id: itemIdSchema, name: itemNameSchema }),
+  [INVOKE.itemDuplicate]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.itemDelete]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.itemMove]: z.strictObject({
+    id: itemIdSchema,
+    parentId: itemIdSchema.nullable(),
+    index: z.number().int().min(0).max(1_000_000)
   })
 } as const satisfies Record<InvokeChannel, z.ZodType>
 

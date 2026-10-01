@@ -29,6 +29,10 @@ interface AppState {
   openWorkspace(path: string): Promise<WorkspaceInfo>
   openWorkspaceWithDialog(): Promise<WorkspaceInfo | null>
   removeRecent(path: string): Promise<void>
+  /** Renames the current Workspace (display name only). */
+  renameWorkspace(name: string): Promise<void>
+  /** Moves a Workspace folder to the system trash. */
+  deleteWorkspace(path: string): Promise<void>
   /** Applies a `workspace:changed` push event from main. */
   workspaceChanged(workspace: WorkspaceInfo | null): void
   configChanged(config: AppConfig): void
@@ -92,6 +96,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   async removeRecent(path) {
     set({ recent: await unwrap(window.hachi.workspace.removeRecent({ path })) })
+  },
+
+  async renameWorkspace(name) {
+    const workspace = await unwrap(window.hachi.workspace.rename({ name }))
+    set({ currentWorkspace: workspace })
+    await get().refreshRecent()
+  },
+
+  async deleteWorkspace(path) {
+    const recent = await unwrap(window.hachi.workspace.delete({ path }))
+    set((s) => ({
+      recent,
+      currentWorkspace: s.currentWorkspace?.path === path ? null : s.currentWorkspace
+    }))
   },
 
   workspaceChanged(workspace) {

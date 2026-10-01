@@ -31,7 +31,19 @@ const api: HachiApi = {
     open: (input) => invoke(INVOKE.workspaceOpen, input),
     openWithDialog: () => invoke(INVOKE.workspaceOpenWithDialog),
     listRecent: () => invoke(INVOKE.workspaceListRecent),
-    removeRecent: (input) => invoke(INVOKE.workspaceRemoveRecent, input)
+    removeRecent: (input) => invoke(INVOKE.workspaceRemoveRecent, input),
+    rename: (input) => invoke(INVOKE.workspaceRename, input),
+    delete: (input) => invoke(INVOKE.workspaceDelete, input)
+  },
+  tree: {
+    get: () => invoke(INVOKE.treeGet)
+  },
+  item: {
+    create: (input) => invoke(INVOKE.itemCreate, input),
+    rename: (input) => invoke(INVOKE.itemRename, input),
+    duplicate: (input) => invoke(INVOKE.itemDuplicate, input),
+    delete: (input) => invoke(INVOKE.itemDelete, input),
+    move: (input) => invoke(INVOKE.itemMove, input)
   },
   dialog: {
     selectDirectory: (input) => invoke(INVOKE.dialogSelectDirectory, input)

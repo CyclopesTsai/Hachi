@@ -143,3 +143,61 @@ describe('WorkspaceService.restoreLast / listRecent', () => {
     expect(await service.removeRecent(ws.path)).toEqual([])
   })
 })
+
+describe('WorkspaceService.rename / delete', () => {
+  it('renames the display name only and updates the recent list', async () => {
+    const ws = await service.create({ name: 'Before', parentDir: root })
+    const listener = vi.fn()
+    service.onChange(listener)
+    const renamed = await service.rename('  After  ')
+    expect(renamed).toEqual({ ...ws, name: 'After' })
+    expect(path.basename(renamed.path)).toBe('Before')
+    const file = JSON.parse(await readFile(path.join(ws.path, 'workspace.json'), 'utf8')) as Record<
+      string,
+      unknown
+    >
+    expect(file).toMatchObject({ name: 'After', id: ws.id, version: 1 })
+    expect(config.get().recentWorkspaces[0]?.name).toBe('After')
+    expect(listener).toHaveBeenCalledWith(renamed)
+  })
+
+  it('picks up a name changed outside the app', async () => {
+    const ws = await service.create({ name: 'Disk', parentDir: root })
+    const file = path.join(ws.path, 'workspace.json')
+    const raw = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>
+    await writeFile(file, JSON.stringify({ ...raw, name: 'Edited' }))
+    await service.reloadCurrent()
+    expect(service.getCurrent()?.name).toBe('Edited')
+  })
+
+  it('moves the current Workspace to the trash, closes it and forgets it', async () => {
+    const trashed: string[] = []
+    const svc = new WorkspaceService(config, now, async (p) => {
+      trashed.push(p)
+      await rm(p, { recursive: true })
+    })
+    const ws = await svc.create({ name: 'Doomed', parentDir: root })
+    const listener = vi.fn()
+    svc.onChange(listener)
+    expect(await svc.delete(ws.path)).toEqual([])
+    expect(trashed).toEqual([ws.path])
+    expect(svc.getCurrent()).toBeNull()
+    expect(listener).toHaveBeenCalledWith(null)
+    expect(config.get().lastWorkspacePath).toBeNull()
+  })
+
+  it('refuses to delete unknown folders or folders without workspace.json', async () => {
+    const trash = vi.fn()
+    const svc = new WorkspaceService(config, now, trash)
+    await mkdir(path.join(root, 'random'))
+    await expect(svc.delete(path.join(root, 'random'))).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    const ws = await svc.create({ name: 'Known', parentDir: root })
+    await rm(path.join(ws.path, 'workspace.json'))
+    await expect(svc.delete(ws.path)).rejects.toMatchObject({ code: 'NOT_A_WORKSPACE' })
+    expect(trash).not.toHaveBeenCalled()
+  })
+
+  it('requires an open Workspace to rename', async () => {
+    await expect(service.rename('x')).rejects.toMatchObject({ code: 'NO_WORKSPACE' })
+  })
+})

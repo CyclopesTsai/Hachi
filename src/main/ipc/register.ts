@@ -3,6 +3,7 @@ import { APP_ID, APP_NAME } from '@shared/app-info'
 import type { WorkspaceInfo } from '@shared/ipc/api'
 import { INVOKE, type InvokeChannel } from '@shared/ipc/channels'
 import { selectDirectory } from '../dialogs'
+import type { CollectionService } from '../services/collection-service'
 import type { ConfigService } from '../services/config-service'
 import type { WorkspaceService } from '../services/workspace-service'
 import { createHandler, forbidden, type Handler } from './handler'
@@ -10,6 +11,7 @@ import { createHandler, forbidden, type Handler } from './handler'
 export interface IpcContext {
   config: ConfigService
   workspaces: WorkspaceService
+  collections: CollectionService
   getWindow(): BrowserWindow | null
   defaultWorkspaceDir: string
   isTrustedSender(frameUrl: string | undefined): boolean
@@ -43,7 +45,15 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.workspaceOpenWithDialog]: () => ctx.openWorkspaceWithDialog(),
     [INVOKE.workspaceListRecent]: () => ctx.workspaces.listRecent(),
     [INVOKE.workspaceRemoveRecent]: (input) => ctx.workspaces.removeRecent(input.path),
-    [INVOKE.dialogSelectDirectory]: (input) => selectDirectory(ctx.getWindow(), input)
+    [INVOKE.workspaceRename]: (input) => ctx.workspaces.rename(input.name),
+    [INVOKE.workspaceDelete]: (input) => ctx.workspaces.delete(input.path),
+    [INVOKE.dialogSelectDirectory]: (input) => selectDirectory(ctx.getWindow(), input),
+    [INVOKE.treeGet]: () => ctx.collections.getTree(),
+    [INVOKE.itemCreate]: (input) => ctx.collections.create(input),
+    [INVOKE.itemRename]: (input) => ctx.collections.rename(input.id, input.name),
+    [INVOKE.itemDuplicate]: (input) => ctx.collections.duplicate(input.id),
+    [INVOKE.itemDelete]: (input) => ctx.collections.delete(input.id),
+    [INVOKE.itemMove]: (input) => ctx.collections.move(input.id, input.parentId, input.index)
   }
 
   for (const channel of Object.keys(handlers) as InvokeChannel[]) {

@@ -34,7 +34,7 @@ export const workspaceFileSchema = z.object({
   name: workspaceNameSchema,
   createdAt: z.string(),
   settings: workspaceSettingsSchema.default({ timeoutMs: 30_000, validateSSL: true }),
-  /** Collection folder names, in display order. */
+  /** Collection ids, in display order. Unknown / missing ids are tolerated (see docs/schema.md). */
   collectionOrder: z.array(z.string()).default([])
 })
 export type WorkspaceFile = z.infer<typeof workspaceFileSchema>
