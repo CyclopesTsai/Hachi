@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "tsBuildInfoFile": "./node_modules/.cache/tsc/node.tsbuildinfo"
+  },
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "src/shared/**/*.json",
+    "electron.vite.config.ts",
+    "vitest.config.ts",
+    "eslint.config.js",
+    "electron-builder.config.mjs",
+    "scripts/**/*.mjs"
+  ]
+}
