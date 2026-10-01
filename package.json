@@ -5,7 +5,7 @@
   "description": "Hachi — a desktop API client for HTTP and WebSocket",
   "license": "MIT",
   "private": true,
-  "author": "Cyclopes",
+  "author": "Hachi contributors",
   "main": "./out/main/index.js",
   "type": "module",
   "dependencies": {
