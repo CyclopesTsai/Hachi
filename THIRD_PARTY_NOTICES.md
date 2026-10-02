@@ -1,6 +1,7 @@
 # Third-Party Notices
 
-Hachi is released under the MIT License (see `LICENSE`).
+Hachi is released under the GNU Affero General Public License v3.0 or later (see `LICENSE`).
+The third-party components below keep their own (permissive) licenses.
 
 ## Source code copied into this repository
 

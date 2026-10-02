@@ -563,6 +563,8 @@ try {
   })
   const appSettings = page.getByTestId('app-settings-dialog')
   await appSettings.waitFor()
+  const notice = await appSettings.getByTestId('legal-notice').innerText()
+  assert.ok(notice.includes('AGPL-3.0-or-later') && notice.includes('不提供任何擔保'), 'legal notice shown')
   await appSettings.getByLabel('自訂').check()
   await appSettings.getByLabel('Proxy URL').fill('http://127.0.0.1:1')
   // The test server is on 127.0.0.1, which the default bypass list skips.

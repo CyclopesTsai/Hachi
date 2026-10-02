@@ -3,7 +3,7 @@
  * jump lists, …) should be added here or split into `win32.ts` when needed.
  */
 import { app, dialog, type MenuItemConstructorOptions } from 'electron'
-import { APP_COPYRIGHT, APP_ID, APP_NAME } from '@shared/app-info'
+import { APP_ID, APP_NAME, LEGAL_NOTICE } from '@shared/app-info'
 import type { PlatformAdapter } from './types'
 
 function showAboutDialog(): void {
@@ -11,7 +11,8 @@ function showAboutDialog(): void {
     type: 'info',
     title: `About ${APP_NAME}`,
     message: APP_NAME,
-    detail: `Version ${app.getVersion()}\n${APP_COPYRIGHT}`,
+    // Appropriate Legal Notices (AGPL-3.0 section 5(d)).
+    detail: `Version ${app.getVersion()}\n\n${LEGAL_NOTICE}`,
     buttons: ['OK']
   })
 }

@@ -3,5 +3,8 @@
   "packageName": "hachi",
   "appId": "tw.com.cyclopes.hachi",
   "copyright": "Copyright © 2026 Hachi contributors",
-  "workspaceDirName": "Hachi"
+  "workspaceDirName": "Hachi",
+  "license": "AGPL-3.0-or-later",
+  "sourceUrl": "https://github.com/CyclopesTsai/Hachi",
+  "licenseUrl": "https://www.gnu.org/licenses/agpl-3.0.html"
 }

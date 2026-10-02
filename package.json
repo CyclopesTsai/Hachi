@@ -3,7 +3,7 @@
   "productName": "Hachi",
   "version": "0.1.0",
   "description": "Hachi — a desktop API client for HTTP and WebSocket",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "private": true,
   "author": "Hachi contributors",
   "main": "./out/main/index.js",

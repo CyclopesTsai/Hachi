@@ -1,4 +1,11 @@
 import { useState, type FormEvent } from 'react'
+import {
+  APP_COPYRIGHT,
+  APP_LICENSE,
+  APP_LICENSE_URL,
+  APP_NAME,
+  APP_SOURCE_URL
+} from '@shared/app-info'
 import { PROXY_MODES, type ProxySettings } from '@shared/schemas/app-config'
 import { MAX_REDIRECTS_LIMIT, type WorkspaceSettings } from '@shared/schemas/workspace'
 import { Button } from '@renderer/components/ui/button'
@@ -265,6 +272,44 @@ function AppSettingsForm({ initial, onDone }: { initial: ProxySettings; onDone: 
   )
 }
 
+/** Appropriate Legal Notices (AGPL-3.0 section 5(d)). Links open in the system browser. */
+function LegalNotice() {
+  const version = useAppStore((s) => s.info?.version)
+  return (
+    <div
+      className="flex flex-col gap-1 border-t pt-3 text-xs text-muted-foreground"
+      data-testid="legal-notice"
+    >
+      <p className="font-medium text-foreground">
+        {APP_NAME} {version}
+      </p>
+      <p>{APP_COPYRIGHT}</p>
+      <p>
+        {APP_NAME} 是自由軟體，以 {APP_LICENSE}（GNU Affero General Public License 第 3
+        版或更新版本）授權， 不提供任何擔保。
+      </p>
+      <p className="flex gap-3">
+        <a
+          className="text-primary underline-offset-2 hover:underline"
+          href={APP_LICENSE_URL}
+          target="_blank"
+          rel="noreferrer"
+        >
+          授權條款
+        </a>
+        <a
+          className="text-primary underline-offset-2 hover:underline"
+          href={APP_SOURCE_URL}
+          target="_blank"
+          rel="noreferrer"
+        >
+          原始碼
+        </a>
+      </p>
+    </div>
+  )
+}
+
 export function AppSettingsDialog() {
   const open = useAppStore((s) => s.appSettingsOpen)
   const setOpen = useAppStore((s) => s.setAppSettingsOpen)
@@ -273,6 +318,7 @@ export function AppSettingsDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent data-testid="app-settings-dialog" className="max-w-lg">
         {open && proxy && <AppSettingsForm initial={proxy} onDone={() => setOpen(false)} />}
+        <LegalNotice />
       </DialogContent>
     </Dialog>
   )

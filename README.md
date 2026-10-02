@@ -38,7 +38,7 @@ npm run dev          # 啟動開發模式（renderer 支援 HMR）
 | `npm run test:e2e`                | 建置後啟動真正的 App 跑冒煙測試（Linux 無桌面環境請用 `xvfb-run -a npm run test:e2e`） |
 | `npm run typecheck`               | TypeScript 型別檢查                                                                    |
 | `npm run lint` / `npm run format` | ESLint / Prettier                                                                      |
-| `npm run check:licenses`          | 檢查所有隨 App 發佈的套件授權（只允許 MIT 相容的寬鬆授權）                             |
+| `npm run check:licenses`          | 檢查所有隨 App 發佈的套件授權（只允許寬鬆授權，見 CONTRIBUTING.md）                    |
 | `npm run verify`                  | 以上檢查一次跑完                                                                       |
 | `npm run dist:mac`                | 打包 macOS `.dmg`（Phase 6 完善）                                                      |
 
@@ -99,4 +99,10 @@ npm run dist:mac     # 產生 release/<version>/Hachi-<version>-arm64.dmg 與 -x
 
 ## 授權
 
-Hachi 以 [MIT License](LICENSE) 釋出。第三方元件的授權資訊請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+Copyright © 2026 Hachi contributors
+
+Hachi 是自由軟體，以 [GNU Affero General Public License v3.0 or later](LICENSE)（`AGPL-3.0-or-later`）授權：你可以依該授權條款散布與修改本程式。本程式不提供任何擔保，詳見授權條款。
+
+- 散布修改版（包含以網路服務形式提供修改版）時，必須以相同授權公開對應的原始碼。
+- 維護者也可能以其他條款（例如商業授權）提供 Hachi；貢獻者需簽署 [CLA](CLA.md)，詳見 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- 第三方元件的授權資訊請見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

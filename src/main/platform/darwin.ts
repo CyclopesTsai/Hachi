@@ -2,7 +2,7 @@
  * macOS-specific behavior.
  */
 import { app, type MenuItemConstructorOptions } from 'electron'
-import { APP_COPYRIGHT, APP_NAME } from '@shared/app-info'
+import { APP_COPYRIGHT, APP_NAME, LEGAL_NOTICE } from '@shared/app-info'
 import type { PlatformAdapter } from './types'
 
 export const darwinAdapter: PlatformAdapter = {
@@ -13,7 +13,9 @@ export const darwinAdapter: PlatformAdapter = {
     app.setAboutPanelOptions({
       applicationName: APP_NAME,
       applicationVersion: app.getVersion(),
-      copyright: APP_COPYRIGHT
+      copyright: APP_COPYRIGHT,
+      // Appropriate Legal Notices (AGPL-3.0 section 5(d)).
+      credits: LEGAL_NOTICE.split('\n\n').slice(1).join('\n\n')
     })
   },
 

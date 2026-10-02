@@ -4,8 +4,12 @@
  *
  * Walks the full transitive tree of `dependencies` in package.json (devDependencies
  * are build tools and are not distributed) and fails if any package uses a license
- * outside the permissive allow-list below — Hachi is MIT licensed and must not
- * pull in copyleft (GPL/LGPL/AGPL/MPL/EPL…) or unknown licenses.
+ * outside the permissive allow-list below.
+ *
+ * Hachi is AGPL-3.0-or-later, and the maintainer may also offer it under a
+ * commercial license (contributors sign a CLA). Shipped dependencies therefore
+ * stay permissive: copyleft code (GPL/LGPL/AGPL/MPL…) would be compatible with the
+ * AGPL but would block the commercial license. Unknown licenses are rejected too.
  *
  *   node scripts/check-licenses.mjs           # audit only
  *   node scripts/check-licenses.mjs --write   # also write out/THIRD_PARTY_LICENSES.txt
@@ -133,4 +137,6 @@ if (violations.length > 0) {
   for (const v of violations) console.error(`  ${v.name}@${v.version}: ${v.license}`)
   process.exit(1)
 }
-console.log('\nAll production dependency licenses are compatible with MIT.')
+console.log(
+  '\nAll production dependency licenses are permissive (compatible with AGPL-3.0-or-later and a commercial license).'
+)
