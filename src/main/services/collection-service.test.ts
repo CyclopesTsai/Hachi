@@ -434,3 +434,178 @@ describe('applyOrder', () => {
     expect(result.map((x) => x.id)).toEqual(['3', '1', '2'])
   })
 })
+
+describe('refreshItem', () => {
+  it('re-reads only the given request', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const a = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'A',
+      requestType: 'http'
+    })
+    const raw = await readJson(col('c/a.json'))
+    await writeFile(col('c/a.json'), JSON.stringify({ ...raw, name: 'A edited', method: 'POST' }))
+    await writeFile(
+      col('c/new.json'),
+      JSON.stringify({ version: 1, id: 'n', type: 'http', name: 'New outside' })
+    )
+    const tree = await service.refreshItem(a.id)
+    expect(shape(tree)).toEqual([['C', ['A edited']]]) // new.json not picked up yet
+    expect(tree.collections[0]!.children[0]).toMatchObject({ method: 'POST' })
+  })
+
+  it('re-reads a whole collection including new and removed items', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const other = await service.create({ parentId: null, kind: 'collection', name: 'Other' })
+    await service.create({ parentId: c.id, kind: 'request', name: 'Gone', requestType: 'http' })
+    await rm(col('c/gone.json'))
+    await writeFile(
+      col('c/new.json'),
+      JSON.stringify({ version: 1, id: 'n', type: 'http', name: 'New outside' })
+    )
+    await writeFile(
+      col('other/x.json'),
+      JSON.stringify({ version: 1, id: 'x', type: 'http', name: 'Not yet' })
+    )
+    const tree = await service.refreshItem(c.id)
+    expect(shape(tree)).toEqual([
+      ['C', ['New outside']],
+      ['Other', []]
+    ])
+    expect(other.id).toBeTruthy()
+  })
+
+  it('removes an item whose file was deleted outside the app', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const a = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'A',
+      requestType: 'http'
+    })
+    await rm(col('c/a.json'))
+    expect(shape(await service.refreshItem(a.id))).toEqual([['C', []]])
+    await expect(service.rename(a.id, 'x')).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('still detects ids duplicated from items outside the refreshed subtree', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const f = await service.create({ parentId: c.id, kind: 'folder', name: 'F' })
+    const a = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'A',
+      requestType: 'http'
+    })
+    await writeFile(col('c/f/copy.json'), await readFile(col('c/a.json')))
+    const tree = await service.refreshItem(f.id)
+    const copied = tree.collections[0]!.children.find((n) => n.id === f.id)
+    const copyId = (copied as { children: { id: string }[] }).children[0]!.id
+    expect(copyId).not.toBe(a.id)
+  })
+})
+
+describe('requests and container settings', () => {
+  it('reads a Phase 1 request with Phase 2 defaults filled in', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const r = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'R',
+      requestType: 'http'
+    })
+    const { request, inherited } = await service.getRequest(r.id)
+    expect(request).toMatchObject({
+      method: 'GET',
+      url: '',
+      body: {
+        mode: 'none',
+        json: '',
+        raw: '',
+        rawContentType: 'text/plain',
+        formData: [],
+        urlencoded: []
+      },
+      settings: { timeoutMs: null, validateSSL: null, followRedirects: null, useProxy: true }
+    })
+    // Collections default to auth "none", which is what the request inherits.
+    expect(inherited).toEqual({
+      headers: [],
+      auth: { auth: { type: 'none' }, sourceId: c.id, sourceName: 'C' }
+    })
+  })
+
+  it('saves editor content, keeping name, id and unknown fields from disk', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const r = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'R',
+      requestType: 'http'
+    })
+    await writeFile(
+      col('c/r.json'),
+      JSON.stringify({ ...(await readJson(col('c/r.json'))), extra: 42 })
+    )
+    const { request } = await service.getRequest(r.id)
+    const { tree } = await service.saveRequest(r.id, {
+      ...request,
+      name: 'ignored',
+      method: 'POST',
+      url: 'https://x.test'
+    })
+    expect(await readJson(col('c/r.json'))).toMatchObject({
+      id: r.id,
+      name: 'R',
+      method: 'POST',
+      url: 'https://x.test',
+      extra: 42
+    })
+    expect(tree.collections[0]!.children[0]).toMatchObject({ method: 'POST' })
+  })
+
+  it('refuses WebSocket requests in the HTTP editor', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const w = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'W',
+      requestType: 'websocket'
+    })
+    await expect(service.getRequest(w.id)).rejects.toMatchObject({ code: 'INVALID_OPERATION' })
+  })
+
+  it('saves container headers / auth and resolves inheritance down the chain', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'API' })
+    const f = await service.create({ parentId: c.id, kind: 'folder', name: 'Admin' })
+    const r = await service.create({
+      parentId: f.id,
+      kind: 'request',
+      name: 'R',
+      requestType: 'http'
+    })
+    await service.saveContainer(c.id, {
+      headers: [{ id: 'h', key: 'X-Team', value: 'core', enabled: true }],
+      auth: { type: 'bearer', token: 'tok' }
+    })
+    const folder = await service.getContainer(f.id)
+    expect(folder).toMatchObject({
+      kind: 'folder',
+      auth: { type: 'inherit' },
+      inherited: {
+        headers: [{ key: 'X-Team', value: 'core', sourceName: 'API' }],
+        auth: { auth: { type: 'bearer', token: 'tok' }, sourceName: 'API' }
+      }
+    })
+    const chain = await service.getContainerChain(r.id)
+    expect(chain.map((l) => l.name)).toEqual(['API', 'Admin'])
+    expect((await service.getRequest(r.id)).inherited.auth?.sourceName).toBe('API')
+  })
+
+  it('stores "inherit" on a collection as "none"', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    const saved = await service.saveContainer(c.id, { headers: [], auth: { type: 'inherit' } })
+    expect(saved.auth).toEqual({ type: 'none' })
+  })
+})

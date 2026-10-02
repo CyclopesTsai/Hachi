@@ -33,10 +33,27 @@ const api: HachiApi = {
     listRecent: () => invoke(INVOKE.workspaceListRecent),
     removeRecent: (input) => invoke(INVOKE.workspaceRemoveRecent, input),
     rename: (input) => invoke(INVOKE.workspaceRename, input),
-    delete: (input) => invoke(INVOKE.workspaceDelete, input)
+    delete: (input) => invoke(INVOKE.workspaceDelete, input),
+    getSettings: () => invoke(INVOKE.workspaceGetSettings),
+    saveSettings: (input) => invoke(INVOKE.workspaceSaveSettings, input)
   },
   tree: {
-    get: () => invoke(INVOKE.treeGet)
+    get: () => invoke(INVOKE.treeGet),
+    reload: (input) => invoke(INVOKE.treeReload, input)
+  },
+  request: {
+    get: (input) => invoke(INVOKE.requestGet, input),
+    save: (input) => invoke(INVOKE.requestSave, input)
+  },
+  container: {
+    get: (input) => invoke(INVOKE.containerGet, input),
+    save: (input) => invoke(INVOKE.containerSave, input)
+  },
+  http: {
+    send: (input) => invoke(INVOKE.httpSend, input),
+    cancel: (input) => invoke(INVOKE.httpCancel, input),
+    getBody: (input) => invoke(INVOKE.httpGetBody, input),
+    saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input)
   },
   item: {
     create: (input) => invoke(INVOKE.itemCreate, input),
@@ -46,7 +63,8 @@ const api: HachiApi = {
     move: (input) => invoke(INVOKE.itemMove, input)
   },
   dialog: {
-    selectDirectory: (input) => invoke(INVOKE.dialogSelectDirectory, input)
+    selectDirectory: (input) => invoke(INVOKE.dialogSelectDirectory, input),
+    selectFile: (input) => invoke(INVOKE.dialogSelectFile, input)
   },
   on<C extends EventChannel>(channel: C, listener: (payload: EventPayloads[C]) => void) {
     if (!EVENT_CHANNELS.includes(channel)) {

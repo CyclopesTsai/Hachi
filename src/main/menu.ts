@@ -9,6 +9,9 @@ export interface MenuActions {
   openRecentWorkspace(workspacePath: string): void
   clearRecentWorkspaces(): void
   switchWorkspace(): void
+  /** Saves the item open in the editor (CmdOrCtrl+S). */
+  save(): void
+  openSettings(): void
 }
 
 /**
@@ -32,7 +35,7 @@ export function buildMenuTemplate(
         ]
 
   return [
-    ...platform.leadingMenus(),
+    ...platform.leadingMenus(() => actions.openSettings()),
     {
       label: 'File',
       submenu: [
@@ -49,6 +52,9 @@ export function buildMenuTemplate(
         { label: 'Open Recent', submenu: recentItems },
         { type: 'separator' },
         { label: 'Switch Workspace…', click: () => actions.switchWorkspace() },
+        { type: 'separator' },
+        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => actions.save() },
+        ...platform.fileMenuSettings(() => actions.openSettings()),
         { type: 'separator' },
         ...platform.fileMenuTail()
       ]

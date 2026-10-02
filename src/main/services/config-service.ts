@@ -7,7 +7,9 @@ import {
   appConfigSchema,
   defaultAppConfig,
   type AppConfig,
+  type ProxySettings,
   type Theme,
+  type UiSettings,
   type WindowState
 } from '@shared/schemas/app-config'
 import { writeJsonAtomic } from './fs/atomic-write'
@@ -84,6 +86,18 @@ export class ConfigService {
   setTheme(theme: Theme): Promise<AppConfig> {
     return this.update((c) => {
       c.theme = theme
+    })
+  }
+
+  setProxy(proxy: ProxySettings): Promise<AppConfig> {
+    return this.update((c) => {
+      c.proxy = proxy
+    })
+  }
+
+  setUi(ui: Partial<UiSettings>): Promise<AppConfig> {
+    return this.update((c) => {
+      c.ui = { ...c.ui, ...ui }
     })
   }
 

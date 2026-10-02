@@ -9,7 +9,7 @@ import {
   type DragMoveEvent,
   type DragStartEvent
 } from '@dnd-kit/core'
-import { Plus, X } from 'lucide-react'
+import { Plus, RefreshCw, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { findNode, isContainer, type TreeNode } from '@shared/tree'
 import {
@@ -23,6 +23,7 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
+import { useEditorStore } from '@renderer/stores/editor-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
 import {
@@ -161,16 +162,28 @@ export function CollectionSidebar() {
         <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Collections
         </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7"
-          title="新增 Collection"
-          aria-label="新增 Collection"
-          onClick={() => void create(null, 'collection')}
-        >
-          <Plus />
-        </Button>
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title="重新讀取整個 Workspace（套用在 Hachi 以外修改的檔案）"
+            aria-label="重新讀取 Workspace"
+            onClick={() => void useEditorStore.getState().reload({ scope: 'workspace' })}
+          >
+            <RefreshCw />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title="新增 Collection"
+            aria-label="新增 Collection"
+            onClick={() => void create(null, 'collection')}
+          >
+            <Plus />
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-1 pb-4" role="tree" aria-label="Collections">

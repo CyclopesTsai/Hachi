@@ -12,7 +12,9 @@ import {
   emptyHistoryFile,
   workspaceFileSchema,
   workspaceFormat,
-  type WorkspaceFile
+  workspaceSettingsSchema,
+  type WorkspaceFile,
+  type WorkspaceSettings
 } from '@shared/schemas/workspace'
 import type { ConfigService } from './config-service'
 import type { TrashFn } from './collection-service'
@@ -171,6 +173,30 @@ export class WorkspaceService {
     return this.getCurrent() as WorkspaceInfo
   }
 
+  /** Request defaults of the current Workspace (timeout, SSL, redirects). */
+  async getSettings(): Promise<WorkspaceSettings> {
+    const current = this.current
+    if (!current) throw new HachiError('NO_WORKSPACE', 'No Workspace is open')
+    const file = await readVersionedJson(path.join(current.path, WORKSPACE_FILE), workspaceFormat)
+    return file.settings
+  }
+
+  async saveSettings(settings: WorkspaceSettings): Promise<WorkspaceSettings> {
+    const current = this.current
+    if (!current) throw new HachiError('NO_WORKSPACE', 'No Workspace is open')
+    const valid = workspaceSettingsSchema.parse(settings)
+    const file = path.join(current.path, WORKSPACE_FILE)
+    await updateJsonAtomic(
+      file,
+      async () => {
+        await readVersionedJson(file, workspaceFormat)
+        return (await readJsonFile(file)) as Record<string, unknown>
+      },
+      (raw) => ({ ...raw, settings: { ...(raw.settings as object), ...valid } })
+    )
+    return this.getSettings()
+  }
+
   /**
    * Re-reads the current workspace.json (after an external edit) and emits if the
    * name changed. Errors are ignored: the file may be mid-edit.
@@ -205,7 +231,7 @@ export class WorkspaceService {
       throw new HachiError('NOT_A_WORKSPACE', `${dir} is not a Hachi Workspace`)
     }
     if (this.current?.path === dir) {
-      // Close first so the watcher and the collection tree let go of the folder.
+      // Close first so the collection tree lets go of the folder.
       this.current = null
       this.emit()
     }

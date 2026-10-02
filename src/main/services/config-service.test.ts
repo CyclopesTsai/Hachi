@@ -32,7 +32,15 @@ describe('ConfigService', () => {
       theme: 'system',
       recentWorkspaces: [],
       lastWorkspacePath: null,
-      window: null
+      window: null,
+      proxy: {
+        mode: 'none',
+        url: '',
+        bypass: ['localhost', '127.0.0.1', '::1'],
+        username: '',
+        password: ''
+      },
+      ui: { requestBodyWrap: false, responseBodyWrap: false }
     })
     expect(await readDisk()).toEqual(config)
   })

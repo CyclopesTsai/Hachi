@@ -120,3 +120,11 @@ describe('item channel validation', () => {
     })
   })
 })
+
+describe('config:update validation', () => {
+  it('passes only the UI keys that were sent (no defaults filled in)', async () => {
+    const fn = vi.fn()
+    await createHandler(INVOKE.configUpdate, fn)({ ui: { responseBodyWrap: true } })
+    expect(fn).toHaveBeenCalledWith({ ui: { responseBodyWrap: true } })
+  })
+})

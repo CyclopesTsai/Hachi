@@ -11,6 +11,7 @@ import {
   Layers,
   Pencil,
   Radio,
+  RefreshCw,
   Trash2
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
@@ -25,6 +26,7 @@ import {
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
 import { cn } from '@renderer/lib/utils'
+import { isDirty, useEditorStore } from '@renderer/stores/editor-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
 import type { DropPosition, FlatRow } from './tree-model'
@@ -99,6 +101,7 @@ export function TreeRow({
   const selected = useTreeStore((s) => s.selectedId === node.id)
   const editing = useTreeStore((s) => s.editingId === node.id)
   const expanded = useTreeStore((s) => s.expanded.has(node.id))
+  const unsaved = useEditorStore((s) => s.doc?.id === node.id && isDirty(s.doc))
   const { select, toggle, setEditing, rename, duplicate, create } = useTreeStore.getState()
   const container = isContainer(node)
   const broken = node.error !== undefined
@@ -214,6 +217,12 @@ export function TreeRow({
               {node.name}
             </span>
           )}
+          {unsaved && (
+            <span
+              className="size-1.5 shrink-0 rounded-full bg-primary"
+              aria-label="有未儲存的修改"
+            />
+          )}
           {broken && (
             <AlertTriangle className="size-3.5 shrink-0 text-destructive" aria-label="檔案錯誤" />
           )}
@@ -257,6 +266,13 @@ export function TreeRow({
             <ContextMenuSeparator />
           </>
         )}
+        <ContextMenuItem
+          onSelect={() => void useEditorStore.getState().reload({ scope: 'item', id: node.id })}
+        >
+          <RefreshCw />
+          重新讀取
+        </ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={() => onRequestDelete(node)}>
           <Trash2 />
           刪除…

@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前進度：**Phase 1**（Workspace 管理、Collection / 資料夾 / 請求樹狀清單、檔案監聽）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
+> 目前進度：**Phase 2**（HTTP 編輯器與回應檢視器）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
@@ -12,6 +12,8 @@ Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP �
 | 建置       | electron-vite（Vite 7）、electron-builder                                          |
 | UI         | React 19、TypeScript（strict）、Tailwind CSS 4、shadcn/ui（Radix UI）、lucide 圖示 |
 | 狀態管理   | Zustand                                                                            |
+| HTTP       | undici（在 main process 發送）                                                     |
+| 編輯器     | CodeMirror 6                                                                       |
 | 驗證       | zod（IPC 輸入與 JSON 檔案）                                                        |
 | 測試       | Vitest（單元測試）、Playwright（Electron E2E 冒煙測試）                            |
 | 程式碼風格 | ESLint + Prettier                                                                  |

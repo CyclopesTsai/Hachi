@@ -17,13 +17,15 @@ export const darwinAdapter: PlatformAdapter = {
     })
   },
 
-  leadingMenus(): MenuItemConstructorOptions[] {
+  leadingMenus(openSettings): MenuItemConstructorOptions[] {
     // macOS always titles the first menu with the app name; set label explicitly for dev runs.
     return [
       {
         label: APP_NAME,
         submenu: [
           { role: 'about', label: `About ${APP_NAME}` },
+          { type: 'separator' },
+          { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings },
           { type: 'separator' },
           { role: 'services' },
           { type: 'separator' },
@@ -35,6 +37,10 @@ export const darwinAdapter: PlatformAdapter = {
         ]
       }
     ]
+  },
+
+  fileMenuSettings(): MenuItemConstructorOptions[] {
+    return []
   },
 
   fileMenuTail(): MenuItemConstructorOptions[] {

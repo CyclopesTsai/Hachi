@@ -19,13 +19,25 @@ export const INVOKE = {
   workspaceRemoveRecent: 'workspace:removeRecent',
   workspaceRename: 'workspace:rename',
   workspaceDelete: 'workspace:delete',
+  workspaceGetSettings: 'workspace:getSettings',
+  workspaceSaveSettings: 'workspace:saveSettings',
   dialogSelectDirectory: 'dialog:selectDirectory',
+  dialogSelectFile: 'dialog:selectFile',
   treeGet: 'tree:get',
+  treeReload: 'tree:reload',
   itemCreate: 'item:create',
   itemRename: 'item:rename',
   itemDuplicate: 'item:duplicate',
   itemDelete: 'item:delete',
-  itemMove: 'item:move'
+  itemMove: 'item:move',
+  requestGet: 'request:get',
+  requestSave: 'request:save',
+  containerGet: 'container:get',
+  containerSave: 'container:save',
+  httpSend: 'http:send',
+  httpCancel: 'http:cancel',
+  httpGetBody: 'http:getBody',
+  httpSaveResponse: 'http:saveResponse'
 } as const
 
 export type InvokeChannel = (typeof INVOKE)[keyof typeof INVOKE]
@@ -43,5 +55,10 @@ export type EventChannel = (typeof EVENTS)[keyof typeof EVENTS]
 export const EVENT_CHANNELS: readonly EventChannel[] = Object.values(EVENTS)
 
 /** Commands sent from the native menu to the renderer through `menu:command`. */
-export const MENU_COMMANDS = ['workspace.new', 'workspace.switch'] as const
+export const MENU_COMMANDS = [
+  'workspace.new',
+  'workspace.switch',
+  'request.save',
+  'app.settings'
+] as const
 export type MenuCommand = (typeof MENU_COMMANDS)[number]

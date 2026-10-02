@@ -6,7 +6,7 @@ import path from 'node:path'
 const RETRYABLE_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY'])
 const RENAME_RETRIES = 5
 
-/** Temp files are hidden and end in `.tmp` so watchers and git can ignore them. */
+/** Temp files are hidden and end in `.tmp` so scans and git can ignore them. */
 export function isTempFileName(fileName: string): boolean {
   return fileName.startsWith('.') && fileName.endsWith('.tmp')
 }

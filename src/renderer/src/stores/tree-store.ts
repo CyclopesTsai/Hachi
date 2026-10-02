@@ -4,6 +4,17 @@ import { findNode, type ItemKind, type WorkspaceTree } from '@shared/tree'
 import { ancestorIds } from '@renderer/features/collections/tree-model'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 
+/**
+ * Asked before the selection changes; returning false keeps the current selection
+ * (the editor uses this to prompt about unsaved changes).
+ */
+type SelectGuard = (id: string | null) => boolean
+let selectGuard: SelectGuard = () => true
+
+export function setSelectGuard(guard: SelectGuard): void {
+  selectGuard = guard
+}
+
 const EMPTY: WorkspaceTree = { workspaceId: null, collections: [] }
 
 /** Default names for new items; the row immediately enters rename mode. */
@@ -98,7 +109,7 @@ export const useTreeStore = create<TreeState>()((set, get) => {
     },
 
     select(id) {
-      set({ selectedId: id })
+      if (id === get().selectedId || selectGuard(id)) set({ selectedId: id })
     },
 
     toggle(id) {
@@ -132,7 +143,8 @@ export const useTreeStore = create<TreeState>()((set, get) => {
         )
         get().applyTree(result.tree)
         expandAll(ancestorIds(result.tree, result.id))
-        set({ selectedId: result.id, editingId: result.id })
+        get().select(result.id)
+        set({ editingId: result.id })
       })
     },
 
@@ -149,7 +161,7 @@ export const useTreeStore = create<TreeState>()((set, get) => {
       await attempt(async () => {
         const result = await unwrap(window.hachi.item.duplicate({ id }))
         get().applyTree(result.tree)
-        set({ selectedId: result.id })
+        get().select(result.id)
       })
     },
 

@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { AppConfig } from '@shared/schemas/app-config'
+import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import type {
   AppInfo,
+  ConfigUpdateInput,
   RecentWorkspaceEntry,
   WorkspaceCreateInput,
   WorkspaceInfo
@@ -22,8 +24,15 @@ interface AppState {
   welcomeRequested: boolean
   /** Incremented to ask the create form to focus its name field. */
   createFocusNonce: number
+  /** Request defaults of the current Workspace. */
+  workspaceSettings: WorkspaceSettings | null
+  appSettingsOpen: boolean
 
   bootstrap(): Promise<void>
+  loadWorkspaceSettings(): Promise<void>
+  saveWorkspaceSettings(settings: WorkspaceSettings): Promise<void>
+  updateConfig(input: ConfigUpdateInput): Promise<void>
+  setAppSettingsOpen(open: boolean): void
   refreshRecent(): Promise<void>
   createWorkspace(input: WorkspaceCreateInput): Promise<WorkspaceInfo>
   openWorkspace(path: string): Promise<WorkspaceInfo>
@@ -50,6 +59,32 @@ export const useAppStore = create<AppState>()((set, get) => ({
   defaultWorkspaceDir: '',
   welcomeRequested: false,
   createFocusNonce: 0,
+  workspaceSettings: null,
+  appSettingsOpen: false,
+
+  async loadWorkspaceSettings() {
+    if (!get().currentWorkspace) {
+      set({ workspaceSettings: null })
+      return
+    }
+    try {
+      set({ workspaceSettings: await unwrap(window.hachi.workspace.getSettings()) })
+    } catch {
+      set({ workspaceSettings: null })
+    }
+  },
+
+  async saveWorkspaceSettings(settings) {
+    set({ workspaceSettings: await unwrap(window.hachi.workspace.saveSettings(settings)) })
+  },
+
+  async updateConfig(input) {
+    set({ config: await unwrap(window.hachi.config.update(input)) })
+  },
+
+  setAppSettingsOpen(open) {
+    set({ appSettingsOpen: open })
+  },
 
   async bootstrap() {
     try {

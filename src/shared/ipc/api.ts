@@ -3,8 +3,11 @@
  * Types only — safe to import anywhere. Keep docs/ipc.md in sync.
  */
 import type { SerializedError } from '../errors'
-import type { AppConfig, Theme } from '../schemas/app-config'
-import type { RequestType } from '../schemas/collection'
+import type { ContainerSettingsData, HttpResult, InheritedSettings } from '../http'
+import type { AppConfig, ProxySettings, Theme, UiSettings } from '../schemas/app-config'
+import type { Auth, KeyValue, RequestType } from '../schemas/collection'
+import type { HttpRequest } from '../schemas/http-request'
+import type { WorkspaceSettings } from '../schemas/workspace'
 import type { ItemKind, WorkspaceTree } from '../tree'
 import type { EventChannel, InvokeChannel, MenuCommand } from './channels'
 
@@ -36,6 +39,8 @@ export interface RecentWorkspaceEntry {
 
 export interface ConfigUpdateInput {
   theme?: Theme
+  proxy?: ProxySettings
+  ui?: Partial<UiSettings>
 }
 
 export interface WorkspaceCreateInput {
@@ -83,6 +88,46 @@ export interface ItemMoveInput {
   index: number
 }
 
+export type TreeReloadInput = { scope: 'workspace' } | { scope: 'item'; id: string }
+
+export interface SelectFileInput {
+  title?: string
+}
+
+export interface RequestData {
+  request: HttpRequest
+  inherited: InheritedSettings
+}
+
+export interface RequestSaveInput {
+  id: string
+  request: HttpRequest
+}
+
+export interface RequestSaveResult {
+  request: HttpRequest
+  tree: WorkspaceTree
+}
+
+export interface ContainerSaveInput {
+  id: string
+  headers: KeyValue[]
+  auth: Auth
+}
+
+export interface HttpSendInput {
+  /** Chosen by the renderer (UUID) so the request can be cancelled while it runs. */
+  runId: string
+  /** The request item being edited; its folders / collection provide inherited settings. */
+  requestId: string
+  /** Current editor content, saved or not. */
+  request: HttpRequest
+}
+
+export interface RunIdInput {
+  runId: string
+}
+
 export interface ItemMutationResult {
   /** Id of the created / duplicated item. */
   id: string
@@ -103,13 +148,25 @@ export interface InvokeMap {
   'workspace:removeRecent': { input: WorkspacePathInput; output: RecentWorkspaceEntry[] }
   'workspace:rename': { input: WorkspaceRenameInput; output: WorkspaceInfo }
   'workspace:delete': { input: WorkspacePathInput; output: RecentWorkspaceEntry[] }
+  'workspace:getSettings': { input: void; output: WorkspaceSettings }
+  'workspace:saveSettings': { input: WorkspaceSettings; output: WorkspaceSettings }
   'dialog:selectDirectory': { input: SelectDirectoryInput; output: string | null }
+  'dialog:selectFile': { input: SelectFileInput; output: string | null }
   'tree:get': { input: void; output: WorkspaceTree }
+  'tree:reload': { input: TreeReloadInput; output: WorkspaceTree }
   'item:create': { input: ItemCreateInput; output: ItemMutationResult }
   'item:rename': { input: ItemRenameInput; output: WorkspaceTree }
   'item:duplicate': { input: ItemIdInput; output: ItemMutationResult }
   'item:delete': { input: ItemIdInput; output: WorkspaceTree }
   'item:move': { input: ItemMoveInput; output: WorkspaceTree }
+  'request:get': { input: ItemIdInput; output: RequestData }
+  'request:save': { input: RequestSaveInput; output: RequestSaveResult }
+  'container:get': { input: ItemIdInput; output: ContainerSettingsData }
+  'container:save': { input: ContainerSaveInput; output: ContainerSettingsData }
+  'http:send': { input: HttpSendInput; output: HttpResult }
+  'http:cancel': { input: RunIdInput; output: boolean }
+  'http:getBody': { input: RunIdInput; output: string }
+  'http:saveResponse': { input: RunIdInput; output: string | null }
 }
 
 // Compile-time guarantee that InvokeMap and the channel constants list the same channels.
@@ -154,9 +211,30 @@ export interface HachiApi {
     rename: InvokeFn<'workspace:rename'>
     /** Moves a known Workspace folder to the system trash and removes it from the recent list. */
     delete: InvokeFn<'workspace:delete'>
+    getSettings: InvokeFn<'workspace:getSettings'>
+    saveSettings: InvokeFn<'workspace:saveSettings'>
   }
   tree: {
     get: InvokeFn<'tree:get'>
+    /** Re-reads files changed outside Hachi: the whole Workspace or one item. */
+    reload: InvokeFn<'tree:reload'>
+  }
+  request: {
+    get: InvokeFn<'request:get'>
+    save: InvokeFn<'request:save'>
+  }
+  container: {
+    get: InvokeFn<'container:get'>
+    save: InvokeFn<'container:save'>
+  }
+  http: {
+    send: InvokeFn<'http:send'>
+    /** Returns false if the request had already finished. */
+    cancel: InvokeFn<'http:cancel'>
+    /** Full text of a response body that was too large to send inline. */
+    getBody: InvokeFn<'http:getBody'>
+    /** Shows a save dialog and writes the response body. Returns the path, or null if cancelled. */
+    saveResponse: InvokeFn<'http:saveResponse'>
   }
   item: {
     create: InvokeFn<'item:create'>
@@ -169,6 +247,8 @@ export interface HachiApi {
   dialog: {
     /** Returns the chosen absolute path, or `null` if cancelled. */
     selectDirectory: InvokeFn<'dialog:selectDirectory'>
+    /** Returns the chosen absolute file path, or `null` if cancelled. */
+    selectFile: InvokeFn<'dialog:selectFile'>
   }
   /** Subscribes to a main → renderer event. Returns an unsubscribe function. */
   on<C extends EventChannel>(channel: C, listener: (payload: EventPayloads[C]) => void): () => void

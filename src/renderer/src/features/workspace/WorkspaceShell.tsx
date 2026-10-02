@@ -1,5 +1,5 @@
-import { ArrowLeftRight, ChevronDown, Pencil, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeftRight, ChevronDown, Pencil, Settings, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { WorkspaceInfo } from '@shared/ipc/api'
 import { AppLogo } from '@renderer/components/app-logo'
 import { Button } from '@renderer/components/ui/button'
@@ -11,7 +11,8 @@ import {
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
 import { CollectionSidebar } from '@renderer/features/collections/CollectionSidebar'
-import { ItemDetails } from '@renderer/features/collections/ItemDetails'
+import { EditorHost } from '@renderer/features/http/EditorHost'
+import { WorkspaceSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
 import { useAppStore } from '@renderer/stores/app-store'
 import { DeleteWorkspaceDialog, RenameWorkspaceDialog } from './WorkspaceDialogs'
 
@@ -20,6 +21,12 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
   const showWelcome = useAppStore((s) => s.showWelcome)
   const [renaming, setRenaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const loadWorkspaceSettings = useAppStore((s) => s.loadWorkspaceSettings)
+
+  useEffect(() => {
+    void loadWorkspaceSettings()
+  }, [workspace.id, loadWorkspaceSettings])
 
   return (
     <div className="flex h-full flex-col" data-testid="workspace-shell">
@@ -45,6 +52,10 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
               <Pencil />
               重新命名 Workspace…
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+              <Settings />
+              Workspace 設定…
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => showWelcome()}>
               <ArrowLeftRight />
               切換 Workspace…
@@ -67,7 +78,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
       <div className="flex min-h-0 flex-1">
         <CollectionSidebar />
         <main className="flex min-w-0 flex-1 flex-col">
-          <ItemDetails />
+          <EditorHost />
         </main>
       </div>
 
@@ -76,6 +87,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
         initialName={workspace.name}
         onOpenChange={setRenaming}
       />
+      <WorkspaceSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <DeleteWorkspaceDialog
         target={deleting ? workspace : null}
         onClose={() => setDeleting(false)}

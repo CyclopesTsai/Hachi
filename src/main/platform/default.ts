@@ -30,6 +30,10 @@ export function createDefaultAdapter(id: 'win32' | 'linux'): PlatformAdapter {
       return []
     },
 
+    fileMenuSettings(openSettings): MenuItemConstructorOptions[] {
+      return [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings }]
+    },
+
     fileMenuTail(): MenuItemConstructorOptions[] {
       return [{ role: 'quit', label: 'Exit' }]
     },

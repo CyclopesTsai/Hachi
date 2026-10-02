@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import http from 'node:http'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -21,6 +22,55 @@ const tmp = await mkdtemp(path.join(os.tmpdir(), 'hachi-smoke-'))
 const userData = path.join(tmp, 'userData')
 const docs = path.join(tmp, 'Documents', 'Hachi')
 await mkdir(shots, { recursive: true })
+
+// Local HTTP server for the Phase 2 checks.
+const BIG_SIZE = 11 * 1024 * 1024
+const testServer = await new Promise((resolve) => {
+  const server = http.createServer(async (req, res) => {
+    const chunks = []
+    for await (const chunk of req) chunks.push(chunk)
+    const url = new URL(req.url, 'http://x')
+    if (url.pathname === '/echo') {
+      res.setHeader('content-type', 'application/json')
+      res.end(
+        JSON.stringify({
+          method: req.method,
+          url: req.url,
+          headers: req.headers,
+          body: Buffer.concat(chunks).toString()
+        })
+      )
+    } else if (url.pathname === '/json') {
+      res.setHeader('set-cookie', ['session=abc; Path=/; HttpOnly', 'theme=dark; Max-Age=60'])
+      res.setHeader('content-type', 'application/json')
+      res.end('{"ok":true}')
+    } else if (url.pathname === '/big') {
+      res.setHeader('content-type', 'text/plain')
+      res.end(Buffer.alloc(BIG_SIZE, 97))
+    } else if (url.pathname === '/slow') {
+      setTimeout(() => res.end('late'), 5000)
+    } else if (url.pathname === '/html') {
+      res.setHeader('content-type', 'text/html')
+      res.end('<h1>Hello Hachi</h1><script>document.title = "ran"</script>')
+    } else if (url.pathname === '/redirect') {
+      const n = Number(url.searchParams.get('n') ?? '1')
+      res.writeHead(302, { location: n > 1 ? `/redirect?n=${n - 1}` : '/json' })
+      res.end()
+    } else {
+      res.statusCode = 404
+      res.end()
+    }
+  })
+  server.listen(0, '127.0.0.1', () =>
+    resolve({
+      url: `http://127.0.0.1:${server.address().port}`,
+      close: () => {
+        server.closeAllConnections()
+        server.close()
+      }
+    })
+  )
+})
 
 const args = [root]
 // Chromium refuses to run as root without this flag (CI containers).
@@ -121,16 +171,29 @@ try {
     require: 'undefined',
     process: 'undefined',
     ipcRenderer: 'undefined',
-    apiKeys: ['app', 'config', 'dialog', 'item', 'on', 'tree', 'workspace'],
+    apiKeys: [
+      'app',
+      'config',
+      'container',
+      'dialog',
+      'http',
+      'item',
+      'on',
+      'request',
+      'tree',
+      'workspace'
+    ],
     workspaceKeys: [
       'create',
       'delete',
       'getCurrent',
+      'getSettings',
       'listRecent',
       'open',
       'openWithDialog',
       'removeRecent',
-      'rename'
+      'rename',
+      'saveSettings'
     ]
   })
   step('renderer has no Node/Electron access; only the window.hachi whitelist')
@@ -250,7 +313,7 @@ try {
   await t.typeName('List Users')
   assert.ok(await exists(path.join(usersDir, 'list-users.json')))
   assert.ok(!(await exists(path.join(usersDir, 'get-users-copy.json'))))
-  assert.equal(await page.getByTestId('item-details-name').innerText(), 'List Users')
+  assert.equal(await page.getByTestId('request-editor').locator('h2').innerText(), 'List Users')
   step('duplicate ("… copy") and rename with F2 (file renamed on disk)')
 
   await t.drag('Get Users', 'Admin', 'inside')
@@ -277,23 +340,254 @@ try {
   await t.row('List Users').waitFor({ state: 'detached' })
   step('delete moves the file to the system trash')
 
+  // ---- Phase 2: no file watching — external changes appear after 「重新讀取」 ----
   await writeFile(
     path.join(usersDir, 'from-git.json'),
     JSON.stringify({ version: 1, id: 'ext-1', type: 'http', name: 'From Git', method: 'POST' })
   )
-  await t.row('From Git').waitFor({ timeout: 5000 })
   const colMeta = await readJson(path.join(usersDir, 'collection.json'))
   await writeFile(
     path.join(usersDir, 'collection.json'),
     JSON.stringify({ ...colMeta, name: 'Users API v2' })
   )
-  await t.row('Users API v2').waitFor({ timeout: 5000 })
   await writeFile(path.join(usersDir, 'broken.json'), '{ not json')
-  await t.row('broken').waitFor({ timeout: 5000 })
+  await new Promise((r) => setTimeout(r, 1000))
+  assert.equal(await t.row('From Git').count(), 0, 'external changes must not appear by themselves')
+  await t.contextAction('Users API', '重新讀取')
+  await t.row('Users API v2').waitFor()
+  await t.row('From Git').waitFor()
   await t.row('broken').click()
   assert.ok((await page.getByTestId('item-details').innerText()).includes('無法讀取'))
   await page.screenshot({ path: path.join(shots, '5-external-changes.png') })
-  step('file watcher: external add / edit / invalid file show up automatically')
+
+  await mkdir(path.join(colDir, 'external'))
+  await writeFile(
+    path.join(colDir, 'external', 'collection.json'),
+    JSON.stringify({ version: 1, id: 'ext-col', name: 'External Col' })
+  )
+  await page.getByRole('button', { name: '重新讀取 Workspace' }).click()
+  await t.row('External Col').waitFor()
+  step(
+    'no file watching: external changes appear after 重新讀取 (one collection / whole Workspace)'
+  )
+
+  // ---- Phase 2: HTTP editor ----
+  const api = (p) => `${testServer.url}${p}`
+  await t.row('Users API v2').click() // selects (and collapses) the collection
+  const ce = page.getByTestId('container-editor')
+  await ce.waitFor()
+  await ce.getByTestId('headers-table').getByLabel('Key').last().fill('X-Team')
+  await ce.getByTestId('headers-table').getByLabel('Value').first().fill('core')
+  await ce.getByRole('tab', { name: 'Auth' }).click()
+  await page.getByLabel('驗證類型').selectOption('bearer')
+  await page.getByLabel('Token').fill('col-token')
+  await ce.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () =>
+      (await readJson(path.join(usersDir, 'collection.json'))).auth?.token === 'col-token',
+    'collection settings saved'
+  )
+  assert.deepEqual(
+    (await readJson(path.join(usersDir, 'collection.json'))).headers.map((h) => [h.key, h.value]),
+    [['X-Team', 'core']]
+  )
+  step('Collection settings: shared Headers + Bearer auth saved to collection.json')
+
+  await t.row('Users API v2').click() // expand again
+  await t.row('Get Users').click()
+  const re = page.getByTestId('request-editor')
+  await re.waitFor()
+  await page.getByLabel('HTTP 方法').selectOption('POST')
+  await page.getByTestId('url-input').fill(api('/echo'))
+  await re.getByTestId('params-table').getByLabel('Key').last().fill('q')
+  await re.getByTestId('params-table').getByLabel('Value').first().fill('1')
+  assert.equal(
+    await page.getByTestId('url-input').inputValue(),
+    api('/echo'),
+    'params stay out of the URL field'
+  )
+  await re.getByRole('tab', { name: /Headers/ }).click()
+  const inheritedHeaders = await page.getByTestId('inherited-headers').innerText()
+  assert.ok(inheritedHeaders.includes('X-Team') && inheritedHeaders.includes('Users API v2'))
+  await re.getByRole('tab', { name: /Body/ }).click()
+  await page.getByLabel('JSON', { exact: true }).check()
+  await page.locator('[data-testid="body-json"] .cm-content').click()
+  await page.keyboard.insertText('{"hello":"hachi"}')
+  await re.getByRole('tab', { name: 'Auth' }).click()
+  const inheritedAuth = page.getByTestId('inherited-auth')
+  assert.ok((await inheritedAuth.innerText()).includes('Users API v2'))
+  assert.equal(await inheritedAuth.getByLabel('Token').inputValue(), 'col-token')
+  assert.equal(await inheritedAuth.getByLabel('Token').getAttribute('readonly'), '')
+  step(
+    'request editor: method / URL / params / JSON body; inherited headers + auth shown read-only'
+  )
+
+  await re.getByRole('button', { name: '發送' }).click()
+  await page.getByTestId('response-status').waitFor()
+  assert.match(await page.getByTestId('response-status').innerText(), /^200/)
+  const echo = await page.getByTestId('response-body').innerText()
+  for (const expected of [
+    '"method": "POST"',
+    '/echo?q=1',
+    '"x-team": "core"',
+    'Bearer col-token',
+    'hachi'
+  ]) {
+    assert.ok(echo.includes(expected), `echo contains ${expected}`)
+  }
+  await page.screenshot({ path: path.join(shots, '6-request-editor.png') })
+  step('send: request runs in main with params, inherited header / auth and JSON body')
+
+  assert.equal(await t.row('Get Users').getByLabel('有未儲存的修改').count(), 1)
+  await t.row('Live Feed').click()
+  const unsaved = page.getByTestId('unsaved-dialog')
+  await unsaved.waitFor()
+  await unsaved.getByRole('button', { name: '儲存', exact: true }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(usersDir, 'admin', 'get-users.json'))).method === 'POST',
+    'request saved'
+  )
+  const savedRequest = await readJson(path.join(usersDir, 'admin', 'get-users.json'))
+  assert.equal(savedRequest.url, api('/echo'))
+  assert.deepEqual(
+    savedRequest.params.map((p) => [p.key, p.value]),
+    [['q', '1']]
+  )
+  assert.deepEqual(savedRequest.body, {
+    ...savedRequest.body,
+    mode: 'json',
+    json: '{"hello":"hachi"}'
+  })
+  assert.ok((await page.locator('main').innerText()).includes('Phase 4'))
+  step('unsaved changes: switching items asks first; 儲存 writes the request file')
+
+  await t.contextAction('Users API v2', '新增 HTTP 請求')
+  await t.typeName('Cookies')
+  await page.getByTestId('request-editor').waitFor()
+  const urlInput = page.getByTestId('url-input')
+  const sendButton = () => page.getByTestId('request-editor').getByRole('button', { name: '發送' })
+  const sendTo = async (p) => {
+    await urlInput.fill(api(p))
+    await sendButton().click()
+  }
+  await sendTo('/json')
+  await page.getByRole('tab', { name: 'Cookies (2)' }).click()
+  const cookies = await page.getByTestId('response-cookies').innerText()
+  assert.ok(cookies.includes('session') && cookies.includes('theme'))
+  await page.getByRole('tab', { name: /^Body/ }).last().click()
+  step('response cookies are listed')
+
+  await sendTo('/big')
+  const large = page.getByTestId('large-body')
+  await large.waitFor()
+  const savePath = path.join(tmp, 'saved-response.txt')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
+  }, savePath)
+  await large.getByRole('button', { name: '下載' }).click()
+  await waitUntil(
+    async () => (await exists(savePath)) && (await readFile(savePath)).length === BIG_SIZE,
+    'download'
+  )
+  await large.getByRole('button', { name: '顯示' }).click()
+  await page.getByTestId('response-body').waitFor()
+  step('responses over 10 MB: 顯示 / 下載 buttons; download writes the full body')
+
+  await sendTo('/slow')
+  await page.getByTestId('request-editor').getByRole('button', { name: '取消' }).first().click()
+  await page.getByTestId('response-error').getByText('已取消請求').waitFor()
+  step('a running request can be cancelled (button only, no keyboard shortcut)')
+
+  await sendTo('/html')
+  await page.getByRole('radio', { name: 'Preview' }).click()
+  assert.equal(await page.getByTestId('html-preview').getAttribute('sandbox'), '')
+  await page.getByRole('radio', { name: 'Pretty' }).click()
+  await page.getByText('自動換行').last().click()
+  await waitUntil(
+    async () =>
+      (await readJson(path.join(userData, 'app-config.json'))).ui?.responseBodyWrap === true,
+    'wrap preference saved'
+  )
+  step('HTML preview runs in a sandboxed iframe; 自動換行 preference is remembered')
+
+  await sendTo('/redirect?n=4')
+  await page.getByTestId('response-error').getByText('重新導向次數超過上限').waitFor()
+  await page.getByTestId('workspace-menu').click()
+  await page.getByRole('menuitem', { name: 'Workspace 設定…' }).click()
+  const wsDialog = page.getByTestId('workspace-settings-dialog')
+  assert.equal(await wsDialog.getByLabel('最多跟隨次數').inputValue(), '3')
+  await wsDialog.getByLabel('最多跟隨次數').fill('5')
+  await wsDialog.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(wsDir, 'workspace.json'))).settings.maxRedirects === 5,
+    'workspace settings saved'
+  )
+  await sendButton().click()
+  await waitUntil(
+    async () =>
+      /^200/.test(
+        await page
+          .getByTestId('response-status')
+          .innerText()
+          .catch(() => '')
+      ),
+    'redirect ok'
+  )
+  step('redirect limit comes from Workspace settings (default 3, now 5)')
+
+  await app.evaluate(({ Menu }) => {
+    const file = Menu.getApplicationMenu().items.find((i) => i.label === 'File')
+    file.submenu.items.find((i) => i.label === 'Save').click()
+  })
+  const cookiesFile = path.join(usersDir, 'cookies.json')
+  await waitUntil(
+    async () => (await readJson(cookiesFile)).url === api('/redirect?n=4'),
+    'menu save'
+  )
+  await urlInput.fill('https://edited.test/unsaved')
+  await writeFile(
+    cookiesFile,
+    JSON.stringify({ ...(await readJson(cookiesFile)), url: 'https://external.test/' })
+  )
+  await t.contextAction('Cookies', '重新讀取')
+  await page.getByTestId('unsaved-dialog').getByRole('button', { name: '放棄並重新讀取' }).click()
+  await waitUntil(
+    async () => (await urlInput.inputValue()) === 'https://external.test/',
+    'reloaded content'
+  )
+  step('File → Save (CmdOrCtrl+S) saves; 重新讀取 asks before discarding unsaved edits')
+
+  await app.evaluate(({ Menu }) => {
+    const file = Menu.getApplicationMenu().items.find((i) => i.label === 'File')
+    file.submenu.items.find((i) => i.label === 'Settings…').click()
+  })
+  const appSettings = page.getByTestId('app-settings-dialog')
+  await appSettings.waitFor()
+  await appSettings.getByLabel('自訂').check()
+  await appSettings.getByLabel('Proxy URL').fill('http://127.0.0.1:1')
+  // The test server is on 127.0.0.1, which the default bypass list skips.
+  await appSettings.getByLabel(/不經過 Proxy/).fill('')
+  await appSettings.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(userData, 'app-config.json'))).proxy?.mode === 'custom',
+    'proxy saved'
+  )
+  await sendTo('/json')
+  await page.getByTestId('response-error').waitFor()
+  await page.getByRole('tab', { name: 'Settings' }).click()
+  await page.getByText('使用 App 的 Proxy 設定').click()
+  await sendButton().click()
+  await waitUntil(
+    async () =>
+      /^200/.test(
+        await page
+          .getByTestId('response-status')
+          .innerText()
+          .catch(() => '')
+      ),
+    'no proxy'
+  )
+  step('app proxy setting (userData) is used; a request can opt out of the proxy')
 
   await app.close()
 
@@ -326,5 +620,6 @@ try {
 
   console.log(`\nAll smoke checks passed. Screenshots: ${shots}`)
 } finally {
+  testServer.close()
   await rm(tmp, { recursive: true, force: true })
 }

@@ -1,6 +1,6 @@
 # Hachi 資料結構（JSON Schema）
 
-> 版本：Phase 1。標示「✅ 已實作」的格式已定案並有 zod schema；標示「📝 草案」的格式會在對應 Phase 實作時定案，並同步更新本文件。
+> 版本：Phase 2。標示「✅ 已實作」的格式已定案並有 zod schema；標示「📝 草案」的格式會在對應 Phase 實作時定案，並同步更新本文件。
 >
 > zod schema 位置：`src/shared/schemas/`
 
@@ -30,7 +30,7 @@
 └─ sessions/<sha1(workspacePath)>.json  📝 Phase 3：各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
 
 <workspace>/                         # 預設 ~/Documents/Hachi/<名稱>/，可自選
-├─ workspace.json                    ✅
+├─ workspace.json                    ✅（settings 於 Phase 2 擴充）
 ├─ .gitignore                        ✅
 ├─ history.json                      ✅ 骨架（entries 格式 📝 Phase 3）
 ├─ .hachi-secrets.json               📝 Phase 3：機密變數值（已列入 .gitignore）
@@ -64,9 +64,23 @@
     }
   ],
   "lastWorkspacePath": "/Users/me/Documents/Hachi/My API", // 啟動時自動開啟；null = 無
-  "window": null // Phase 6：{ x?, y?, width, height, isMaximized }
+  "window": null, // Phase 6：{ x?, y?, width, height, isMaximized }
+  "proxy": {
+    // App 層級（每台電腦），不寫進 Workspace
+    "mode": "none", // "none" | "system" | "custom"
+    "url": "", // custom 時：http://host:port 或 https://host:port（沒寫 scheme 補 http://）
+    "bypass": ["localhost", "127.0.0.1", "::1"], // 不經過 Proxy：完全相符、"*.example.com" / ".example.com"（含子網域）、"*"（全部）
+    "username": "", // 選填，Proxy-Authorization: Basic
+    "password": "" // 目前以明文存在本機；之後可改存系統 Keychain
+  },
+  "ui": {
+    "requestBodyWrap": false, // 請求 Body 編輯器自動換行（僅影響顯示）
+    "responseBodyWrap": false // 回應 Body 自動換行（僅影響顯示）
+  }
 }
 ```
+
+`proxy` 與 `ui` 於 Phase 2 加入（新增欄位附預設值，不升版）。
 
 ## ✅ `workspace.json`
 
@@ -77,9 +91,10 @@
   "name": "My API", // 顯示名稱（1–100 字元）
   "createdAt": "2026-10-01T02:00:00.000Z",
   "settings": {
-    "timeoutMs": 30000, // 預設請求逾時，0 = 不限
-    "validateSSL": true // 預設 TLS 憑證驗證
-    // Phase 2 會補上 proxy 設定（新增欄位附預設值，不升版）
+    "timeoutMs": 30000, // 預設請求逾時，0 = 不限（上限 3600000）
+    "validateSSL": true, // 預設 TLS 憑證驗證
+    "followRedirects": true, // 預設跟隨重新導向（Phase 2）
+    "maxRedirects": 3 // 最多跟隨次數，0–20（Phase 2）
   },
   "collectionOrder": [] // Collection 的 id，依顯示順序（規則同 collection.json 的 order）
 }
@@ -173,7 +188,7 @@ Phase 0 建立骨架 `{ "version": 1, "entries": [] }`。Entry 格式於 Phase 3
 }
 ```
 
-Collection 層級的 Headers / Auth / 變數在 Phase 1 只定義欄位，編輯介面在 Phase 2 加入。
+Collection / 資料夾的 Headers 與 Auth 在 Phase 2 有編輯介面（點選 Collection 或資料夾）。Collection 的 `auth` 不可為 `inherit`（存檔時改為 `none`）。Collection 變數的編輯介面在 Phase 3 與環境變數一起加入。
 
 ### 排序規則（`order` 與 `collectionOrder`）
 
@@ -202,9 +217,11 @@ Phase 1 驗證所有請求共通的欄位：
 | `name`    | string（1–100）         | 顯示名稱                    |
 | `method`  | string（選填）          | HTTP 方法，樹狀清單的標籤用 |
 
-其餘欄位由各自的編輯器在 Phase 2（HTTP）/ Phase 4（WebSocket）定案，屆時以「新增欄位附預設值」的方式加入，不升版。目前新建請求時寫入的預設內容如下。
+WebSocket 的其餘欄位在 Phase 4 定案，以「新增欄位附預設值」的方式加入，不升版。
 
-HTTP（Phase 2 會補齊 body 各模式的欄位）：
+### ✅ HTTP 請求（Phase 2 定案，`src/shared/schemas/http-request.ts`）
+
+所有欄位都有預設值，Phase 1 建立的檔案可直接讀取。
 
 ```jsonc
 {
@@ -212,13 +229,29 @@ HTTP（Phase 2 會補齊 body 各模式的欄位）：
   "id": "…",
   "type": "http",
   "name": "Get users",
-  "method": "GET", // GET | POST | PUT | PATCH | DELETE | HEAD | OPTIONS
-  "url": "",
-  "params": [], // KeyValue[]
+  "method": "GET", // GET | POST | PUT | PATCH | DELETE | HEAD | OPTIONS（讀取時轉大寫）
+  "url": "https://api.example.com/users", // 照輸入保存；發送時才接上 params
+  "params": [], // KeyValue[]：啟用且 key 不為空的列，發送時接在 URL 的 query 之後
   "headers": [], // KeyValue[]
-  "body": { "mode": "none" }, // none | json | raw | formData | urlencoded
-  "auth": { "type": "inherit" },
-  "settings": { "timeoutMs": null, "validateSSL": null } // null = 沿用 Workspace 預設
+  "body": {
+    "mode": "none", // none | json | raw | formData | urlencoded
+    // 各模式的內容分開保存，切換模式不會遺失
+    "json": "",
+    "raw": "",
+    "rawContentType": "text/plain",
+    "formData": [
+      // { id, key, enabled, type: "text" | "file", value, filePath, description? }
+      // filePath 為本機絕對路徑，換電腦可能不存在
+    ],
+    "urlencoded": [] // KeyValue[]
+  },
+  "auth": { "type": "inherit" }, // 見「共用型別」的 Auth
+  "settings": {
+    "timeoutMs": null, // null = 沿用 Workspace；0 = 不限
+    "validateSSL": null, // null = 沿用 Workspace
+    "followRedirects": null, // null = 沿用 Workspace（次數上限一律用 Workspace 的 maxRedirects）
+    "useProxy": true // false = 這個請求不使用 App 的 Proxy 設定
+  }
 }
 ```
 

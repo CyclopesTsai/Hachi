@@ -1,9 +1,12 @@
 import { useEffect } from 'react'
 import { EVENTS } from '@shared/ipc/channels'
+import { UnsavedChangesDialog } from '@renderer/features/http/UnsavedChangesDialog'
 import { WelcomeScreen } from '@renderer/features/onboarding/WelcomeScreen'
+import { AppSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
 import { WorkspaceShell } from '@renderer/features/workspace/WorkspaceShell'
 import { useSystemTheme } from '@renderer/hooks/use-system-theme'
 import { useAppStore } from '@renderer/stores/app-store'
+import { useEditorStore } from '@renderer/stores/editor-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 
 function useMainProcessEvents(): void {
@@ -20,6 +23,12 @@ function useMainProcessEvents(): void {
             break
           case 'workspace.switch':
             store().showWelcome()
+            break
+          case 'request.save':
+            void useEditorStore.getState().save()
+            break
+          case 'app.settings':
+            store().setAppSettingsOpen(true)
             break
         }
       })
@@ -58,6 +67,15 @@ export function App() {
       </div>
     )
   }
-  if (!currentWorkspace || welcomeRequested) return <WelcomeScreen />
-  return <WorkspaceShell workspace={currentWorkspace} />
+  return (
+    <>
+      {!currentWorkspace || welcomeRequested ? (
+        <WelcomeScreen />
+      ) : (
+        <WorkspaceShell workspace={currentWorkspace} />
+      )}
+      <AppSettingsDialog />
+      <UnsavedChangesDialog />
+    </>
+  )
 }

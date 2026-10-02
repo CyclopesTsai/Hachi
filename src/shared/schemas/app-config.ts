@@ -24,12 +24,41 @@ export const recentWorkspaceSchema = z.object({
 })
 export type RecentWorkspace = z.infer<typeof recentWorkspaceSchema>
 
+export const PROXY_MODES = ['none', 'system', 'custom'] as const
+
+/**
+ * App-wide proxy (per machine, not per Workspace — it depends on the network,
+ * not on the project). Stored in userData, never in a Workspace.
+ */
+export const proxySettingsSchema = z.object({
+  mode: z.enum(PROXY_MODES).default('none'),
+  /** For mode "custom": http://host:port or https://host:port */
+  url: z.string().max(2048).default(''),
+  /** Hosts that bypass the proxy: "localhost", "example.com", "*.internal", ".corp" */
+  bypass: z.array(z.string().max(255)).max(200).default(['localhost', '127.0.0.1', '::1']),
+  username: z.string().max(512).default(''),
+  /** Stored locally in plain text for now; may move to the system keychain later. */
+  password: z.string().max(512).default('')
+})
+export type ProxySettings = z.infer<typeof proxySettingsSchema>
+
+/** Display preferences. */
+export const uiSettingsSchema = z.object({
+  /** Soft-wrap long lines in the request body editor (display only). */
+  requestBodyWrap: z.boolean().default(false),
+  /** Soft-wrap long lines in the response body viewer (display only). */
+  responseBodyWrap: z.boolean().default(false)
+})
+export type UiSettings = z.infer<typeof uiSettingsSchema>
+
 export const appConfigSchema = z.object({
   version: z.literal(APP_CONFIG_VERSION),
   theme: themeSchema.default('system'),
   recentWorkspaces: z.array(recentWorkspaceSchema).max(MAX_RECENT_WORKSPACES).default([]),
   lastWorkspacePath: z.string().min(1).nullable().default(null),
-  window: windowStateSchema.nullable().default(null)
+  window: windowStateSchema.nullable().default(null),
+  proxy: proxySettingsSchema.prefault({}),
+  ui: uiSettingsSchema.prefault({})
 })
 export type AppConfig = z.infer<typeof appConfigSchema>
 

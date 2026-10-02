@@ -1,10 +1,13 @@
+import { writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { app, ipcMain, nativeTheme, type BrowserWindow } from 'electron'
 import { APP_ID, APP_NAME } from '@shared/app-info'
 import type { WorkspaceInfo } from '@shared/ipc/api'
 import { INVOKE, type InvokeChannel } from '@shared/ipc/channels'
-import { selectDirectory } from '../dialogs'
+import { selectDirectory, selectFile, selectSavePath } from '../dialogs'
 import type { CollectionService } from '../services/collection-service'
 import type { ConfigService } from '../services/config-service'
+import type { HttpService } from '../services/http/http-service'
 import type { WorkspaceService } from '../services/workspace-service'
 import { createHandler, forbidden, type Handler } from './handler'
 
@@ -12,6 +15,7 @@ export interface IpcContext {
   config: ConfigService
   workspaces: WorkspaceService
   collections: CollectionService
+  http: HttpService
   getWindow(): BrowserWindow | null
   defaultWorkspaceDir: string
   isTrustedSender(frameUrl: string | undefined): boolean
@@ -35,8 +39,10 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.configUpdate]: async (input) => {
       if (input.theme) {
         nativeTheme.themeSource = input.theme
-        return ctx.config.setTheme(input.theme)
+        await ctx.config.setTheme(input.theme)
       }
+      if (input.proxy) await ctx.config.setProxy(input.proxy)
+      if (input.ui) await ctx.config.setUi(input.ui)
       return ctx.config.get()
     },
     [INVOKE.workspaceGetCurrent]: () => ctx.workspaces.getCurrent(),
@@ -47,13 +53,39 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.workspaceRemoveRecent]: (input) => ctx.workspaces.removeRecent(input.path),
     [INVOKE.workspaceRename]: (input) => ctx.workspaces.rename(input.name),
     [INVOKE.workspaceDelete]: (input) => ctx.workspaces.delete(input.path),
+    [INVOKE.workspaceGetSettings]: () => ctx.workspaces.getSettings(),
+    [INVOKE.workspaceSaveSettings]: (input) => ctx.workspaces.saveSettings(input),
     [INVOKE.dialogSelectDirectory]: (input) => selectDirectory(ctx.getWindow(), input),
+    [INVOKE.dialogSelectFile]: (input) => selectFile(ctx.getWindow(), input),
     [INVOKE.treeGet]: () => ctx.collections.getTree(),
+    [INVOKE.treeReload]: async (input) => {
+      if (input.scope === 'item') return ctx.collections.refreshItem(input.id)
+      await ctx.workspaces.reloadCurrent()
+      return ctx.collections.refresh()
+    },
     [INVOKE.itemCreate]: (input) => ctx.collections.create(input),
     [INVOKE.itemRename]: (input) => ctx.collections.rename(input.id, input.name),
     [INVOKE.itemDuplicate]: (input) => ctx.collections.duplicate(input.id),
     [INVOKE.itemDelete]: (input) => ctx.collections.delete(input.id),
-    [INVOKE.itemMove]: (input) => ctx.collections.move(input.id, input.parentId, input.index)
+    [INVOKE.itemMove]: (input) => ctx.collections.move(input.id, input.parentId, input.index),
+    [INVOKE.requestGet]: (input) => ctx.collections.getRequest(input.id),
+    [INVOKE.requestSave]: (input) => ctx.collections.saveRequest(input.id, input.request),
+    [INVOKE.containerGet]: (input) => ctx.collections.getContainer(input.id),
+    [INVOKE.containerSave]: (input) =>
+      ctx.collections.saveContainer(input.id, { headers: input.headers, auth: input.auth }),
+    [INVOKE.httpSend]: (input) => ctx.http.send(input),
+    [INVOKE.httpCancel]: (input) => ctx.http.cancel(input.runId),
+    [INVOKE.httpGetBody]: (input) => ctx.http.getBodyText(input.runId),
+    [INVOKE.httpSaveResponse]: async (input) => {
+      const stored = ctx.http.requireStored(input.runId)
+      const target = await selectSavePath(ctx.getWindow(), {
+        title: 'Save Response',
+        defaultPath: path.join(app.getPath('downloads'), stored.suggestedName)
+      })
+      if (!target) return null
+      await writeFile(target, stored.body)
+      return target
+    }
   }
 
   for (const channel of Object.keys(handlers) as InvokeChannel[]) {

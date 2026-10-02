@@ -21,19 +21,26 @@ export const workspaceNameSchema = z
   .min(1, 'Name is required')
   .max(WORKSPACE_NAME_MAX, `Name must be at most ${WORKSPACE_NAME_MAX} characters`)
 
+export const MAX_REDIRECTS_LIMIT = 20
+
 export const workspaceSettingsSchema = z.object({
   /** Default request timeout in milliseconds. 0 = no timeout. */
-  timeoutMs: z.number().int().min(0).default(30_000),
+  timeoutMs: z.number().int().min(0).max(3_600_000).default(30_000),
   /** Default TLS certificate verification. */
-  validateSSL: z.boolean().default(true)
+  validateSSL: z.boolean().default(true),
+  /** Follow HTTP redirects by default. */
+  followRedirects: z.boolean().default(true),
+  /** Maximum number of redirects to follow. */
+  maxRedirects: z.number().int().min(0).max(MAX_REDIRECTS_LIMIT).default(3)
 })
+export type WorkspaceSettings = z.infer<typeof workspaceSettingsSchema>
 
 export const workspaceFileSchema = z.object({
   version: z.literal(WORKSPACE_VERSION),
   id: z.string().min(1),
   name: workspaceNameSchema,
   createdAt: z.string(),
-  settings: workspaceSettingsSchema.default({ timeoutMs: 30_000, validateSSL: true }),
+  settings: workspaceSettingsSchema.prefault({}),
   /** Collection ids, in display order. Unknown / missing ids are tolerated (see docs/schema.md). */
   collectionOrder: z.array(z.string()).default([])
 })

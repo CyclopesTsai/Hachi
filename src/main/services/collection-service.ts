@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { copyFile, mkdir, readdir, rename } from 'node:fs/promises'
+import { access, copyFile, mkdir, readdir, rename } from 'node:fs/promises'
 import path from 'node:path'
 import { HachiError, isHachiError } from '@shared/errors'
 import { copyName, slugify } from '@shared/file-names'
@@ -11,11 +11,17 @@ import {
   folderFormat,
   newCollectionFile,
   newFolderFile,
+  ITEM_VERSION,
   newRequestFile,
   requestFormat,
+  type Auth,
+  type KeyValue,
   type RequestType
 } from '@shared/schemas/collection'
+import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
+import { parseVersioned, type VersionedFormat } from '@shared/schemas/versioned'
 import { WORKSPACE_FILE, WORKSPACE_LAYOUT, workspaceFormat } from '@shared/schemas/workspace'
+import type { ContainerSettingsData, InheritedSettings } from '@shared/http'
 import {
   INVALID_ID_PREFIX,
   findNode,
@@ -30,6 +36,13 @@ import {
 } from '@shared/tree'
 import { isTempFileName, updateJsonAtomic, writeJsonAtomic } from './fs/atomic-write'
 import { readJsonFile, readVersionedJson } from './fs/json-file'
+import { resolveInherited, type ContainerLevel } from './http/build-request'
+
+const httpRequestFormat: VersionedFormat<typeof httpRequestSchema> = {
+  name: 'request file',
+  currentVersion: ITEM_VERSION,
+  schema: httpRequestSchema
+}
 
 /** Moves a file or folder to the system trash. Injected so tests don't touch the real trash. */
 export type TrashFn = (absPath: string) => Promise<void>
@@ -77,6 +90,24 @@ async function readRawObject(filePath: string): Promise<Record<string, unknown>>
     throw new HachiError('INVALID_FILE', `${filePath}: expected a JSON object`)
   }
   return raw as Record<string, unknown>
+}
+
+function subtreeIds(node: TreeNode): string[] {
+  return 'children' in node ? [node.id, ...node.children.flatMap(subtreeIds)] : [node.id]
+}
+
+/** Returns a copy of the tree with node `id` replaced by `replacement` (or removed when null). */
+export function replaceNode(
+  tree: WorkspaceTree,
+  id: string,
+  replacement: TreeNode | null
+): WorkspaceTree {
+  const swap = <T extends TreeNode>(nodes: T[]): T[] =>
+    nodes.flatMap((node): T[] => {
+      if (node.id === id) return replacement ? [replacement as T] : []
+      return 'children' in node ? [{ ...node, children: swap(node.children) }] : [node]
+    })
+  return { ...tree, collections: swap(tree.collections) }
 }
 
 /** Sorts by the ids in `order`; items not listed go last, by name. */
@@ -140,6 +171,102 @@ export class CollectionService {
   /** Re-reads the disk (e.g. after an external change). Listeners fire only if the tree changed. */
   refresh(): Promise<WorkspaceTree> {
     return this.run(() => this.rescan())
+  }
+
+  /**
+   * Re-reads a single item from disk — a request, a folder or a whole collection
+   * with everything inside it. The rest of the tree is left as it was.
+   * An item whose file / folder no longer exists is removed from the tree.
+   */
+  refreshItem(id: string): Promise<WorkspaceTree> {
+    return this.run(() => this.rescanItem(id))
+  }
+
+  /** Collections / folders above an item, outermost first, read fresh from disk. */
+  getContainerChain(id: string): Promise<ContainerLevel[]> {
+    return this.run(() => this.readChain(this.requireEntry(id).parentId))
+  }
+
+  /** Full content of an HTTP request plus what it inherits. */
+  getRequest(id: string): Promise<{ request: HttpRequest; inherited: InheritedSettings }> {
+    return this.run(async () => {
+      const entry = this.requireValid(id)
+      if (entry.kind !== 'request') throw new HachiError('INVALID_OPERATION', 'Not a request')
+      const request = await this.readHttpRequest(entry.absPath)
+      return { request, inherited: resolveInherited(await this.readChain(entry.parentId)) }
+    })
+  }
+
+  /**
+   * Saves editor content to the request file. The name, id and type on disk are kept
+   * (renaming goes through `rename`); unknown fields already in the file are preserved.
+   */
+  saveRequest(
+    id: string,
+    request: HttpRequest
+  ): Promise<{ request: HttpRequest; tree: WorkspaceTree }> {
+    return this.run(async () => {
+      const entry = this.requireValid(id)
+      if (entry.kind !== 'request') throw new HachiError('INVALID_OPERATION', 'Not a request')
+      await this.readHttpRequest(entry.absPath) // must still be a valid HTTP request
+      await updateJsonAtomic(
+        entry.absPath,
+        () => readRawObject(entry.absPath),
+        (raw) => ({
+          ...raw,
+          ...request,
+          version: ITEM_VERSION,
+          id: raw.id,
+          type: 'http',
+          name: raw.name
+        })
+      )
+      const tree = await this.rescanItem(id)
+      return { request: await this.readHttpRequest(entry.absPath), tree }
+    })
+  }
+
+  /** Shared headers / auth of a collection or folder, plus what a folder inherits. */
+  getContainer(id: string): Promise<ContainerSettingsData> {
+    return this.run(async () => {
+      const entry = this.requireContainer(id)
+      const [own] = await this.readChainLevels([id])
+      const inherited = resolveInherited(await this.readChain(entry.parentId))
+      return {
+        kind: entry.kind as 'collection' | 'folder',
+        headers: own!.headers,
+        auth: own!.auth,
+        inherited
+      }
+    })
+  }
+
+  saveContainer(
+    id: string,
+    data: { headers: KeyValue[]; auth: Auth }
+  ): Promise<ContainerSettingsData> {
+    return this.run(async () => {
+      const entry = this.requireContainer(id)
+      const meta = entry.metaFile as string
+      // A collection has nothing above it to inherit from.
+      const auth =
+        entry.kind === 'collection' && data.auth.type === 'inherit'
+          ? { type: 'none' as const }
+          : data.auth
+      await updateJsonAtomic(
+        meta,
+        () => readRawObject(meta),
+        (raw) => ({ ...raw, headers: data.headers, auth })
+      )
+      const [own] = await this.readChainLevels([id])
+      const inherited = resolveInherited(await this.readChain(entry.parentId))
+      return {
+        kind: entry.kind as 'collection' | 'folder',
+        headers: own!.headers,
+        auth: own!.auth,
+        inherited
+      }
+    })
   }
 
   create(input: CreateItemInput): Promise<{ id: string; tree: WorkspaceTree }> {
@@ -459,6 +586,65 @@ export class CollectionService {
       )
     }
     return newId
+  }
+
+  private async readHttpRequest(file: string): Promise<HttpRequest> {
+    const raw = await readJsonFile(file)
+    if (
+      typeof raw === 'object' &&
+      raw !== null &&
+      (raw as { type?: unknown }).type === 'websocket'
+    ) {
+      throw new HachiError('INVALID_OPERATION', 'WebSocket requests are edited in Phase 4')
+    }
+    return parseVersioned(httpRequestFormat, raw)
+  }
+
+  /** Container levels from the collection down to `parentId` (inclusive). */
+  private async readChain(parentId: string | null): Promise<ContainerLevel[]> {
+    const ids: string[] = []
+    for (let id = parentId; id !== null; id = this.requireEntry(id).parentId) ids.unshift(id)
+    return this.readChainLevels(ids)
+  }
+
+  private async readChainLevels(ids: string[]): Promise<ContainerLevel[]> {
+    const levels: ContainerLevel[] = []
+    for (const id of ids) {
+      const entry = this.requireValid(id)
+      const format = entry.kind === 'collection' ? collectionFormat : folderFormat
+      const meta = await readVersionedJson(entry.metaFile as string, format)
+      levels.push({ id, name: meta.name, headers: meta.headers, auth: meta.auth })
+    }
+    return levels
+  }
+
+  /** Re-reads one item and its subtree; see refreshItem. Must run inside the queue. */
+  private async rescanItem(id: string): Promise<WorkspaceTree> {
+    const root = this.requireRoot()
+    const entry = this.requireEntry(id)
+    const found = findNode(this.tree, id)
+    if (!found) throw new HachiError('NOT_FOUND', 'Item not found')
+
+    const index = new Map(this.index)
+    for (const old of subtreeIds(found.node)) index.delete(old)
+    const seenIds = new Set([...index.keys()].filter((k) => !k.startsWith(INVALID_ID_PREFIX)))
+    const ctx: ScanContext = { root, index, seenIds }
+
+    let replacement: TreeNode | null = null
+    const stillThere = await access(entry.absPath).then(
+      () => true,
+      () => false
+    )
+    if (stillThere) {
+      replacement =
+        entry.kind === 'request'
+          ? await this.scanRequest(entry.absPath, entry.parentId as string, ctx)
+          : await this.scanContainer(entry.absPath, entry.kind, entry.parentId, ctx)
+    }
+    if (this.root !== root) return this.tree
+    this.index = ctx.index
+    this.setTree(replaceNode(this.tree, id, replacement))
+    return this.tree
   }
 
   // -------------------------------------------------------------------- scan

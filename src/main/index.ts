@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { BrowserWindow, app, dialog, nativeTheme, shell } from 'electron'
+import { BrowserWindow, app, dialog, nativeTheme, session, shell } from 'electron'
 import { APP_NAME, WORKSPACE_DIR_NAME } from '@shared/app-info'
 import { isHachiError } from '@shared/errors'
 import type { EventPayloads, WorkspaceInfo } from '@shared/ipc/api'
@@ -12,8 +12,9 @@ import { platform } from './platform'
 import { applySecurityPolicies } from './security'
 import { CollectionService, type TrashFn } from './services/collection-service'
 import { APP_CONFIG_FILE, ConfigService } from './services/config-service'
+import { resolveInherited } from './services/http/build-request'
+import { HttpService } from './services/http/http-service'
 import { WorkspaceService } from './services/workspace-service'
-import { WorkspaceWatcher } from './services/workspace-watcher'
 import { createMainWindow, getRendererUrl } from './window'
 
 app.setName(APP_NAME)
@@ -54,26 +55,26 @@ async function bootstrap(): Promise<void> {
   const trash: TrashFn = (absPath) => shell.trashItem(absPath)
   const workspaces = new WorkspaceService(config, undefined, trash)
   const collections = new CollectionService(trash)
-  const watcher = new WorkspaceWatcher((areas) => {
-    if (areas.has('collections') || areas.has('workspace')) void collections.refresh()
-    if (areas.has('workspace')) void workspaces.reloadCurrent()
-  })
 
-  // The collection tree and the file watcher follow the current Workspace.
-  let switching: Promise<void> = Promise.resolve()
+  // The collection tree follows the current Workspace. Files are not watched:
+  // changes made outside Hachi are picked up with the reload button (tree:reload).
   let openedPath: string | null = null
   workspaces.onChange((current) => {
     if ((current?.path ?? null) === openedPath) return // e.g. a rename: same folder
     openedPath = current?.path ?? null
     void collections.open(current?.path ?? null, current?.id ?? null)
-    switching = switching
-      .then(async () => {
-        if (current) await watcher.start(current.path)
-        else await watcher.stop()
-      })
-      .catch((error: unknown) => console.warn(`[watcher] ${String(error)}`))
   })
   collections.onChange((tree) => send(EVENTS.treeChanged, tree))
+
+  const http = new HttpService({
+    getContainerChain: (requestId) => collections.getContainerChain(requestId),
+    resolveInherited,
+    getWorkspaceSettings: () => workspaces.getSettings(),
+    getProxySettings: () => config.get().proxy,
+    // Platform-specific system proxy lookup is delegated to Chromium (macOS / Windows / Linux).
+    resolveSystemProxy: (url) => session.defaultSession.resolveProxy(url),
+    userAgent: `${APP_NAME}/${app.getVersion()}`
+  })
 
   await workspaces.restoreLast()
 
@@ -110,6 +111,8 @@ async function bootstrap(): Promise<void> {
   const menuActions: MenuActions = {
     newWorkspace: () => sendMenuCommand('workspace.new'),
     switchWorkspace: () => sendMenuCommand('workspace.switch'),
+    save: () => sendMenuCommand('request.save'),
+    openSettings: () => sendMenuCommand('app.settings'),
     openWorkspace: () => {
       void ensureWindow()
         .then(() => openWorkspaceWithDialog())
@@ -136,6 +139,7 @@ async function bootstrap(): Promise<void> {
     config,
     workspaces,
     collections,
+    http,
     defaultWorkspaceDir,
     getWindow: () => mainWindow,
     isTrustedSender,
