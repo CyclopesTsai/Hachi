@@ -164,6 +164,27 @@ export interface HttpSendInput {
   environmentId: string | null
   /** Current editor content, saved or not, before variable substitution. */
   request: HttpRequest
+  /** Send without running the request's scripts ("這次不執行腳本", decision 84). */
+  skipScripts?: boolean
+}
+
+/** A runtime variable (set by scripts / extractions, in memory only — decision 71). */
+export interface RuntimeVariable {
+  name: string
+  value: string
+}
+
+export interface VariablesChangedEvent {
+  /** Runtime variables of the current Workspace (always included). */
+  runtime: RuntimeVariable[]
+  /** Environment / Collection whose stored variables a script or extraction changed. */
+  environmentId: string | null
+  collectionId: string | null
+}
+
+export interface ScriptTrustInput {
+  /** Trust (or stop trusting) the scripts of the current Workspace. */
+  trusted: boolean
 }
 
 export interface EnvironmentSummary {
@@ -333,6 +354,10 @@ export interface InvokeMap {
   'workspace:delete': { input: WorkspacePathInput; output: RecentWorkspaceEntry[] }
   'workspace:getSettings': { input: void; output: WorkspaceSettings }
   'workspace:saveSettings': { input: WorkspaceSettings; output: WorkspaceSettings }
+  'workspace:setScriptTrust': { input: ScriptTrustInput; output: AppConfig }
+  'runtime:list': { input: void; output: RuntimeVariable[] }
+  'runtime:delete': { input: { name: string }; output: RuntimeVariable[] }
+  'runtime:clear': { input: void; output: RuntimeVariable[] }
   'dialog:selectDirectory': { input: SelectDirectoryInput; output: string | null }
   'dialog:selectFile': { input: SelectFileInput; output: string | null }
   'tree:get': { input: void; output: WorkspaceTree }
@@ -397,6 +422,7 @@ export interface EventPayloads {
   'config:changed': AppConfig
   'tree:changed': WorkspaceTree
   'history:changed': HistoryUsage
+  'variables:changed': VariablesChangedEvent
   'ws:event': WsEventPayload
   'app:closeRequested': CloseRequest
 }
@@ -428,6 +454,14 @@ export interface HachiApi {
     delete: InvokeFn<'workspace:delete'>
     getSettings: InvokeFn<'workspace:getSettings'>
     saveSettings: InvokeFn<'workspace:saveSettings'>
+    /** Trust the current Workspace's scripts on this computer (stored in app-config.json). */
+    setScriptTrust: InvokeFn<'workspace:setScriptTrust'>
+  }
+  runtime: {
+    /** Runtime variables of the current Workspace. */
+    list: InvokeFn<'runtime:list'>
+    delete: InvokeFn<'runtime:delete'>
+    clear: InvokeFn<'runtime:clear'>
   }
   tree: {
     get: InvokeFn<'tree:get'>

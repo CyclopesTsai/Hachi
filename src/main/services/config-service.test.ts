@@ -42,7 +42,8 @@ describe('ConfigService', () => {
       },
       ui: { requestBodyWrap: false, responseBodyWrap: false },
       history: { maxEntries: 200 },
-      websocket: { messageLimit: 100 }
+      websocket: { messageLimit: 100 },
+      scripts: { trustedWorkspaces: [] }
     })
     expect(await readDisk()).toEqual(config)
   })
@@ -131,5 +132,22 @@ describe('ConfigService', () => {
       await service.removeRecentWorkspace('/ws/a')
       expect(service.get()).toMatchObject({ recentWorkspaces: [], lastWorkspacePath: null })
     })
+  })
+})
+
+describe('ConfigService script trust (decision 84)', () => {
+  it('remembers trusted Workspace folders', async () => {
+    const service = new ConfigService(file, fixedNow, silent)
+    await service.load()
+    expect(service.isScriptTrusted('/ws/a')).toBe(false)
+    await service.setScriptTrust('/ws/a', true)
+    await service.setScriptTrust('/ws/a', true)
+    await service.setScriptTrust('/ws/b', true)
+    expect(((await readDisk()) as { scripts: unknown }).scripts).toEqual({
+      trustedWorkspaces: ['/ws/a', '/ws/b']
+    })
+    await service.setScriptTrust('/ws/a', false)
+    expect(service.isScriptTrusted('/ws/a')).toBe(false)
+    expect(service.isScriptTrusted('/ws/b')).toBe(true)
   })
 })

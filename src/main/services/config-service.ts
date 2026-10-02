@@ -115,6 +115,18 @@ export class ConfigService {
     })
   }
 
+  /** Trusts (or stops trusting) the scripts of a Workspace folder (decision 84). */
+  setScriptTrust(workspacePath: string, trusted: boolean): Promise<AppConfig> {
+    return this.update((c) => {
+      const others = c.scripts.trustedWorkspaces.filter((p) => p !== workspacePath)
+      c.scripts = { trustedWorkspaces: trusted ? [...others, workspacePath] : others }
+    })
+  }
+
+  isScriptTrusted(workspacePath: string): boolean {
+    return this.get().scripts.trustedWorkspaces.includes(workspacePath)
+  }
+
   setWindowState(window: WindowState): Promise<AppConfig> {
     return this.update((c) => {
       c.window = window

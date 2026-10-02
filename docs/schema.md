@@ -83,11 +83,14 @@
   },
   "websocket": {
     "messageLimit": 100 // 每個 WebSocket 分頁的訊息串最多保留幾則（10–5000），超過時刪除最舊的
+  },
+  "scripts": {
+    "trustedWorkspaces": ["/Users/me/Documents/Hachi/My API"] // 信任其腳本的 Workspace 資料夾（決策 84，只在這台電腦）
   }
 }
 ```
 
-`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3、`websocket` 於 Phase 4 加入（新增欄位附預設值，不升版）。
+`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3、`websocket` 於 Phase 4、`scripts` 於 Phase 5b 加入（新增欄位附預設值，不升版）。
 
 ## ✅ `workspace.json`
 
@@ -292,12 +295,37 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
     "useProxy": true // false = 這個請求不使用 App 的 Proxy 設定
   },
   "scripts": {
-    // Phase 5a 起保存（例如從 Postman 匯入），Phase 5b 起執行
-    "preRequest": "", // 發送前執行的 JavaScript（最多約 1 MB）
+    "preRequest": "", // 發送前執行的 JavaScript（最多約 1 MB），見 docs/ipc.md「腳本」
     "postResponse": "" // 收到回應後執行的 JavaScript
-  }
+  },
+  "extractions": [
+    // 從回應擷取變數（決策 73 / 81），收到回應後、Post-response 腳本之前執行
+    {
+      "id": "…",
+      "enabled": true,
+      "source": "jsonBody", // jsonBody | header | status | body
+      "path": "data.token", // JSON 路徑 / Header 名稱 / body 的 Regex（取第 1 個群組）；空白＝整個 JSON 或 Body
+      "variable": "token",
+      "scope": "runtime" // runtime（暫存變數，預設）| environment（寫入目前環境）
+    }
+  ],
+  "assertions": [
+    // 斷言（決策 73），最後執行
+    {
+      "id": "…",
+      "enabled": true,
+      "target": "jsonBody", // status | responseTime | header | jsonBody | body
+      "path": "data.items[0].id", // header 名稱或 JSON 路徑（其他 target 不用）
+      "operator": "eq", // eq | neq | contains | notContains | exists | notExists | gt | gte | lt | lte | matches | isType
+      "expected": "{{userId}}" // 執行時替換變數；isType 用 string / number / boolean / object / array / null
+    }
+  ]
 }
 ```
+
+- **JSON 路徑**：`data.items[0].id`、`$.data`、`data["key with space"]`；空白或 `$` 為整個 JSON。
+- **比較規則**：依實際值的型別比較——字串直接比對；數字以 `Number(預期值)` 比較；布林 / null 比對文字 `true` / `false` / `null`；物件 / 陣列以 `JSON.parse(預期值)` 深度比較。`contains`：字串包含、陣列含有相等的元素、物件含有該 key。
+- **擷取的值**：字串照原樣，其他 JSON 值以 `JSON.stringify` 存成文字。
 
 `collection.json` / `folder.json` 也可能有同樣形狀的 `scripts`（從 Postman 匯入時保留），目前不會執行（決策 70）。
 

@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import type { EnvironmentData, EnvironmentSummary } from '@shared/ipc/api'
+import type {
+  EnvironmentData,
+  EnvironmentSummary,
+  RuntimeVariable,
+  VariablesChangedEvent
+} from '@shared/ipc/api'
 import type { Variable } from '@shared/schemas/collection'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 
@@ -11,6 +16,8 @@ interface EnvState {
   active: EnvironmentData | null
   /** Variables of collections that open tabs belong to, by collection id. */
   collectionVariables: Record<string, Variable[]>
+  /** Runtime variables of the current Workspace (decision 71, in memory only). */
+  runtime: RuntimeVariable[]
   error: string | null
 
   reset(): void
@@ -23,6 +30,11 @@ interface EnvState {
   setCollectionVariables(collectionId: string, variables: Variable[]): void
   /** Forgets cached collection variables (after re-reading files). */
   clearCollectionVariables(): void
+  loadRuntime(): Promise<void>
+  deleteRuntime(name: string): Promise<void>
+  clearRuntime(): Promise<void>
+  /** A script / extraction changed variables (`variables:changed`). */
+  variablesChanged(event: VariablesChangedEvent): Promise<void>
 }
 
 /** Collection variables are loaded once per collection; requests in flight are shared. */
@@ -33,11 +45,19 @@ export const useEnvStore = create<EnvState>()((set, get) => ({
   activeId: null,
   active: null,
   collectionVariables: {},
+  runtime: [],
   error: null,
 
   reset() {
     inflight.clear()
-    set({ list: [], activeId: null, active: null, collectionVariables: {}, error: null })
+    set({
+      list: [],
+      activeId: null,
+      active: null,
+      collectionVariables: {},
+      runtime: [],
+      error: null
+    })
   },
 
   async loadList() {
@@ -103,5 +123,35 @@ export const useEnvStore = create<EnvState>()((set, get) => ({
   clearCollectionVariables() {
     inflight.clear()
     set({ collectionVariables: {} })
+  },
+
+  async loadRuntime() {
+    try {
+      set({ runtime: await unwrap(window.hachi.runtime.list()) })
+    } catch {
+      set({ runtime: [] })
+    }
+  },
+
+  async deleteRuntime(name) {
+    set({ runtime: await unwrap(window.hachi.runtime.delete({ name })) })
+  },
+
+  async clearRuntime() {
+    set({ runtime: await unwrap(window.hachi.runtime.clear()) })
+  },
+
+  async variablesChanged(event) {
+    set({ runtime: event.runtime })
+    const { activeId } = get()
+    if (event.environmentId && event.environmentId === activeId) await get().setActive(activeId)
+    if (event.collectionId && get().collectionVariables[event.collectionId]) {
+      const id = event.collectionId
+      set((s) => {
+        const { [id]: _removed, ...rest } = s.collectionVariables
+        return { collectionVariables: rest }
+      })
+      await get().ensureCollectionVariables(id)
+    }
   }
 }))

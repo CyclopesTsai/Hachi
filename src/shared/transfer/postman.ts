@@ -186,6 +186,27 @@ function parseAuth(raw: unknown, fallback: Auth, where: string, warnings: Transf
   }
 }
 
+/** Postman script APIs the Hachi sandbox does not provide (decision 72). */
+const UNSUPPORTED_SCRIPT_APIS: [RegExp, string][] = [
+  [/\bpm\.sendRequest\b/, 'pm.sendRequest'],
+  [/\bpm\.cookies\b/, 'pm.cookies'],
+  [/\bpm\.vault\b/, 'pm.vault'],
+  [/\bpm\.execution\b/, 'pm.execution'],
+  [/\bpm\.visualizer\b/, 'pm.visualizer'],
+  [/\b(pm|postman)\.setNextRequest\b/, 'setNextRequest'],
+  [/\bpm\.require\b/, 'pm.require'],
+  [/\bsetTimeout\s*\(/, 'setTimeout'],
+  [/\b(?:await|async)\b/, 'async / await']
+]
+
+export function unsupportedScriptApis(code: string): string[] {
+  const found = UNSUPPORTED_SCRIPT_APIS.filter(([re]) => re.test(code)).map(([, name]) => name)
+  for (const m of code.matchAll(/\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+    if (m[1] !== 'crypto-js') found.push(`require('${m[1]}')`)
+  }
+  return [...new Set(found)]
+}
+
 function parseScripts(events: unknown, where: string, warnings: TransferWarnings) {
   const scripts: RequestScripts = { preRequest: '', postResponse: '' }
   let found = false
@@ -199,6 +220,10 @@ function parseScripts(events: unknown, where: string, warnings: TransferWarnings
       continue
     }
     const listen = asString(event.listen)
+    const unsupported = unsupportedScriptApis(code)
+    if (unsupported.length > 0) {
+      warnings.add(`腳本使用了 Hachi 不支援的寫法：${unsupported.join('、')}`, where)
+    }
     if (listen === 'prerequest') scripts.preRequest = code
     else if (listen === 'test') scripts.postResponse = code
     else continue

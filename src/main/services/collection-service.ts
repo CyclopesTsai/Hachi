@@ -44,7 +44,7 @@ import { readJsonFile, readVersionedJson } from './fs/json-file'
 import { uniqueFileName } from './fs/unique-name'
 import { resolveInherited, type ContainerLevel } from './http/build-request'
 import { copySecrets, getSecrets, setSecrets } from './secrets'
-import type { VariableLayer } from '@shared/variables'
+import { applyVariableChanges, type VariableLayer } from '@shared/variables'
 
 /** Moves a file or folder to the system trash. Injected so tests don't touch the real trash. */
 export type TrashFn = (absPath: string) => Promise<void>
@@ -206,6 +206,15 @@ export class CollectionService {
 
   /** Variables of the collection that contains `parentId` (secret values included). */
   getCollectionLayer(parentId: string | null): Promise<VariableLayer | null> {
+    return this.getCollectionFor(parentId).then((c) =>
+      c ? { source: 'collection', sourceName: c.name, variables: c.variables } : null
+    )
+  }
+
+  /** The Collection that `parentId` (a collection or folder) belongs to, secrets included. */
+  getCollectionFor(
+    parentId: string | null
+  ): Promise<{ id: string; name: string; variables: Variable[] } | null> {
     if (parentId === null) return Promise.resolve(null)
     return this.run(async () => {
       this.requireContainer(parentId)
@@ -216,11 +225,20 @@ export class CollectionService {
       const entry = this.requireValid(id)
       const meta = await readVersionedJson(entry.metaFile as string, collectionFormat)
       const secrets = await getSecrets(this.requireRoot(), 'collections', id)
-      return {
-        source: 'collection',
-        sourceName: meta.name,
-        variables: mergeSecrets(meta.variables, secrets)
-      }
+      return { id, name: meta.name, variables: mergeSecrets(meta.variables, secrets) }
+    })
+  }
+
+  /** Applies `set` / `unset` from a script to a Collection's variables (decision 71). */
+  async applyVariableChanges(
+    collectionId: string,
+    changes: readonly { name: string; value: string | null }[]
+  ): Promise<void> {
+    const data = await this.getContainer(collectionId)
+    await this.saveContainer(collectionId, {
+      headers: data.headers,
+      auth: data.auth,
+      variables: applyVariableChanges(data.variables, changes, this.newId)
     })
   }
 

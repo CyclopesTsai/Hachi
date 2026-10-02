@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { HttpResult } from '@shared/http'
+import type { VariablesChangedEvent } from '@shared/ipc/api'
 import type { HistoryEntry } from '@shared/schemas/history'
 import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
 import { wsRequestSchema, type WsRequest } from '@shared/schemas/ws-request'
@@ -33,6 +34,8 @@ import {
   type WsTab
 } from '@renderer/features/tabs/tab-model'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
+import { hasScripts } from '@shared/scripts'
+import { useAppStore } from './app-store'
 import { useEnvStore } from './env-store'
 import { useTreeStore } from './tree-store'
 import { isLive, useWsStore } from './ws-store'
@@ -47,6 +50,12 @@ export interface UnsavedPrompt {
   resolve(proceed: boolean): void
 }
 
+/** "信任這個 Workspace 的腳本？" before the first script runs (decision 84). */
+export type TrustChoice = 'trust' | 'skip' | 'cancel'
+export interface TrustPrompt {
+  resolve(choice: TrustChoice): void
+}
+
 /** The "Save As" dialog for an unsaved request. */
 export interface SaveAsRequest {
   key: TabKey
@@ -58,6 +67,7 @@ interface TabsState {
   activeKey: TabKey | null
   prompt: UnsavedPrompt | null
   saveAs: SaveAsRequest | null
+  trustPrompt: TrustPrompt | null
   /** Full text of "large" bodies the user chose to display, by run id. */
   fullBodies: Record<string, string>
   /** Set once the session of the current Workspace was restored (enables saving it). */
@@ -106,6 +116,7 @@ interface TabsState {
   cancelSaveAs(): void
 
   send(key: TabKey): Promise<void>
+  resolveTrust(choice: TrustChoice): void
   cancel(key: TabKey): Promise<void>
   showFullBody(key: TabKey, runId: string): Promise<void>
   downloadResponse(key: TabKey, runId: string): Promise<string | null>
@@ -117,11 +128,19 @@ interface TabsState {
   resolvePrompt(choice: 'save' | 'discard' | 'cancel'): Promise<void>
   /** Re-reads inherited headers / auth of every open tab (after containers changed). */
   refreshInherited(): Promise<void>
+  /** Re-reads environment / Collection tabs (without unsaved edits) a script changed. */
+  variablesChanged(event: VariablesChangedEvent): void
   /** Applies a tree change (deleted / renamed items). */
   treeChanged(tree: WorkspaceTree): void
 }
 
 const tree = () => useTreeStore.getState().tree
+
+/** Whether the current Workspace's scripts are trusted on this computer (decision 84). */
+function scriptsTrusted(): boolean {
+  const { config, currentWorkspace } = useAppStore.getState()
+  return !!currentWorkspace && !!config?.scripts.trustedWorkspaces.includes(currentWorkspace.path)
+}
 
 function newHttpRequest(): HttpRequest {
   return httpRequestSchema.parse({
@@ -278,17 +297,20 @@ export const useTabsStore = create<TabsState>()((set, get) => {
     activeKey: null,
     prompt: null,
     saveAs: null,
+    trustPrompt: null,
     fullBodies: {},
     sessionReady: false,
 
     reset() {
       get().prompt?.resolve(false)
       get().saveAs?.resolve(false)
+      get().trustPrompt?.resolve('cancel')
       set({
         tabs: [],
         activeKey: null,
         prompt: null,
         saveAs: null,
+        trustPrompt: null,
         fullBodies: {},
         sessionReady: false
       })
@@ -528,8 +550,28 @@ export const useTabsStore = create<TabsState>()((set, get) => {
     async send(key) {
       const tab = find(key)
       if (tab?.kind !== 'request' || !tab.draft || tab.runId) return
-      const runId = crypto.randomUUID()
       const request = tab.draft
+      let skipScripts = false
+      if (hasScripts(request.scripts) && !scriptsTrusted()) {
+        const choice = await new Promise<TrustChoice>((resolve) =>
+          set({ trustPrompt: { resolve } })
+        )
+        set({ trustPrompt: null })
+        if (choice === 'cancel') return
+        if (choice === 'skip') skipScripts = true
+        else {
+          try {
+            const config = await unwrap(window.hachi.workspace.setScriptTrust({ trusted: true }))
+            useAppStore.getState().configChanged(config)
+          } catch (error) {
+            useAppStore.getState().setNotice(errorMessage(error))
+            return
+          }
+        }
+      }
+      const current = find(key)
+      if (current?.kind !== 'request' || current.runId) return
+      const runId = crypto.randomUUID()
       patch<RequestTab>(key, (t) => ({ ...t, runId, preview: false }))
       let result: HttpResult
       try {
@@ -539,7 +581,8 @@ export const useTabsStore = create<TabsState>()((set, get) => {
             requestId: tab.itemId,
             parentId: contextParentId(tab, tree()),
             environmentId: useEnvStore.getState().activeId,
-            request
+            request,
+            skipScripts
           })
         )
       } catch (error) {
@@ -559,6 +602,26 @@ export const useTabsStore = create<TabsState>()((set, get) => {
           t.kind === 'request' && t.runId === runId ? { ...t, runId: null, result } : t
         )
       }))
+    },
+
+    variablesChanged(event) {
+      for (const t of get().tabs) {
+        if (isTabDirty(t)) continue
+        if (
+          t.kind === 'environments' &&
+          event.environmentId &&
+          t.selectedId === event.environmentId
+        ) {
+          void load(t.key)
+        }
+        if (t.kind === 'container' && event.collectionId && t.itemId === event.collectionId) {
+          void load(t.key)
+        }
+      }
+    },
+
+    resolveTrust(choice) {
+      get().trustPrompt?.resolve(choice)
     },
 
     async cancel(key) {

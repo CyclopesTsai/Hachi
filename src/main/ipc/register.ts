@@ -16,6 +16,7 @@ import type { WsService } from '../services/ws/ws-service'
 import type { HttpService } from '../services/http/http-service'
 import type { WorkspaceService } from '../services/workspace-service'
 import type { TransferService } from '../services/transfer-service'
+import type { RuntimeVariables } from '../services/runtime-variables'
 import { createHandler, forbidden, type Handler } from './handler'
 
 export interface IpcContext {
@@ -27,6 +28,7 @@ export interface IpcContext {
   history: HistoryService
   sessions: SessionService
   transfer: TransferService
+  runtime: RuntimeVariables
   /** Sends a request and records it in the history. */
   sendHttp(input: HttpSendInput): Promise<HttpResult>
   ws: WsService
@@ -91,6 +93,17 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     },
     [INVOKE.workspaceGetSettings]: () => ctx.workspaces.getSettings(),
     [INVOKE.workspaceSaveSettings]: (input) => ctx.workspaces.saveSettings(input),
+    [INVOKE.workspaceSetScriptTrust]: (input) =>
+      ctx.config.setScriptTrust(workspacePath(), input.trusted),
+    [INVOKE.runtimeList]: () => ctx.runtime.list(workspacePath()),
+    [INVOKE.runtimeDelete]: (input) => {
+      ctx.runtime.delete(workspacePath(), input.name)
+      return ctx.runtime.list(workspacePath())
+    },
+    [INVOKE.runtimeClear]: () => {
+      ctx.runtime.clear(workspacePath())
+      return ctx.runtime.list(workspacePath())
+    },
     [INVOKE.dialogSelectDirectory]: (input) => selectDirectory(ctx.getWindow(), input),
     [INVOKE.dialogSelectFile]: (input) => selectFile(ctx.getWindow(), input),
     [INVOKE.dialogSaveTextFile]: async (input) => {

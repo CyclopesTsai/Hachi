@@ -200,6 +200,11 @@ function treeHelpers(page) {
     const y =
       where === 'inside' ? t.y + t.height / 2 : where === 'before' ? t.y + 2 : t.y + t.height - 2
     await page.mouse.move(t.x + t.width / 2, y, { steps: 12 })
+    // Let the drag library see the final position before dropping (it reads it on the next
+    // frame; releasing right away sometimes used the previous position, e.g. "inside").
+    await new Promise((r) => setTimeout(r, 150))
+    await page.mouse.move(t.x + t.width / 2 + 1, y)
+    await new Promise((r) => setTimeout(r, 100))
     await page.mouse.up()
   }
 
@@ -246,6 +251,7 @@ try {
       'item',
       'on',
       'request',
+      'runtime',
       'session',
       'transfer',
       'tree',
@@ -262,7 +268,8 @@ try {
       'openWithDialog',
       'removeRecent',
       'rename',
-      'saveSettings'
+      'saveSettings',
+      'setScriptTrust'
     ]
   })
   step('renderer has no Node/Electron access; only the window.hachi whitelist')
@@ -1111,6 +1118,109 @@ try {
   await transferResult.getByRole('button', { name: '確定' }).click()
   await t.row('Shop copy').waitFor()
   step('export a Collection as Postman v2.1; File → Import… reads it back as "Shop copy"')
+
+  // ---- Phase 5b: scripts, extraction, assertions, script trust ----
+  // "Shop copy" has a Ping too: pick the original by its file.
+  await page.locator('[data-testid="tree-row"][title="collections/shop/ping.json"]').click()
+  const pingEditor = page.getByTestId('request-editor')
+  await page.getByTestId('url-input').fill('{{shopBase}}/echo')
+  await pingEditor.getByRole('tab', { name: /^Scripts/ }).click()
+  await page.locator('[data-testid="script-editor"] .cm-content').click()
+  await page.keyboard.insertText(
+    "hachi.variables.set('stamp', 'from-pre'); hachi.request.headers.set('X-Stamp', '{{stamp}}'); console.log('pre ran')"
+  )
+  await page
+    .getByTestId('scripts-tab')
+    .getByRole('radio', { name: /Post-response/ })
+    .click()
+  await page.locator('[data-testid="script-editor"] .cm-content').click()
+  await page.keyboard.insertText(
+    "hachi.test('echo is JSON', () => hachi.expect(typeof hachi.response.json()).toBe('object')); pm.environment.set('pmSet', 'yes'); console.log(CryptoJS.SHA256('a').toString())"
+  )
+  await pingEditor.getByRole('tab', { name: /^Tests/ }).click()
+  const testsTab = page.getByTestId('tests-tab')
+  await testsTab.getByRole('button', { name: '新增擷取' }).click()
+  const extraction = page.getByTestId('extraction-row').first()
+  await extraction.getByLabel('路徑').fill('method')
+  await extraction.getByLabel('變數名稱').fill('echoMethod')
+  for (let i = 0; i < 3; i++) await testsTab.getByRole('button', { name: '新增斷言' }).click()
+  const assertionRow = (i) => page.getByTestId('assertion-row').nth(i)
+  await assertionRow(1).getByLabel('檢查對象').selectOption('jsonBody')
+  await assertionRow(1).getByLabel('路徑').fill('headers["x-stamp"]')
+  await assertionRow(1).getByLabel('預期值').fill('{{stamp}}')
+  await assertionRow(2).getByLabel('預期值').fill('404')
+
+  await pingEditor.getByRole('button', { name: '發送' }).click()
+  const trustDialog = page.getByTestId('script-trust-dialog')
+  await trustDialog.waitFor()
+  await trustDialog.getByRole('button', { name: '信任並執行' }).click()
+  await page.getByTestId('tests-summary').waitFor()
+  assert.equal(await page.getByTestId('tests-summary').innerText(), '3/4')
+  await page.getByTestId('tests-trigger').click()
+  const testsPanel = page.getByTestId('tests-panel')
+  const testsText = await testsPanel.innerText()
+  assert.ok(testsText.includes('echo is JSON') && testsText.includes('狀態碼 等於 404'), testsText)
+  assert.ok(testsText.includes('echoMethod（暫存變數）'), 'extraction shown')
+  assert.equal(
+    await testsPanel.locator('[data-testid="variable-changes"] [data-scope="environment"]').count(),
+    1,
+    'environment change highlighted'
+  )
+  await page.screenshot({ path: path.join(shots, '12-tests.png') })
+  await page.getByRole('tab', { name: /^Console/ }).click()
+  const consoleText = await page.getByTestId('console-panel').innerText()
+  assert.ok(consoleText.includes('pre ran'))
+  assert.ok(
+    consoleText.includes('ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb'),
+    'CryptoJS in the sandbox'
+  )
+  const trustedConfig = await readJson(path.join(userData, 'app-config.json'))
+  assert.deepEqual(trustedConfig.scripts.trustedWorkspaces, [wsDir])
+  const devEnv = await readJson(path.join(wsDir, 'environments', 'dev.json'))
+  assert.ok(devEnv.variables.some((x) => x.key === 'pmSet' && x.value === 'yes'))
+  step(
+    'scripts run in the sandbox after trusting the Workspace: pre-request header + runtime variable, extraction, assertions 3/4, console, CryptoJS, pm.environment.set'
+  )
+
+  await page.getByTestId('environment-select').click()
+  await page.getByRole('menuitem', { name: '管理環境…' }).click()
+  const runtimeSection = page.getByTestId('runtime-variables')
+  await runtimeSection.locator('[data-testid="runtime-variable"][data-name="stamp"]').waitFor()
+  assert.equal(
+    await runtimeSection.locator('[data-name="echoMethod"] td').nth(1).innerText(),
+    'GET'
+  )
+  await runtimeSection.getByRole('button', { name: '全部清除' }).click()
+  await waitUntil(
+    async () => (await runtimeSection.getByTestId('runtime-variable').count()) === 0,
+    'runtime variables cleared'
+  )
+  await tabByTitle('Ping').click()
+
+  await page.getByTestId('workspace-menu').click()
+  await page.getByRole('menuitem', { name: 'Workspace 設定…' }).click()
+  const wsSettings = page.getByTestId('workspace-settings-dialog')
+  await wsSettings.getByTestId('trust-scripts').uncheck()
+  await wsSettings.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () =>
+      (await readJson(path.join(userData, 'app-config.json'))).scripts.trustedWorkspaces.length ===
+      0,
+    'trust removed'
+  )
+  await page.getByTestId('request-editor').getByRole('button', { name: '發送' }).click()
+  await trustDialog.waitFor()
+  await trustDialog.getByRole('button', { name: '這次不執行腳本' }).click()
+  await page.getByTestId('tests-summary').waitFor()
+  await page.getByTestId('tests-trigger').click()
+  await page.getByTestId('tests-panel').getByText('這次沒有執行腳本').waitFor()
+  assert.equal(await page.getByTestId('tests-summary').innerText(), '1/3')
+  // Back to a request without scripts for the proxy checks below.
+  await tabByTitle('Cookies').click()
+  await page.getByTestId('request-editor').locator('h2').getByText('Cookies').waitFor()
+  step(
+    'runtime variables listed / cleared in the environment manager; untrusting asks again and "這次不執行腳本" runs only assertions'
+  )
 
   await clickMenu(app, 'Settings…')
   const appSettings = page.getByTestId('app-settings-dialog')

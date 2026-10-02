@@ -15,6 +15,8 @@ import { cn } from '@renderer/lib/utils'
 import type { RequestTab } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useWrapPreference } from '@renderer/hooks/use-wrap-preference'
+import { testSummary } from '@shared/scripts'
+import { ConsolePanel, TestsPanel } from './ScriptResults'
 
 const ERROR_TITLES: Record<HttpErrorCode, string> = {
   INVALID_URL: 'URL 格式不正確',
@@ -26,6 +28,7 @@ const ERROR_TITLES: Record<HttpErrorCode, string> = {
   TOO_LARGE: '回應超過 100 MB，已中止接收',
   FILE_NOT_FOUND: 'Form-data 指定的檔案不存在',
   TOO_MANY_REDIRECTS: '重新導向次數超過上限（可在 Workspace 設定調整）',
+  SCRIPT: '腳本錯誤，請求沒有發送',
   UNKNOWN: '發送失敗'
 }
 
@@ -296,9 +299,27 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
             {result.url} · {formatDuration(result.timings.totalMs)}
           </p>
         </div>
+        {result.scriptReport && (
+          <Tabs defaultValue="console" className="flex min-h-0 flex-1 flex-col border-t">
+            <TabsList>
+              <TabsTrigger value="console">Console</TabsTrigger>
+              <TabsTrigger value="tests">Tests</TabsTrigger>
+            </TabsList>
+            <TabsContent value="console" className="min-h-0 flex-1">
+              <ConsolePanel report={result.scriptReport} />
+            </TabsContent>
+            <TabsContent value="tests" className="min-h-0 flex-1">
+              <TestsPanel report={result.scriptReport} />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     )
   }
+  const report = result.scriptReport
+  const summary = testSummary(report)
+  const logCount = (report?.preRequest?.logs.length ?? 0) + (report?.postResponse?.logs.length ?? 0)
+  const scriptFailed = !!(report?.preRequest?.error || report?.postResponse?.error)
 
   return (
     <Tabs
@@ -311,6 +332,30 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
           <TabsTrigger value="body">Body</TabsTrigger>
           <TabsTrigger value="headers">Headers ({result.headers.length})</TabsTrigger>
           <TabsTrigger value="cookies">Cookies ({result.cookies.length})</TabsTrigger>
+          {report && (
+            <>
+              <TabsTrigger value="tests" data-testid="tests-trigger">
+                Tests
+                {summary.total > 0 && (
+                  <span
+                    className={cn(
+                      'rounded px-1 text-[10px] font-semibold',
+                      summary.passed === summary.total && !scriptFailed
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                        : 'bg-red-500/15 text-red-700 dark:text-red-400'
+                    )}
+                    data-testid="tests-summary"
+                  >
+                    {summary.passed}/{summary.total}
+                  </span>
+                )}
+                {summary.total === 0 && scriptFailed && (
+                  <AlertTriangle className="size-3.5 text-red-600 dark:text-red-400" />
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="console">Console {logCount > 0 && `(${logCount})`}</TabsTrigger>
+            </>
+          )}
         </TabsList>
         <div className="flex-1" />
         <span
@@ -348,6 +393,16 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
       <TabsContent value="cookies" className="min-h-0 flex-1">
         <CookiesPanel result={result} />
       </TabsContent>
+      {report && (
+        <>
+          <TabsContent value="tests" className="min-h-0 flex-1">
+            <TestsPanel report={report} />
+          </TabsContent>
+          <TabsContent value="console" className="min-h-0 flex-1">
+            <ConsolePanel report={report} />
+          </TabsContent>
+        </>
+      )}
     </Tabs>
   )
 }

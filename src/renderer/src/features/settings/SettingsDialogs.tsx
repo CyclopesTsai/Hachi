@@ -27,7 +27,7 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { CheckboxLabel } from '@renderer/components/ui/native-select'
-import { errorMessage } from '@renderer/lib/ipc'
+import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from '@renderer/stores/app-store'
 import { useHistoryStore } from '@renderer/stores/history-store'
 
@@ -83,7 +83,12 @@ function WorkspaceSettingsForm({
   onDone: () => void
 }) {
   const save = useAppStore((s) => s.saveWorkspaceSettings)
+  const initiallyTrusted = useAppStore((s) => {
+    const path = s.currentWorkspace?.path
+    return !!path && !!s.config?.scripts.trustedWorkspaces.includes(path)
+  })
   const [value, setValue] = useState(initial)
+  const [trusted, setTrusted] = useState(initiallyTrusted)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -92,6 +97,10 @@ function WorkspaceSettingsForm({
     setBusy(true)
     try {
       await save(value)
+      if (trusted !== initiallyTrusted) {
+        const config = await unwrap(window.hachi.workspace.setScriptTrust({ trusted }))
+        useAppStore.getState().configChanged(config)
+      }
       onDone()
     } catch (err) {
       setError(errorMessage(err))
@@ -150,6 +159,20 @@ function WorkspaceSettingsForm({
           }
         />
         <span className="text-xs text-muted-foreground">0–{MAX_REDIRECTS_LIMIT} 次</span>
+      </Row>
+      <Row label="腳本">
+        <div className="flex flex-col gap-1">
+          <CheckboxLabel
+            checked={trusted}
+            data-testid="trust-scripts"
+            onChange={(e) => setTrusted(e.target.checked)}
+          >
+            信任這個 Workspace 的腳本
+          </CheckboxLabel>
+          <span className="text-xs text-muted-foreground">
+            只記在這台電腦；不信任時，發送含有腳本的請求前會先詢問。
+          </span>
+        </div>
       </Row>
       <Footer busy={busy} error={error} />
     </form>

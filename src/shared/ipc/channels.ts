@@ -23,6 +23,7 @@ export const INVOKE = {
   workspaceDelete: 'workspace:delete',
   workspaceGetSettings: 'workspace:getSettings',
   workspaceSaveSettings: 'workspace:saveSettings',
+  workspaceSetScriptTrust: 'workspace:setScriptTrust',
   dialogSelectDirectory: 'dialog:selectDirectory',
   dialogSelectFile: 'dialog:selectFile',
   dialogSaveTextFile: 'dialog:saveTextFile',
@@ -57,6 +58,9 @@ export const INVOKE = {
   historyDelete: 'history:delete',
   historyClear: 'history:clear',
   historyGetUsage: 'history:getUsage',
+  runtimeList: 'runtime:list',
+  runtimeDelete: 'runtime:delete',
+  runtimeClear: 'runtime:clear',
   sessionGet: 'session:get',
   sessionSave: 'session:save',
   wsConnect: 'ws:connect',
@@ -74,6 +78,7 @@ export const EVENTS = {
   configChanged: 'config:changed',
   treeChanged: 'tree:changed',
   historyChanged: 'history:changed',
+  variablesChanged: 'variables:changed',
   wsEvent: 'ws:event',
   appCloseRequested: 'app:closeRequested'
 } as const

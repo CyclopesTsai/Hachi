@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a 已確認；**目前進行：5b 腳本與斷言**（決策 81–85），完成後給使用者確認再做 5c。已改由本機（macOS）的 Claude Code 桌面版接手
+- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a 已確認；**5b（腳本與斷言）完成，等使用者確認**後再做 5c。已改由本機（macOS）的 Claude Code 桌面版接手
 - **最後更新**：2026-10-03
 
 ## Phase 進度
@@ -105,7 +105,22 @@
 
 **驗證方式**：`npm run verify`（342 個單元測試，新增：Postman 匯入 / 匯出與往返、cURL 解析（含瀏覽器 Copy as cURL 的 POSIX / cmd 格式）、四種程式碼產生，且產生的 cURL 與 fetch 程式碼**實際對本機伺服器執行**、Python 以 `ast.parse` 檢查語法、`http:resolve` 的機密值保留、實際寫檔的匯入 / 匯出）；`npm run test:e2e`（**首次在 macOS 實機**跑完全部冒煙檢查，新增 4 項：Import cURL 並發送、Code 對話框（機密值、Python、複製）、拖放 Postman Collection + Environment 並發送匯入的請求、匯出後用 File → Import… 讀回）。
 
-**E2E 在 macOS 的調整**：選單的 Settings… 在 macOS 位於 Hachi 選單（改用依名稱尋找選單項目）；刪除的項目改移到測試自己的暫存資料夾，不會進到電腦的垃圾桶；刪除 Workspace 後等待 app-config 寫入；失敗時自動截圖（`failure.png`）。Phase 1 的拖曳排序檢查在 macOS 偶爾逾時（共 6 次中前 2 次逾時，之後 4 次都通過），尚未找到原因。冒煙檢查共 43 項。
+**E2E 在 macOS 的調整**：選單的 Settings… 在 macOS 位於 Hachi 選單（改用依名稱尋找選單項目）；刪除的項目改移到測試自己的暫存資料夾，不會進到電腦的垃圾桶；刪除 Workspace 後等待 app-config 寫入；失敗時自動截圖（`failure.png`）。Phase 1 的拖曳排序檢查在 macOS 偶爾逾時（原因：放開滑鼠時拖曳函式庫還沒讀到最後的位置，5b 已修正測試）。
+
+### Phase 5b 完成內容（待使用者確認）
+
+- 腳本：請求編輯器新增 Scripts 分頁（Pre-request / Post-response，JavaScript 語法標示，附 API 說明與範例）；在 Electron `utilityProcess` 的 QuickJS 沙箱執行（5 秒 / 64 MB，卡住時結束程序重啟）；`hachi.*` API、Postman `pm.*` 與舊版 `tests[...]` 常用子集、CryptoJS、`btoa` / `atob`、`console`
+- 執行順序：Pre-request 腳本（可改 URL / 方法 / Headers / Body，可設定變數，之後才替換變數）→ 發送 → 擷取 → Post-response 腳本 → 斷言；Pre-request 出錯不發送
+- Tests 分頁：斷言表格（12 種條件、預期值可用 `{{變數}}`）＋「從回應擷取變數」表格（JSON 欄位 / Header / 狀態碼 / Body Regex，預設存成暫存變數）
+- 回應區新增 Tests（通過數 / 總數，紅綠標示；列出斷言、腳本測試、擷取、變數變更，寫入檔案的變更以橘色標出）與 Console 分頁；Pre-request 失敗時錯誤頁也顯示 Console / Tests
+- 暫存變數：main 記憶體中依 Workspace 保存，優先於環境與 Collection（HTTP 與 WebSocket 都適用），編輯器的變數標示也包含；「管理環境…」分頁最上方可查看、單筆刪除、全部清除
+- 腳本信任：第一次發送有腳本的請求時詢問（信任並執行 / 這次不執行腳本 / 取消），記在 `app-config.json` 的 `scripts.trustedWorkspaces`；Workspace 設定可取消
+- 腳本改了環境 / Collection 變數時，推送 `variables:changed`，畫面重新讀取（沒有未儲存修改的環境 / Collection 分頁也會更新）
+- Postman 匯入時列出腳本中不支援的寫法（`pm.sendRequest`、`pm.cookies`、`setNextRequest`、`require` 其他套件、`async` 等）
+- 新 IPC：`workspace:setScriptTrust`、`runtime:list|delete|clear`、事件 `variables:changed`；`http:send` 新增 `skipScripts`；`HttpResult` 新增 `scriptReport`、`requestHeaders`；新錯誤類別 `SCRIPT`
+- 新套件（皆 MIT）：`quickjs-emscripten-core` + `@jitl/quickjs-singlefile-cjs-release-sync`（wasm 內嵌在 JS 中，打包不需額外檔案）、`crypto-js`
+
+**驗證方式**：`npm run verify`（374 個單元測試，新增：沙箱引擎（變數優先順序、修改請求、Jest / Chai / pm 斷言、無 Node / 網路、無窮迴圈 / 記憶體 / 遞迴的中止與恢復、偽造結果、CryptoJS 與 Node 結果一致、console 上限）、斷言與擷取、整條執行流程對本機伺服器實測（HMAC 簽章 Header、腳本設定的變數用在同一個請求、擷取先於 Post-response、變更寫入環境 / Collection、未信任 / 略過腳本、Pre-request 失敗不發送）、信任設定、變數變更套用）；`npm run test:e2e`（macOS，冒煙檢查新增 2 項：信任 Workspace 後執行腳本、擷取、斷言 3/4、Console 與 CryptoJS、`pm.environment.set` 寫入 dev.json、環境管理分頁的暫存變數查看 / 清除、取消信任後「這次不執行腳本」只跑斷言）。冒煙檢查共 45 項。另修正 E2E 的拖曳輔助函式（放開前先停一下），之後的 7 次執行都沒有再逾時。
 
 ## 決策紀錄（已與使用者確認）
 
@@ -199,7 +214,7 @@
 
 ## 下一步
 
-- Phase 5b（腳本與斷言）實作中；完成後給使用者確認，再做 5c（Runner）
+- Phase 5b 已完成，等使用者確認後做 5c（Runner，並行與壓測細節先確認）
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 - Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽

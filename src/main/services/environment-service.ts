@@ -16,7 +16,7 @@ import {
 import { parseVersioned } from '@shared/schemas/versioned'
 import { WORKSPACE_LAYOUT } from '@shared/schemas/workspace'
 import { INVALID_ID_PREFIX } from '@shared/tree'
-import type { VariableLayer } from '@shared/variables'
+import { applyVariableChanges, type VariableLayer } from '@shared/variables'
 import type { TrashFn } from './collection-service'
 import { isTempFileName, updateJsonAtomic, writeJsonAtomic } from './fs/atomic-write'
 import { readJsonFile } from './fs/json-file'
@@ -75,6 +75,18 @@ export class EnvironmentService {
         environmentFileSchema.parse({ version: ENVIRONMENT_VERSION, id, name })
       )
       return { id, list: await this.scan() }
+    })
+  }
+
+  /** Applies `set` / `unset` from a script or an extraction row (decision 71). */
+  async applyVariableChanges(
+    id: string,
+    changes: readonly { name: string; value: string | null }[]
+  ): Promise<EnvironmentData> {
+    const env = await this.get(id)
+    return this.save(id, {
+      name: env.name,
+      variables: applyVariableChanges(env.variables, changes, this.newId)
     })
   }
 

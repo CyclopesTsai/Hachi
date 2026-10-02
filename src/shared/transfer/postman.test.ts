@@ -8,7 +8,8 @@ import {
   exportPostmanCollection,
   importPostmanCollection,
   importPostmanEnvironment,
-  toPostmanUrl
+  toPostmanUrl,
+  unsupportedScriptApis
 } from './postman'
 
 let n = 0
@@ -264,6 +265,36 @@ describe('importPostmanCollection', () => {
       ctx
     )
     expect(w).toEqual(['不支援的 Auth 類型「digest」，已改為 None（R0、R1、R2 等 5 項）'])
+  })
+})
+
+describe('unsupportedScriptApis', () => {
+  it('lists Postman APIs the sandbox does not provide', () => {
+    expect(
+      unsupportedScriptApis(
+        `pm.sendRequest(url, cb); const _ = require('lodash'); const C = require("crypto-js")\npm.cookies.get('a'); postman.setNextRequest('x')`
+      )
+    ).toEqual(['pm.sendRequest', 'pm.cookies', 'setNextRequest', "require('lodash')"])
+    expect(unsupportedScriptApis('pm.test("ok", () => pm.response.to.have.status(200))')).toEqual(
+      []
+    )
+  })
+
+  it('is reported when importing', () => {
+    const { warnings } = importPostmanCollection(
+      {
+        info: { name: 'A', schema: POSTMAN_SCHEMA_V21 },
+        item: [
+          {
+            name: 'R',
+            request: 'https://a.test',
+            event: [{ listen: 'test', script: { exec: ['pm.sendRequest("x")'] } }]
+          }
+        ]
+      },
+      ctx
+    )
+    expect(warnings).toEqual(['腳本使用了 Hachi 不支援的寫法：pm.sendRequest（R）'])
   })
 })
 

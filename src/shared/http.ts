@@ -3,6 +3,7 @@
  * Types + pure helpers only, safe to import anywhere.
  */
 import type { Auth, KeyValue, Variable } from './schemas/collection'
+import type { ScriptReport } from './scripts'
 
 /** Bodies larger than this are not sent to the renderer unless the user asks. */
 export const DISPLAY_LIMIT_BYTES = 10 * 1024 * 1024
@@ -48,9 +49,13 @@ export interface HttpResponseData {
   timings: { headersMs: number; totalMs: number }
   /** The URL that was actually requested (after params, before redirects). */
   url: string
+  /** Headers Hachi sent (multipart Content-Type / Content-Length are added by the client). */
+  requestHeaders: [string, string][]
   redirects: number
   /** `{{names}}` that had no value and were sent as-is. */
   unresolvedVariables: string[]
+  /** Scripts / extractions / assertions; absent when the request has none. */
+  scriptReport?: ScriptReport
 }
 
 export const HTTP_ERROR_CODES = [
@@ -63,6 +68,8 @@ export const HTTP_ERROR_CODES = [
   'TOO_LARGE',
   'FILE_NOT_FOUND',
   'TOO_MANY_REDIRECTS',
+  /** The Pre-request script failed, or scripts of this Workspace are not trusted. */
+  'SCRIPT',
   'UNKNOWN'
 ] as const
 export type HttpErrorCode = (typeof HTTP_ERROR_CODES)[number]
@@ -77,6 +84,7 @@ export interface HttpErrorData {
   timings: { totalMs: number }
   /** `{{names}}` that had no value and were sent as-is. */
   unresolvedVariables: string[]
+  scriptReport?: ScriptReport
 }
 
 export type HttpResult = HttpResponseData | HttpErrorData

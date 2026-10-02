@@ -20,6 +20,8 @@ import { useTreeStore } from '@renderer/stores/tree-store'
 import { AuthEditor } from './AuthEditor'
 import { BodyEditor } from './BodyEditor'
 import { CodeDialog } from './CodeDialog'
+import { ScriptsTab, TestsTab } from './ScriptsEditor'
+import { hasScripts } from '@shared/scripts'
 import { HeadersEditor } from './HeadersEditor'
 import { RequestSettingsTab } from './RequestSettingsTab'
 import { ResponseViewer } from './ResponseViewer'
@@ -141,6 +143,15 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
                   )}
                 </TabsTrigger>
                 <TabsTrigger value="auth">Auth</TabsTrigger>
+                <TabsTrigger value="scripts">
+                  Scripts{' '}
+                  {hasScripts(draft.scripts) && (
+                    <span className="size-1.5 rounded-full bg-primary" />
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="tests">
+                  Tests <Count n={draft.assertions.length + draft.extractions.length} />
+                </TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
               <TabsContent value="params" className="overflow-auto">
@@ -171,6 +182,16 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
                   auth={draft.auth}
                   onChange={(auth) => set({ auth })}
                   inherited={tab.inherited}
+                />
+              </TabsContent>
+              <TabsContent value="scripts" className="flex min-h-0 flex-col">
+                <ScriptsTab scripts={draft.scripts} onChange={(scripts) => set({ scripts })} />
+              </TabsContent>
+              <TabsContent value="tests" className="overflow-auto">
+                <TestsTab
+                  assertions={draft.assertions}
+                  extractions={draft.extractions}
+                  onChange={(patch) => set(patch)}
                 />
               </TabsContent>
               <TabsContent value="settings" className="overflow-auto">

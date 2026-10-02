@@ -21,9 +21,10 @@ export function useVariables(): VariableMap {
   return useContext(VariablesContext)
 }
 
-/** Active environment + the given collection's variables (environment wins). */
+/** Runtime + active environment + the given collection's variables (in that precedence). */
 export function useVariableMap(collectionId: string | null): VariableMap {
   const active = useEnvStore((s) => s.active)
+  const runtime = useEnvStore((s) => s.runtime)
   const collectionVariables = useEnvStore((s) =>
     collectionId ? s.collectionVariables[collectionId] : undefined
   )
@@ -32,6 +33,19 @@ export function useVariableMap(collectionId: string | null): VariableMap {
   )
   return useMemo(() => {
     const layers: VariableLayer[] = []
+    if (runtime.length > 0) {
+      layers.push({
+        source: 'runtime',
+        sourceName: '本次執行',
+        variables: runtime.map((v) => ({
+          id: `runtime:${v.name}`,
+          key: v.name,
+          value: v.value,
+          enabled: true,
+          secret: false
+        }))
+      })
+    }
     if (active) {
       layers.push({ source: 'environment', sourceName: active.name, variables: active.variables })
     }
@@ -43,7 +57,7 @@ export function useVariableMap(collectionId: string | null): VariableMap {
       })
     }
     return buildVariableMap(layers)
-  }, [active, collectionVariables, collectionName])
+  }, [runtime, active, collectionVariables, collectionName])
 }
 
 export type VariableStatus = 'defined' | 'dynamic' | 'missing'
@@ -55,7 +69,7 @@ export interface VariableInfo {
   detail: string
 }
 
-const SOURCE_LABEL = { environment: '環境', collection: 'Collection' } as const
+const SOURCE_LABEL = { runtime: '暫存變數', environment: '環境', collection: 'Collection' } as const
 
 export function describeVariable(name: string, map: VariableMap): VariableInfo {
   const variable = map.get(name)

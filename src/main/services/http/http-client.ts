@@ -198,6 +198,7 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
           headers.reduce((sum, [k, v]) => sum + k.length + v.length + 4, 2),
         timings: { headersMs, totalMs },
         url: built.url,
+        requestHeaders: built.headers,
         redirects: history && history.length > 1 ? history.length - 1 : 0,
         unresolvedVariables: []
       },

@@ -96,6 +96,10 @@ export const inputSchemas = {
   [INVOKE.workspaceDelete]: z.strictObject({ path: absolutePathSchema }),
   [INVOKE.workspaceGetSettings]: noInput,
   [INVOKE.workspaceSaveSettings]: workspaceSettingsSchema,
+  [INVOKE.workspaceSetScriptTrust]: z.strictObject({ trusted: z.boolean() }),
+  [INVOKE.runtimeList]: noInput,
+  [INVOKE.runtimeDelete]: z.strictObject({ name: z.string().min(1).max(200) }),
+  [INVOKE.runtimeClear]: noInput,
   [INVOKE.dialogSelectDirectory]: z.strictObject({
     title: z.string().max(200).optional(),
     defaultPath: absolutePathSchema.optional()
@@ -140,7 +144,8 @@ export const inputSchemas = {
     requestId: itemIdSchema.nullable(),
     parentId: itemIdSchema.nullable(),
     environmentId: itemIdSchema.nullable(),
-    request: httpRequestSchema
+    request: httpRequestSchema,
+    skipScripts: z.boolean().optional()
   }),
   [INVOKE.httpCancel]: z.strictObject({ runId: runIdSchema }),
   [INVOKE.httpGetBody]: z.strictObject({ runId: runIdSchema }),

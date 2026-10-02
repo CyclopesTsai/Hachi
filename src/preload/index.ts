@@ -37,7 +37,13 @@ const api: HachiApi = {
     rename: (input) => invoke(INVOKE.workspaceRename, input),
     delete: (input) => invoke(INVOKE.workspaceDelete, input),
     getSettings: () => invoke(INVOKE.workspaceGetSettings),
-    saveSettings: (input) => invoke(INVOKE.workspaceSaveSettings, input)
+    saveSettings: (input) => invoke(INVOKE.workspaceSaveSettings, input),
+    setScriptTrust: (input) => invoke(INVOKE.workspaceSetScriptTrust, input)
+  },
+  runtime: {
+    list: () => invoke(INVOKE.runtimeList),
+    delete: (input) => invoke(INVOKE.runtimeDelete, input),
+    clear: () => invoke(INVOKE.runtimeClear)
   },
   tree: {
     get: () => invoke(INVOKE.treeGet),

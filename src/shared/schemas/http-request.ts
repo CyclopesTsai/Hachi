@@ -65,15 +65,65 @@ export type HttpRequestSettings = z.infer<typeof httpRequestSettingsSchema>
 export const MAX_SCRIPT_TEXT = 1024 * 1024
 
 /**
- * Pre-request / Post-response scripts (JavaScript). Stored since Phase 5a (e.g. from a
- * Postman import); they run from Phase 5b on. Collections / folders may carry the same
- * shape (kept as-is, not run yet — decision 70).
+ * Pre-request / Post-response scripts (JavaScript, run in a QuickJS sandbox — decision 70).
+ * Collections / folders may carry the same shape (kept as-is, not run yet).
  */
 export const requestScriptsSchema = z.looseObject({
   preRequest: z.string().max(MAX_SCRIPT_TEXT).default(''),
   postResponse: z.string().max(MAX_SCRIPT_TEXT).default('')
 })
 export type RequestScripts = z.infer<typeof requestScriptsSchema>
+
+/** Rows of the assertion table (decision 73). Evaluated after the Post-response script. */
+export const ASSERTION_TARGETS = ['status', 'responseTime', 'header', 'jsonBody', 'body'] as const
+export type AssertionTarget = (typeof ASSERTION_TARGETS)[number]
+
+export const ASSERTION_OPERATORS = [
+  'eq',
+  'neq',
+  'contains',
+  'notContains',
+  'exists',
+  'notExists',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'matches',
+  'isType'
+] as const
+export type AssertionOperator = (typeof ASSERTION_OPERATORS)[number]
+
+export const ROWS_MAX = 500
+
+export const assertionSchema = z.looseObject({
+  id: z.string(),
+  enabled: z.boolean().default(true),
+  target: z.enum(ASSERTION_TARGETS).default('status'),
+  /** Header name, JSON path (`data.items[0].id`) — unused for status / responseTime / body. */
+  path: z.string().max(1000).default(''),
+  operator: z.enum(ASSERTION_OPERATORS).default('eq'),
+  /** May contain `{{variables}}`; resolved when the assertion runs. */
+  expected: z.string().max(100_000).default('')
+})
+export type Assertion = z.infer<typeof assertionSchema>
+
+/** Rows of "從回應擷取變數" (decision 73 / 81). Run before the Post-response script. */
+export const EXTRACTION_SOURCES = ['jsonBody', 'header', 'status', 'body'] as const
+export type ExtractionSource = (typeof EXTRACTION_SOURCES)[number]
+export const EXTRACTION_SCOPES = ['runtime', 'environment'] as const
+export type ExtractionScope = (typeof EXTRACTION_SCOPES)[number]
+
+export const extractionSchema = z.looseObject({
+  id: z.string(),
+  enabled: z.boolean().default(true),
+  source: z.enum(EXTRACTION_SOURCES).default('jsonBody'),
+  /** JSON path, header name, or for `body` an optional regex (first group, or the match). */
+  path: z.string().max(1000).default(''),
+  variable: z.string().max(200).default(''),
+  scope: z.enum(EXTRACTION_SCOPES).default('runtime')
+})
+export type Extraction = z.infer<typeof extractionSchema>
 
 export const httpMethodSchema = z.preprocess(
   (v) => (typeof v === 'string' ? v.toUpperCase() : v),
@@ -95,6 +145,8 @@ export const httpRequestSchema = z.looseObject({
   body: httpBodySchema.prefault({}),
   auth: authSchema.default({ type: 'inherit' }),
   settings: httpRequestSettingsSchema.prefault({}),
-  scripts: requestScriptsSchema.prefault({})
+  scripts: requestScriptsSchema.prefault({}),
+  assertions: z.array(assertionSchema).max(ROWS_MAX).default([]),
+  extractions: z.array(extractionSchema).max(ROWS_MAX).default([])
 })
 export type HttpRequest = z.infer<typeof httpRequestSchema>

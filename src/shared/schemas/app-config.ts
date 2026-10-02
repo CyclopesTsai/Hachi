@@ -72,6 +72,12 @@ export const historySettingsSchema = z.object({
 })
 export type HistorySettings = z.infer<typeof historySettingsSchema>
 
+/** Workspaces whose scripts the user trusts on this computer (decision 84), by folder path. */
+export const scriptSettingsSchema = z.object({
+  trustedWorkspaces: z.array(z.string().min(1)).max(1000).default([])
+})
+export type ScriptSettings = z.infer<typeof scriptSettingsSchema>
+
 export const appConfigSchema = z.object({
   version: z.literal(APP_CONFIG_VERSION),
   theme: themeSchema.default('system'),
@@ -81,7 +87,8 @@ export const appConfigSchema = z.object({
   proxy: proxySettingsSchema.prefault({}),
   ui: uiSettingsSchema.prefault({}),
   history: historySettingsSchema.prefault({}),
-  websocket: websocketSettingsSchema.prefault({})
+  websocket: websocketSettingsSchema.prefault({}),
+  scripts: scriptSettingsSchema.prefault({})
 })
 export type AppConfig = z.infer<typeof appConfigSchema>
 

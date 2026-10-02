@@ -10,6 +10,7 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 import { UnsavedChangesDialog } from '@renderer/features/http/UnsavedChangesDialog'
+import { ScriptTrustDialog } from '@renderer/features/http/ScriptTrustDialog'
 import { WelcomeScreen } from '@renderer/features/onboarding/WelcomeScreen'
 import { AppSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
 import { SaveAsDialog } from '@renderer/features/tabs/SaveAsDialog'
@@ -38,6 +39,10 @@ function useMainProcessEvents(): void {
         useHistoryStore.getState().usageChanged(usage)
       ),
       window.hachi.on(EVENTS.wsEvent, (payload) => useWsStore.getState().handleEvent(payload)),
+      window.hachi.on(EVENTS.variablesChanged, (event) => {
+        void useEnvStore.getState().variablesChanged(event)
+        useTabsStore.getState().variablesChanged(event)
+      }),
       // Closing the window / quitting while tabs have unsaved changes.
       window.hachi.on(EVENTS.appCloseRequested, () => {
         void useTabsStore
@@ -150,7 +155,8 @@ function useWorkspaceData(workspaceId: string | null): void {
       const [session, list, usage] = await Promise.all([
         unwrap(window.hachi.session.get()).catch(() => null),
         useEnvStore.getState().loadList(),
-        unwrap(window.hachi.history.getUsage()).catch(() => null)
+        unwrap(window.hachi.history.getUsage()).catch(() => null),
+        useEnvStore.getState().loadRuntime()
       ])
       if (cancelled) return
       if (usage) useHistoryStore.setState({ usage })
@@ -228,6 +234,7 @@ export function App() {
       <AppSettingsDialog />
       <UnsavedChangesDialog />
       <SaveAsDialog />
+      <ScriptTrustDialog />
       <CurlImportDialog />
       <TransferResultDialog />
       <NoticeDialog />

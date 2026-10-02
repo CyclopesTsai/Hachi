@@ -4,6 +4,7 @@ import { httpRequestSchema } from './schemas/http-request'
 import {
   MAX_DEPTH,
   VariableResolver,
+  applyVariableChanges,
   buildVariableMap,
   findVariableTokens,
   maskSecret,
@@ -261,5 +262,31 @@ describe('maskSecret', () => {
     expect(maskSecret('')).toBe('')
     expect(maskSecret('ab')).toBe('••••')
     expect(maskSecret('x'.repeat(40))).toBe('•'.repeat(12))
+  })
+})
+
+describe('applyVariableChanges', () => {
+  it('updates (and enables) existing variables, adds new ones, removes unset ones', () => {
+    let n = 0
+    const result = applyVariableChanges(
+      [
+        v('token', 'old', { secret: true }),
+        v('off', 'x', { enabled: false }),
+        v('gone', '1'),
+        v('gone', '2')
+      ],
+      [
+        { name: 'token', value: 'new' },
+        { name: 'off', value: 'y' },
+        { name: 'gone', value: null },
+        { name: 'added', value: 'z' }
+      ],
+      () => `new-${++n}`
+    )
+    expect(result).toEqual([
+      v('token', 'new', { secret: true }),
+      v('off', 'y'),
+      { id: 'new-1', key: 'added', value: 'z', enabled: true, secret: false }
+    ])
   })
 })

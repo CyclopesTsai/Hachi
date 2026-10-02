@@ -29,6 +29,9 @@ import { WsService } from './services/ws/ws-service'
 import { resolveInherited } from './services/http/build-request'
 import { HttpService } from './services/http/http-service'
 import { TransferService } from './services/transfer-service'
+import { RuntimeVariables } from './services/runtime-variables'
+import { ScriptHost } from './services/scripts/script-host'
+import { RequestExecutor } from './services/http/executor'
 import { WorkspaceService } from './services/workspace-service'
 import { createMainWindow, getRendererUrl } from './window'
 
@@ -96,11 +99,18 @@ async function bootstrap(): Promise<void> {
       .then((usage) => send(EVENTS.historyChanged, usage))
   })
 
+  // Runtime variables (decision 71) and the script sandbox process (decision 85).
+  const runtime = new RuntimeVariables()
+  const scriptHost = new ScriptHost()
+  app.on('will-quit', () => scriptHost.dispose())
+
   const requestDeps = {
     getContainerChain: (parentId: string | null) => collections.getChainFor(parentId),
     resolveInherited,
     getVariableLayers: async (parentId: string | null, environmentId: string | null) => {
+      const ws = workspaces.getCurrent()
       const layers = [
+        ws ? runtime.layer(ws.path) : null,
         await environments.layer(environmentId),
         await collections.getCollectionLayer(parentId)
       ]
@@ -114,6 +124,33 @@ async function bootstrap(): Promise<void> {
   }
   const http = new HttpService(requestDeps)
   const transfer = new TransferService(collections, environments)
+  const variablesChanged = (change: {
+    environmentId: string | null
+    collectionId: string | null
+  }): void => {
+    const ws = workspaces.getCurrent()
+    send(EVENTS.variablesChanged, { runtime: ws ? runtime.list(ws.path) : [], ...change })
+  }
+  runtime.onChange((workspacePath) => {
+    if (workspaces.getCurrent()?.path === workspacePath) {
+      variablesChanged({ environmentId: null, collectionId: null })
+    }
+  })
+  const executor = new RequestExecutor({
+    http,
+    runtime,
+    runScript: (input) => scriptHost.run(input),
+    workspacePath: () => workspaces.getCurrent()?.path ?? null,
+    isTrusted: (workspacePath) => config.isScriptTrusted(workspacePath),
+    getEnvironment: (id) => (id ? environments.get(id).catch(() => null) : Promise.resolve(null)),
+    getCollection: (parentId) => collections.getCollectionFor(parentId).catch(() => null),
+    getVariableLayers: requestDeps.getVariableLayers,
+    applyEnvironmentChanges: async (id, changes) => {
+      await environments.applyVariableChanges(id, changes)
+    },
+    applyCollectionChanges: (id, changes) => collections.applyVariableChanges(id, changes),
+    variablesChanged
+  })
 
   const environmentName = (id: string | null): Promise<string | null> =>
     id
@@ -173,7 +210,7 @@ async function bootstrap(): Promise<void> {
   const sendHttp = async (input: HttpSendInput): Promise<HttpResult> => {
     const workspace = workspaces.getCurrent()
     const sentAt = new Date().toISOString()
-    const result = await http.send(input)
+    const result = await executor.execute(input)
     if (workspace && !(result.kind === 'error' && result.code === 'CANCELLED')) {
       await history
         .add(workspace.path, {
@@ -313,6 +350,7 @@ async function bootstrap(): Promise<void> {
     history,
     sessions,
     transfer,
+    runtime,
     sendHttp,
     ws,
     connectWs,

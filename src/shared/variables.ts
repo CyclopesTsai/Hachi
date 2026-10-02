@@ -2,7 +2,7 @@
  * `{{variable}}` substitution. Pure: used by main when sending (resolution) and by
  * the renderer for highlighting. See docs/schema.md ("變數替換").
  *
- * - Layers are given highest precedence first (Environment, then Collection).
+ * - Layers are given highest precedence first (runtime, Environment, then Collection).
  * - Disabled variables and variables with an empty name are ignored.
  * - A value may reference other variables; references are followed up to
  *   MAX_DEPTH levels and cycles are left unreplaced.
@@ -34,7 +34,8 @@ export function isDynamicVariable(name: string): name is DynamicVariableName {
   return Object.hasOwn(DYNAMIC_VARIABLES, name)
 }
 
-export type VariableSource = 'environment' | 'collection'
+/** `runtime`: set by scripts / extractions, in memory only (decision 71). */
+export type VariableSource = 'runtime' | 'environment' | 'collection'
 
 export interface VariableLayer {
   source: VariableSource
@@ -237,6 +238,30 @@ export class VariableResolver {
       auth: inherited.auth ? { ...inherited.auth, auth: this.auth(inherited.auth.auth) } : null
     }
   }
+}
+
+/**
+ * Applies `set` / `unset` changes from a script to stored variables: an existing variable
+ * with the name gets the value (and is enabled; secret stays secret), otherwise one is added.
+ */
+export function applyVariableChanges(
+  variables: readonly Variable[],
+  changes: readonly { name: string; value: string | null }[],
+  newId: () => string = () => globalThis.crypto.randomUUID()
+): Variable[] {
+  let result = [...variables]
+  for (const { name, value } of changes) {
+    if (value === null) {
+      result = result.filter((v) => v.key.trim() !== name)
+      continue
+    }
+    let index = result.findIndex((v) => v.key.trim() === name && v.enabled)
+    if (index < 0) index = result.findIndex((v) => v.key.trim() === name)
+    const existing = result[index]
+    if (existing) result[index] = { ...existing, value, enabled: true }
+    else result.push({ id: newId(), key: name, value, enabled: true, secret: false })
+  }
+  return result
 }
 
 /** Masks a secret value for display. */
