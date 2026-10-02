@@ -176,10 +176,13 @@ try {
       'config',
       'container',
       'dialog',
+      'env',
+      'history',
       'http',
       'item',
       'on',
       'request',
+      'session',
       'tree',
       'workspace'
     ],
@@ -376,6 +379,7 @@ try {
   await t.row('Users API v2').click() // selects (and collapses) the collection
   const ce = page.getByTestId('container-editor')
   await ce.waitFor()
+  await ce.getByRole('tab', { name: 'Headers' }).click()
   await ce.getByTestId('headers-table').getByLabel('Key').last().fill('X-Team')
   await ce.getByTestId('headers-table').getByLabel('Value').first().fill('core')
   await ce.getByRole('tab', { name: 'Auth' }).click()
@@ -439,7 +443,12 @@ try {
   step('send: request runs in main with params, inherited header / auth and JSON body')
 
   assert.equal(await t.row('Get Users').getByLabel('有未儲存的修改').count(), 1)
+  const tabByTitle = (title) => page.locator(`[data-testid="tab"][data-title="${title}"]`)
   await t.row('Live Feed').click()
+  assert.ok((await page.locator('main').innerText()).includes('Phase 4'))
+  assert.equal(await page.getByTestId('unsaved-dialog').count(), 0, 'switching tabs never asks')
+  assert.equal(await tabByTitle('Get Users').getAttribute('data-dirty'), 'true')
+  await tabByTitle('Get Users').getByTestId('tab-close').click()
   const unsaved = page.getByTestId('unsaved-dialog')
   await unsaved.waitFor()
   await unsaved.getByRole('button', { name: '儲存', exact: true }).click()
@@ -447,6 +456,7 @@ try {
     async () => (await readJson(path.join(usersDir, 'admin', 'get-users.json'))).method === 'POST',
     'request saved'
   )
+  await tabByTitle('Get Users').waitFor({ state: 'detached' })
   const savedRequest = await readJson(path.join(usersDir, 'admin', 'get-users.json'))
   assert.equal(savedRequest.url, api('/echo'))
   assert.deepEqual(
@@ -458,8 +468,7 @@ try {
     mode: 'json',
     json: '{"hello":"hachi"}'
   })
-  assert.ok((await page.locator('main').innerText()).includes('Phase 4'))
-  step('unsaved changes: switching items asks first; 儲存 writes the request file')
+  step('tabs keep unsaved edits; closing an unsaved tab asks first and 儲存 writes the file')
 
   await t.contextAction('Users API v2', '新增 HTTP 請求')
   await t.typeName('Cookies')
@@ -557,6 +566,158 @@ try {
   )
   step('File → Save (CmdOrCtrl+S) saves; 重新讀取 asks before discarding unsaved edits')
 
+  // ---- Phase 3: tabs ----
+  const tabTitles = () =>
+    page.locator('[data-testid="tab"]').evaluateAll((els) => els.map((e) => e.dataset.title))
+  await t.row('From Git').click()
+  assert.equal(await tabByTitle('From Git').getAttribute('data-preview'), 'true')
+  await t.row('External Col').click()
+  await tabByTitle('External Col').waitFor()
+  assert.equal(await tabByTitle('From Git').count(), 0, 'preview tab replaced')
+  await t.row('External Col').dblclick()
+  assert.equal(await tabByTitle('External Col').getAttribute('data-preview'), null)
+  await t.row('From Git').click()
+  await page.getByTestId('url-input').fill('https://pinned-by-editing.test/')
+  assert.equal(await tabByTitle('From Git').getAttribute('data-preview'), null, 'edit pins')
+  await app.evaluate(({ Menu }) => {
+    const file = Menu.getApplicationMenu().items.find((i) => i.label === 'File')
+    file.submenu.items.find((i) => i.label === 'Close Tab').click()
+  })
+  const unsavedTab = page.getByTestId('unsaved-dialog')
+  await unsavedTab.waitFor()
+  await unsavedTab.getByRole('button', { name: '不儲存' }).click()
+  await tabByTitle('From Git').waitFor({ state: 'detached' })
+  await tabByTitle('External Col').getByTestId('tab-close').click()
+  step(
+    `tabs: preview tab replaced by the next click, pinned by double-click / editing; Close Tab asks about unsaved edits (open: ${(await tabTitles()).join(', ')})`
+  )
+
+  // ---- Phase 3: environments + secrets ----
+  await page.getByTestId('environment-select').click()
+  await page.getByRole('menuitem', { name: '管理環境…' }).click()
+  const envEditor = page.getByTestId('environments-editor')
+  await envEditor.getByRole('button', { name: '建立環境' }).click()
+  await page.getByTestId('environment-name').fill('dev')
+  const envVars = page.getByTestId('environment-variables')
+  await envVars.getByLabel('Key').last().fill('baseUrl')
+  await envVars.getByLabel('Value').first().fill(api(''))
+  await envVars.getByLabel('Key').last().fill('token')
+  await envVars.getByLabel('機密').last().check()
+  // Rows: baseUrl, token, then the blank row for new variables.
+  await envVars.getByLabel('Value').nth(1).fill('s3cret-value')
+  await envEditor.getByRole('button', { name: '儲存' }).click()
+  const envFile = path.join(wsDir, 'environments', 'dev.json')
+  await waitUntil(() => exists(envFile), 'environment renamed to dev.json')
+  const envJson = await readFile(envFile, 'utf8')
+  assert.ok(!envJson.includes('s3cret-value'), 'secret value not in the environment file')
+  assert.deepEqual(
+    JSON.parse(envJson).variables.map((v) => [v.key, v.value, v.secret]),
+    [
+      ['baseUrl', api(''), false],
+      ['token', '', true]
+    ]
+  )
+  const secretsFile = await readJson(path.join(wsDir, '.hachi-secrets.json'))
+  assert.deepEqual(Object.values(secretsFile.environments), [
+    { [JSON.parse(envJson).variables[1].id]: 's3cret-value' }
+  ])
+  await envEditor.getByRole('button', { name: '設為目前環境' }).click()
+  await waitUntil(
+    async () => (await page.getByTestId('active-environment').innerText()) === 'dev',
+    'environment selected'
+  )
+  await page.screenshot({ path: path.join(shots, '7-environments.png') })
+  step(
+    'environments: dev.json keeps secret values empty; .hachi-secrets.json holds them; dev is active'
+  )
+
+  await t.row('Users API v2').click()
+  await ce.getByRole('tab', { name: 'Variables' }).click()
+  const colVars = page.getByTestId('collection-variables')
+  await colVars.getByLabel('Key').last().fill('team')
+  await colVars.getByLabel('Value').first().fill('from-collection')
+  await colVars.getByLabel('Key').last().fill('baseUrl')
+  await colVars.getByLabel('Value').nth(1).fill('http://collection-loses.invalid')
+  await ce.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(usersDir, 'collection.json'))).variables?.length === 2,
+    'collection variables saved'
+  )
+  step('collection Variables tab saves to collection.json')
+
+  // ---- Phase 3: unsaved request tab + {{variables}} ----
+  await page.getByTestId('new-tab').click()
+  await page.getByTestId('url-input').fill('{{baseUrl}}/echo?id={{$randomInt}}&m={{missing}}')
+  const urlBox = page.getByTestId('url-input').locator('..')
+  assert.equal(await urlBox.locator('[data-variable="defined"]').count(), 1)
+  assert.equal(await urlBox.locator('[data-variable="dynamic"]').count(), 1)
+  assert.equal(await urlBox.locator('[data-variable="missing"]').count(), 1)
+  const draftEditor = page.getByTestId('request-editor')
+  await draftEditor.getByRole('tab', { name: /Headers/ }).click()
+  await draftEditor.getByTestId('headers-table').getByLabel('Key').last().fill('X-Token')
+  await draftEditor.getByTestId('headers-table').getByLabel('Value').first().fill('{{token}}')
+  await draftEditor.getByRole('button', { name: '發送' }).click()
+  await page.getByTestId('response-status').waitFor()
+  // The body view has line numbers, so check the pretty-printed text.
+  const draftEcho = await page.getByTestId('response-body').innerText()
+  assert.ok(draftEcho.includes('"x-token": "s3cret-value"'), 'secret sent')
+  assert.match(draftEcho, /"url": "\/echo\?id=\d+&m=\{\{missing\}\}"/)
+  assert.ok((await page.getByTestId('unresolved-variables').innerText()).includes('{{missing}}'))
+  step(
+    'unsaved "+" tab: {{env}} / secret / dynamic variables resolved in main; missing ones highlighted and reported'
+  )
+
+  await draftEditor.getByRole('button', { name: '儲存到…' }).click()
+  const saveAs = page.getByTestId('save-as-dialog')
+  await saveAs.getByLabel('名稱').fill('Env Echo')
+  await saveAs.getByTestId('save-as-parent').selectOption({ label: 'Users API v2' })
+  await saveAs.getByRole('button', { name: '儲存' }).click()
+  await t.row('Env Echo').waitFor()
+  const envEcho = await readJson(path.join(usersDir, 'env-echo.json'))
+  assert.equal(envEcho.url, '{{baseUrl}}/echo?id={{$randomInt}}&m={{missing}}')
+  await tabByTitle('Env Echo').waitFor()
+  await draftEditor.getByTestId('headers-table').getByLabel('Key').last().fill('X-Team')
+  await draftEditor.getByTestId('headers-table').getByLabel('Value').nth(1).fill('{{team}}')
+  await draftEditor.getByRole('button', { name: '發送' }).click()
+  await waitUntil(
+    async () =>
+      (
+        await page
+          .getByTestId('response-body')
+          .innerText()
+          .catch(() => '')
+      ).includes('from-collection'),
+    'collection variable used after Save As'
+  )
+  step(
+    'Save As puts the request in a collection; collection variables apply, environment wins on conflicts'
+  )
+
+  // ---- Phase 3: history ----
+  await page.getByTestId('sidebar-history').click()
+  const historyRows = page.getByTestId('history-row')
+  await waitUntil(async () => (await historyRows.count()) >= 3, 'history rows')
+  const historyFile = await readFile(path.join(wsDir, 'history.json'), 'utf8')
+  assert.ok(historyFile.includes('{{token}}') && !historyFile.includes('s3cret-value'))
+  assert.ok(!historyFile.includes('"body":{"kind"'), 'no response bodies in history')
+  const total = JSON.parse(historyFile).entries.length
+  assert.equal(
+    await page.getByTestId('history-usage').getAttribute('data-percent'),
+    String(Math.round((total / 200) * 100))
+  )
+  const tabsBefore = (await tabTitles()).length
+  await page.locator('[data-testid="history-row"][data-url^="{{baseUrl}}"]').first().click()
+  await waitUntil(async () => (await tabTitles()).length === tabsBefore + 1, 'history tab')
+  assert.equal(
+    await page.getByTestId('url-input').inputValue(),
+    '{{baseUrl}}/echo?id={{$randomInt}}&m={{missing}}'
+  )
+  await page.screenshot({ path: path.join(shots, '8-history.png') })
+  await page.getByTestId('sidebar-collections').click()
+  step(
+    `history: ${total} entries with unresolved variables (no secrets, no bodies); usage ring; opening an entry adds a new unsaved tab`
+  )
+
   await app.evaluate(({ Menu }) => {
     const file = Menu.getApplicationMenu().items.find((i) => i.label === 'File')
     file.submenu.items.find((i) => i.label === 'Settings…').click()
@@ -594,7 +755,28 @@ try {
   )
   step('app proxy setting (userData) is used; a request can opt out of the proxy')
 
-  await app.close()
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
+  const closeDialog = page.getByTestId('unsaved-dialog')
+  await closeDialog.waitFor()
+  await closeDialog.getByRole('button', { name: '取消' }).click()
+  await new Promise((r) => setTimeout(r, 300))
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1)
+  // Unsaved request tabs are not remembered between launches.
+  const savedTabTitles = (p) =>
+    p
+      .locator('[data-testid="tab"]:not([data-draft])')
+      .evaluateAll((els) => els.map((e) => e.dataset.title))
+  const openTabs = await savedTabTitles(page)
+  const closed = app.waitForEvent('close')
+  void app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined)
+  await closeDialog.waitFor()
+  // The app quits while the click is still settling; the close event is the real check.
+  await closeDialog
+    .getByRole('button', { name: '不儲存' })
+    .click({ noWaitAfter: true })
+    .catch(() => undefined)
+  await closed
+  step('closing the window / quitting with unsaved tabs asks first (取消 keeps the window)')
 
   // ---- Second launch: last Workspace is restored ----
   ;({ app, page } = await launch())
@@ -602,7 +784,12 @@ try {
   assert.equal(await page.getByTestId('current-workspace-name').innerText(), 'Smoke API')
   t = treeHelpers(page)
   await t.row('Users API v2').waitFor()
-  step('relaunch restores the last opened Workspace and its Collection tree')
+  await waitUntil(
+    async () => JSON.stringify(await savedTabTitles(page)) === JSON.stringify(openTabs),
+    `tabs restored: ${openTabs.join(', ')}`
+  )
+  assert.equal(await page.getByTestId('active-environment').innerText(), 'dev')
+  step('relaunch restores the last Workspace, its tree, open tabs and active environment')
 
   await page.getByTestId('workspace-menu').click()
   await page.getByRole('menuitem', { name: '重新命名 Workspace…' }).click()

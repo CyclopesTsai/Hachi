@@ -4,17 +4,6 @@ import { findNode, type ItemKind, type WorkspaceTree } from '@shared/tree'
 import { ancestorIds } from '@renderer/features/collections/tree-model'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 
-/**
- * Asked before the selection changes; returning false keeps the current selection
- * (the editor uses this to prompt about unsaved changes).
- */
-type SelectGuard = (id: string | null) => boolean
-let selectGuard: SelectGuard = () => true
-
-export function setSelectGuard(guard: SelectGuard): void {
-  selectGuard = guard
-}
-
 const EMPTY: WorkspaceTree = { workspaceId: null, collections: [] }
 
 /** Default names for new items; the row immediately enters rename mode. */
@@ -41,13 +30,17 @@ interface TreeState {
   applyTree(tree: WorkspaceTree): void
   reset(): void
   select(id: string | null): void
+  /** Selects an item and expands its collection / folders so it is visible. */
+  reveal(id: string): void
   toggle(id: string): void
   setEditing(id: string | null): void
   dismissError(): void
 
-  create(parentId: string | null, kind: ItemKind, requestType?: RequestType): Promise<void>
+  /** Creates an item (in rename mode). Resolves its id, or null on failure. */
+  create(parentId: string | null, kind: ItemKind, requestType?: RequestType): Promise<string | null>
   rename(id: string, name: string): Promise<void>
-  duplicate(id: string): Promise<void>
+  /** Resolves the id of the copy, or null on failure. */
+  duplicate(id: string): Promise<string | null>
   remove(id: string): Promise<void>
   move(id: string, parentId: string | null, index: number): Promise<void>
 }
@@ -109,7 +102,12 @@ export const useTreeStore = create<TreeState>()((set, get) => {
     },
 
     select(id) {
-      if (id === get().selectedId || selectGuard(id)) set({ selectedId: id })
+      if (id !== get().selectedId) set({ selectedId: id })
+    },
+
+    reveal(id) {
+      expandAll(ancestorIds(get().tree, id))
+      get().select(id)
     },
 
     toggle(id) {
@@ -130,6 +128,7 @@ export const useTreeStore = create<TreeState>()((set, get) => {
     },
 
     async create(parentId, kind, requestType) {
+      let created: string | null = null
       await attempt(async () => {
         const name =
           DEFAULT_NAMES[kind === 'request' && requestType === 'websocket' ? 'websocket' : kind]
@@ -145,7 +144,9 @@ export const useTreeStore = create<TreeState>()((set, get) => {
         expandAll(ancestorIds(result.tree, result.id))
         get().select(result.id)
         set({ editingId: result.id })
+        created = result.id
       })
+      return created
     },
 
     async rename(id, name) {
@@ -158,11 +159,14 @@ export const useTreeStore = create<TreeState>()((set, get) => {
     },
 
     async duplicate(id) {
+      let copy: string | null = null
       await attempt(async () => {
         const result = await unwrap(window.hachi.item.duplicate({ id }))
         get().applyTree(result.tree)
         get().select(result.id)
+        copy = result.id
       })
+      return copy
     },
 
     async remove(id) {

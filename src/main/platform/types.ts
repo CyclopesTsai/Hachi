@@ -13,7 +13,7 @@ export interface PlatformAdapter {
   leadingMenus(openSettings: () => void): MenuItemConstructorOptions[]
   /** "Settings…" in the File menu (non-macOS; macOS has it in the app menu). */
   fileMenuSettings(openSettings: () => void): MenuItemConstructorOptions[]
-  /** Items appended to the end of the File menu (macOS: Close Window; others: Quit). */
+  /** Items appended to the end of the File menu (macOS: Close Window, CmdOrCtrl+Shift+W; others: Quit). */
   fileMenuTail(): MenuItemConstructorOptions[]
   /** Menus appended to the menu bar (non-macOS: Help → About, since there is no app menu). */
   trailingMenus(): MenuItemConstructorOptions[]

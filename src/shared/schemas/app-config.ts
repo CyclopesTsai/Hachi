@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { HISTORY_LIMIT_DEFAULT, HISTORY_LIMIT_MAX, HISTORY_LIMIT_MIN } from './history'
 import type { VersionedFormat } from './versioned'
 
 /** Stored at `<userData>/app-config.json`. See docs/schema.md. */
@@ -51,6 +52,17 @@ export const uiSettingsSchema = z.object({
 })
 export type UiSettings = z.infer<typeof uiSettingsSchema>
 
+/** History is limited across all Workspaces together (see docs/schema.md). */
+export const historySettingsSchema = z.object({
+  maxEntries: z
+    .number()
+    .int()
+    .min(HISTORY_LIMIT_MIN)
+    .max(HISTORY_LIMIT_MAX)
+    .default(HISTORY_LIMIT_DEFAULT)
+})
+export type HistorySettings = z.infer<typeof historySettingsSchema>
+
 export const appConfigSchema = z.object({
   version: z.literal(APP_CONFIG_VERSION),
   theme: themeSchema.default('system'),
@@ -58,7 +70,8 @@ export const appConfigSchema = z.object({
   lastWorkspacePath: z.string().min(1).nullable().default(null),
   window: windowStateSchema.nullable().default(null),
   proxy: proxySettingsSchema.prefault({}),
-  ui: uiSettingsSchema.prefault({})
+  ui: uiSettingsSchema.prefault({}),
+  history: historySettingsSchema.prefault({})
 })
 export type AppConfig = z.infer<typeof appConfigSchema>
 

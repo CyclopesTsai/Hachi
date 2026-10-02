@@ -198,7 +198,8 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
           headers.reduce((sum, [k, v]) => sum + k.length + v.length + 4, 2),
         timings: { headersMs, totalMs },
         url: built.url,
-        redirects: history && history.length > 1 ? history.length - 1 : 0
+        redirects: history && history.length > 1 ? history.length - 1 : 0,
+        unresolvedVariables: []
       },
       body: decoded
     }
@@ -215,7 +216,8 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
         code,
         message,
         url: built.url,
-        timings: { totalMs: performance.now() - started }
+        timings: { totalMs: performance.now() - started },
+        unresolvedVariables: []
       },
       body: null
     }

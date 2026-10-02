@@ -23,7 +23,10 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
-import { useEditorStore } from '@renderer/stores/editor-store'
+import { HistoryPanel } from '@renderer/features/history/HistoryPanel'
+import { cn } from '@renderer/lib/utils'
+import { useHistoryStore, type SidebarMode } from '@renderer/stores/history-store'
+import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
 import {
@@ -75,13 +78,90 @@ function DeleteDialog({ node, onClose }: { node: TreeNode | null; onClose: () =>
   )
 }
 
-/** Left sidebar: the Collection tree of the current Workspace. */
+function createCollection(): Promise<void> {
+  return useTreeStore
+    .getState()
+    .create(null, 'collection')
+    .then((id) => {
+      if (id) useTabsStore.getState().openItem(id, { preview: false })
+    })
+}
+
+const MODES: { mode: SidebarMode; label: string }[] = [
+  { mode: 'collections', label: 'Collections' },
+  { mode: 'history', label: 'History' }
+]
+
+/** Left sidebar: Collections tree or History of the current Workspace. */
 export function CollectionSidebar() {
+  const mode = useHistoryStore((s) => s.sidebarMode)
+  return (
+    <aside
+      className="flex w-72 shrink-0 flex-col border-r bg-muted/40"
+      data-testid="collection-sidebar"
+    >
+      <div className="flex h-9 shrink-0 items-center gap-1 pr-1 pl-2">
+        <div role="tablist" aria-label="側欄" className="flex items-center gap-0.5">
+          {MODES.map((m) => (
+            <button
+              key={m.mode}
+              type="button"
+              role="tab"
+              aria-selected={mode === m.mode}
+              data-testid={`sidebar-${m.mode}`}
+              className={cn(
+                'rounded-sm px-2 py-1 text-xs font-semibold tracking-wide uppercase',
+                mode === m.mode
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+              onClick={() => useHistoryStore.getState().setSidebarMode(m.mode)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1" />
+        {mode === 'collections' && <CollectionActions />}
+      </div>
+      {mode === 'collections' ? <CollectionTree /> : <HistoryPanel />}
+    </aside>
+  )
+}
+
+function CollectionActions() {
+  return (
+    <div className="flex items-center">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-7"
+        title="重新讀取整個 Workspace（套用在 Hachi 以外修改的檔案）"
+        aria-label="重新讀取 Workspace"
+        onClick={() => void useTabsStore.getState().reload({ scope: 'workspace' })}
+      >
+        <RefreshCw />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-7"
+        title="新增 Collection"
+        aria-label="新增 Collection"
+        onClick={() => void createCollection()}
+      >
+        <Plus />
+      </Button>
+    </div>
+  )
+}
+
+function CollectionTree() {
   const tree = useTreeStore((s) => s.tree)
   const expanded = useTreeStore((s) => s.expanded)
   const error = useTreeStore((s) => s.error)
   const loaded = useTreeStore((s) => s.loaded)
-  const { create, move, toggle, dismissError } = useTreeStore.getState()
+  const { move, toggle, dismissError } = useTreeStore.getState()
 
   const rows = useMemo(() => flattenTree(tree, expanded), [tree, expanded])
   const [pendingDelete, setPendingDelete] = useState<TreeNode | null>(null)
@@ -154,43 +234,12 @@ export function CollectionSidebar() {
   const dragging = draggingId ? findNode(tree, draggingId)?.node : undefined
 
   return (
-    <aside
-      className="flex w-72 shrink-0 flex-col border-r bg-muted/40"
-      data-testid="collection-sidebar"
-    >
-      <div className="flex h-9 shrink-0 items-center justify-between pr-1 pl-3">
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Collections
-        </span>
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            title="重新讀取整個 Workspace（套用在 Hachi 以外修改的檔案）"
-            aria-label="重新讀取 Workspace"
-            onClick={() => void useEditorStore.getState().reload({ scope: 'workspace' })}
-          >
-            <RefreshCw />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            title="新增 Collection"
-            aria-label="新增 Collection"
-            onClick={() => void create(null, 'collection')}
-          >
-            <Plus />
-          </Button>
-        </div>
-      </div>
-
+    <>
       <div className="min-h-0 flex-1 overflow-auto px-1 pb-4" role="tree" aria-label="Collections">
         {loaded && rows.length === 0 && (
           <div className="flex flex-col items-start gap-2 px-2 py-3 text-sm text-muted-foreground">
             <p>還沒有任何 Collection。</p>
-            <Button variant="outline" size="sm" onClick={() => void create(null, 'collection')}>
+            <Button variant="outline" size="sm" onClick={() => void createCollection()}>
               <Plus />
               建立 Collection
             </Button>
@@ -231,6 +280,6 @@ export function CollectionSidebar() {
       )}
 
       <DeleteDialog node={pendingDelete} onClose={() => setPendingDelete(null)} />
-    </aside>
+    </>
   )
 }

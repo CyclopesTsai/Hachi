@@ -4,7 +4,36 @@ import type { Auth } from '@shared/schemas/collection'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { NativeSelect } from '@renderer/components/ui/native-select'
+import { VariableInput } from '@renderer/components/variable-input'
 import { cn } from '@renderer/lib/utils'
+
+/** Text field that highlights `{{variables}}` (styled like <Input>). */
+function VarField({
+  label,
+  value,
+  readOnly,
+  onChange
+}: {
+  label: string
+  value: string
+  readOnly?: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <VariableInput
+      aria-label={label}
+      className={cn(
+        'h-8 rounded-md border border-input bg-background shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30',
+        readOnly && 'bg-muted shadow-none'
+      )}
+      textClassName="px-3 font-mono text-xs"
+      muted={readOnly}
+      readOnly={readOnly}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  )
+}
 
 const AUTH_LABELS: Record<Auth['type'], string> = {
   inherit: '沿用上層（Inherit）',
@@ -55,12 +84,11 @@ function AuthFields({
     case 'bearer':
       return (
         <Field label="Token">
-          <Input
-            aria-label="Token"
-            className={input}
+          <VarField
+            label="Token"
             value={auth.token}
             readOnly={readOnly}
-            onChange={(e) => set({ token: e.target.value })}
+            onChange={(token) => set({ token })}
           />
         </Field>
       )
@@ -68,12 +96,11 @@ function AuthFields({
       return (
         <>
           <Field label="Username">
-            <Input
-              aria-label="Username"
-              className={input}
+            <VarField
+              label="Username"
               value={auth.username}
               readOnly={readOnly}
-              onChange={(e) => set({ username: e.target.value })}
+              onChange={(username) => set({ username })}
             />
           </Field>
           <Field label="Password">
@@ -92,21 +119,19 @@ function AuthFields({
       return (
         <>
           <Field label="Key">
-            <Input
-              aria-label="Key"
-              className={input}
+            <VarField
+              label="Key"
               value={auth.key}
               readOnly={readOnly}
-              onChange={(e) => set({ key: e.target.value })}
+              onChange={(key) => set({ key })}
             />
           </Field>
           <Field label="Value">
-            <Input
-              aria-label="Value"
-              className={input}
+            <VarField
+              label="Value"
               value={auth.value}
               readOnly={readOnly}
-              onChange={(e) => set({ value: e.target.value })}
+              onChange={(value) => set({ value })}
             />
           </Field>
           <Field label="加在">

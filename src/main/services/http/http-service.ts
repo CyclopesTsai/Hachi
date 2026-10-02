@@ -5,6 +5,7 @@ import type { HttpErrorCode, HttpResult, InheritedSettings } from '@shared/http'
 import type { ProxySettings } from '@shared/schemas/app-config'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
+import { VariableResolver, buildVariableMap, type VariableLayer } from '@shared/variables'
 import { buildRequest, HttpBuildError, type ContainerLevel } from './build-request'
 import { sendHttp } from './http-client'
 import { resolveProxyUrl } from './proxy'
@@ -52,9 +53,11 @@ export class ResponseStore {
 }
 
 export interface HttpServiceDeps {
-  /** Collections / folders above the request, outermost first. */
-  getContainerChain(requestId: string): Promise<ContainerLevel[]>
+  /** Collections / folders from the collection down to `parentId`, outermost first. */
+  getContainerChain(parentId: string | null): Promise<ContainerLevel[]>
   resolveInherited(chain: ContainerLevel[]): InheritedSettings
+  /** Variable layers, highest precedence first (environment, then collection). */
+  getVariableLayers(parentId: string | null, environmentId: string | null): Promise<VariableLayer[]>
   getWorkspaceSettings(): Promise<WorkspaceSettings>
   getProxySettings(): ProxySettings
   resolveSystemProxy(url: string): Promise<string>
@@ -64,7 +67,10 @@ export interface HttpServiceDeps {
 
 export interface SendInput {
   runId: string
-  requestId: string
+  /** Container the request lives in (or would be saved in); provides inherited settings. */
+  parentId: string | null
+  environmentId: string | null
+  /** As edited, saved or not, before variable substitution. */
   request: HttpRequest
 }
 
@@ -82,22 +88,29 @@ export class HttpService {
     const controller = new AbortController()
     this.running.set(input.runId, controller)
     const started = performance.now()
+    let unresolved: string[] = []
     const fail = (code: HttpErrorCode, message: string, url = input.request.url): HttpResult => ({
       kind: 'error',
       runId: input.runId,
       code,
       message,
       url,
-      timings: { totalMs: performance.now() - started }
+      timings: { totalMs: performance.now() - started },
+      unresolvedVariables: unresolved
     })
 
     try {
-      const chain = await this.deps.getContainerChain(input.requestId)
+      const chain = await this.deps.getContainerChain(input.parentId)
+      const layers = await this.deps.getVariableLayers(input.parentId, input.environmentId)
+      const resolver = new VariableResolver(buildVariableMap(layers))
+      const request = resolver.request(input.request)
+      const inherited = resolver.inherited(this.deps.resolveInherited(chain))
+      unresolved = [...resolver.unresolved].sort()
       let built
       try {
         built = await buildRequest({
-          request: input.request,
-          inherited: this.deps.resolveInherited(chain),
+          request,
+          inherited,
           workspace: await this.deps.getWorkspaceSettings(),
           userAgent: this.deps.userAgent,
           readFile: this.deps.readFile ?? ((p) => readFile(p))
@@ -133,7 +146,7 @@ export class HttpService {
       if (result.kind === 'response' && body) {
         this.store.put(input.runId, { body, contentType: result.contentType, url: result.url })
       }
-      return result
+      return { ...result, unresolvedVariables: unresolved }
     } finally {
       this.running.delete(input.runId)
     }

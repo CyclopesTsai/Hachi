@@ -4,9 +4,17 @@
  */
 import type { SerializedError } from '../errors'
 import type { ContainerSettingsData, HttpResult, InheritedSettings } from '../http'
-import type { AppConfig, ProxySettings, Theme, UiSettings } from '../schemas/app-config'
-import type { Auth, KeyValue, RequestType } from '../schemas/collection'
+import type {
+  AppConfig,
+  HistorySettings,
+  ProxySettings,
+  Theme,
+  UiSettings
+} from '../schemas/app-config'
+import type { Auth, KeyValue, RequestType, Variable } from '../schemas/collection'
+import type { HttpHistoryEntry } from '../schemas/history'
 import type { HttpRequest } from '../schemas/http-request'
+import type { SessionData } from '../schemas/session'
 import type { WorkspaceSettings } from '../schemas/workspace'
 import type { ItemKind, WorkspaceTree } from '../tree'
 import type { EventChannel, InvokeChannel, MenuCommand } from './channels'
@@ -41,6 +49,8 @@ export interface ConfigUpdateInput {
   theme?: Theme
   proxy?: ProxySettings
   ui?: Partial<UiSettings>
+  /** Lowering the limit removes the oldest entries (in all Workspaces) right away. */
+  history?: HistorySettings
 }
 
 export interface WorkspaceCreateInput {
@@ -109,19 +119,96 @@ export interface RequestSaveResult {
   tree: WorkspaceTree
 }
 
+export interface RequestSaveAsInput {
+  /** Collection / folder to create the request in. */
+  parentId: string
+  name: string
+  request: HttpRequest
+}
+
+export interface RequestSaveAsResult {
+  id: string
+  request: HttpRequest
+  tree: WorkspaceTree
+}
+
+export interface ParentIdInput {
+  /** Collection / folder id; null = not inside any collection (nothing inherited). */
+  parentId: string | null
+}
+
 export interface ContainerSaveInput {
   id: string
   headers: KeyValue[]
   auth: Auth
+  /** Collection variables (ignored for folders). Secret values go to .hachi-secrets.json. */
+  variables: Variable[]
 }
 
 export interface HttpSendInput {
   /** Chosen by the renderer (UUID) so the request can be cancelled while it runs. */
   runId: string
-  /** The request item being edited; its folders / collection provide inherited settings. */
-  requestId: string
-  /** Current editor content, saved or not. */
+  /** The saved request this tab edits (recorded in history); null for unsaved requests. */
+  requestId: string | null
+  /** Collection / folder providing inherited headers / auth and collection variables. */
+  parentId: string | null
+  /** Active environment; null = none. */
+  environmentId: string | null
+  /** Current editor content, saved or not, before variable substitution. */
   request: HttpRequest
+}
+
+export interface EnvironmentSummary {
+  id: string
+  name: string
+  /** Set when the file cannot be read; such entries can only be deleted. */
+  error?: string
+}
+
+export interface EnvironmentData {
+  id: string
+  name: string
+  /** Secret values are included (read from .hachi-secrets.json). */
+  variables: Variable[]
+}
+
+export interface EnvironmentCreateInput {
+  name: string
+}
+
+export interface EnvironmentSaveInput {
+  id: string
+  name: string
+  variables: Variable[]
+}
+
+export interface EnvironmentMutationResult {
+  id: string
+  list: EnvironmentSummary[]
+}
+
+export interface HistoryUsage {
+  /** Entries in all Workspaces together. */
+  total: number
+  /** Limit shared by all Workspaces (App setting). */
+  max: number
+  /** Entries in the current Workspace. */
+  workspace: number
+}
+
+export interface HistoryListResult {
+  /** Newest first. */
+  entries: HttpHistoryEntry[]
+  usage: HistoryUsage
+}
+
+export interface CloseGuardInput {
+  /** True while any tab has unsaved changes: closing the window then asks the renderer. */
+  dirty: boolean
+}
+
+export interface CloseRequest {
+  reason: 'close' | 'quit'
 }
 
 export interface RunIdInput {
@@ -138,6 +225,8 @@ export interface ItemMutationResult {
 export interface InvokeMap {
   'app:getInfo': { input: void; output: AppInfo }
   'app:getDefaultWorkspaceDir': { input: void; output: string }
+  'app:setCloseGuard': { input: CloseGuardInput; output: void }
+  'app:confirmClose': { input: void; output: void }
   'config:get': { input: void; output: AppConfig }
   'config:update': { input: ConfigUpdateInput; output: AppConfig }
   'workspace:getCurrent': { input: void; output: WorkspaceInfo | null }
@@ -161,12 +250,26 @@ export interface InvokeMap {
   'item:move': { input: ItemMoveInput; output: WorkspaceTree }
   'request:get': { input: ItemIdInput; output: RequestData }
   'request:save': { input: RequestSaveInput; output: RequestSaveResult }
+  'request:saveAs': { input: RequestSaveAsInput; output: RequestSaveAsResult }
+  'request:getInherited': { input: ParentIdInput; output: InheritedSettings }
   'container:get': { input: ItemIdInput; output: ContainerSettingsData }
   'container:save': { input: ContainerSaveInput; output: ContainerSettingsData }
   'http:send': { input: HttpSendInput; output: HttpResult }
   'http:cancel': { input: RunIdInput; output: boolean }
   'http:getBody': { input: RunIdInput; output: string }
   'http:saveResponse': { input: RunIdInput; output: string | null }
+  'env:list': { input: void; output: EnvironmentSummary[] }
+  'env:get': { input: ItemIdInput; output: EnvironmentData }
+  'env:create': { input: EnvironmentCreateInput; output: EnvironmentMutationResult }
+  'env:save': { input: EnvironmentSaveInput; output: EnvironmentData }
+  'env:duplicate': { input: ItemIdInput; output: EnvironmentMutationResult }
+  'env:delete': { input: ItemIdInput; output: EnvironmentSummary[] }
+  'history:list': { input: void; output: HistoryListResult }
+  'history:delete': { input: ItemIdInput; output: HistoryUsage }
+  'history:clear': { input: void; output: HistoryUsage }
+  'history:getUsage': { input: void; output: HistoryUsage }
+  'session:get': { input: void; output: SessionData }
+  'session:save': { input: SessionData; output: void }
 }
 
 // Compile-time guarantee that InvokeMap and the channel constants list the same channels.
@@ -181,6 +284,8 @@ export type InvokeFn<C extends InvokeChannel> = InvokeMap[C]['input'] extends vo
 
 export interface MenuCommandPayload {
   command: MenuCommand
+  /** Workspace folder, for "workspace.openRecent". */
+  path?: string
 }
 
 export interface EventPayloads {
@@ -188,12 +293,18 @@ export interface EventPayloads {
   'workspace:changed': WorkspaceInfo | null
   'config:changed': AppConfig
   'tree:changed': WorkspaceTree
+  'history:changed': HistoryUsage
+  'app:closeRequested': CloseRequest
 }
 
 export interface HachiApi {
   app: {
     getInfo: InvokeFn<'app:getInfo'>
     getDefaultWorkspaceDir: InvokeFn<'app:getDefaultWorkspaceDir'>
+    /** Tells main whether closing the window must ask about unsaved tabs first. */
+    setCloseGuard: InvokeFn<'app:setCloseGuard'>
+    /** Closes the window (or quits) after the renderer resolved `app:closeRequested`. */
+    confirmClose: InvokeFn<'app:confirmClose'>
   }
   config: {
     get: InvokeFn<'config:get'>
@@ -222,6 +333,10 @@ export interface HachiApi {
   request: {
     get: InvokeFn<'request:get'>
     save: InvokeFn<'request:save'>
+    /** Creates a request from an unsaved tab. */
+    saveAs: InvokeFn<'request:saveAs'>
+    /** What an item inside `parentId` inherits (for unsaved tabs and moved items). */
+    getInherited: InvokeFn<'request:getInherited'>
   }
   container: {
     get: InvokeFn<'container:get'>
@@ -235,6 +350,26 @@ export interface HachiApi {
     getBody: InvokeFn<'http:getBody'>
     /** Shows a save dialog and writes the response body. Returns the path, or null if cancelled. */
     saveResponse: InvokeFn<'http:saveResponse'>
+  }
+  env: {
+    list: InvokeFn<'env:list'>
+    get: InvokeFn<'env:get'>
+    create: InvokeFn<'env:create'>
+    save: InvokeFn<'env:save'>
+    duplicate: InvokeFn<'env:duplicate'>
+    /** Moves the environment file to the system trash. */
+    delete: InvokeFn<'env:delete'>
+  }
+  history: {
+    list: InvokeFn<'history:list'>
+    delete: InvokeFn<'history:delete'>
+    clear: InvokeFn<'history:clear'>
+    getUsage: InvokeFn<'history:getUsage'>
+  }
+  session: {
+    /** Open tabs and active environment of the current Workspace (this computer only). */
+    get: InvokeFn<'session:get'>
+    save: InvokeFn<'session:save'>
   }
   item: {
     create: InvokeFn<'item:create'>

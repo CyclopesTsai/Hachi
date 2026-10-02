@@ -7,6 +7,7 @@ import {
   appConfigSchema,
   defaultAppConfig,
   type AppConfig,
+  type HistorySettings,
   type ProxySettings,
   type Theme,
   type UiSettings,
@@ -98,6 +99,12 @@ export class ConfigService {
   setUi(ui: Partial<UiSettings>): Promise<AppConfig> {
     return this.update((c) => {
       c.ui = { ...c.ui, ...ui }
+    })
+  }
+
+  setHistory(history: HistorySettings): Promise<AppConfig> {
+    return this.update((c) => {
+      c.history = history
     })
   }
 

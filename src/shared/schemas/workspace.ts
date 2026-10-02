@@ -52,12 +52,6 @@ export const workspaceFormat: VersionedFormat<typeof workspaceFileSchema> = {
   schema: workspaceFileSchema
 }
 
-/** History file skeleton. Entry format is finalized in Phase 3 (see docs/schema.md). */
-export const HISTORY_VERSION = 1
-export function emptyHistoryFile(): { version: number; entries: unknown[] } {
-  return { version: HISTORY_VERSION, entries: [] }
-}
-
 /** Content of the `.gitignore` written into every new Workspace. */
 export const WORKSPACE_GITIGNORE = [
   '# Hachi — files that must not be committed',

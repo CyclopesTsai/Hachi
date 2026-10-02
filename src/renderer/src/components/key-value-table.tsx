@@ -1,6 +1,7 @@
 import { Trash2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import type { KeyValue } from '@shared/schemas/collection'
+import { VariableInput } from '@renderer/components/variable-input'
 import { newKeyValue } from '@renderer/lib/key-value'
 import { cn } from '@renderer/lib/utils'
 
@@ -19,7 +20,7 @@ export interface KeyValueTableProps<T extends KeyValue> {
   'data-testid'?: string
 }
 
-const cell =
+export const KV_CELL_CLASS =
   'h-8 w-full min-w-0 bg-transparent px-2 font-mono text-xs outline-none placeholder:text-muted-foreground/60 focus:bg-accent/40 disabled:cursor-default'
 
 /**
@@ -67,13 +68,14 @@ export function KeyValueTable<T extends KeyValue>({
           )}
         </td>
         <td className="w-[35%] border-r">
-          <input
+          <VariableInput
             aria-label="Key"
-            className={cn(cell, !isBlank && !row.enabled && 'text-muted-foreground line-through')}
+            className={cn(!isBlank && !row.enabled && 'line-through')}
+            textClassName={KV_CELL_CLASS}
+            muted={!isBlank && !row.enabled}
             placeholder={keyPlaceholder}
             value={row?.key ?? ''}
             disabled={readOnly}
-            spellCheck={false}
             onChange={(e) => set({ key: e.target.value } as Partial<T>)}
           />
         </td>
@@ -82,13 +84,13 @@ export function KeyValueTable<T extends KeyValue>({
           {row && renderValue ? (
             renderValue(row, set)
           ) : (
-            <input
+            <VariableInput
               aria-label="Value"
-              className={cn(cell, !isBlank && !row.enabled && 'text-muted-foreground')}
+              textClassName={KV_CELL_CLASS}
+              muted={!isBlank && !row.enabled}
               placeholder={valuePlaceholder}
               value={row?.value ?? ''}
               disabled={readOnly}
-              spellCheck={false}
               onChange={(e) => set({ value: e.target.value } as Partial<T>)}
             />
           )}

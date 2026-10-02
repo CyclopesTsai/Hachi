@@ -30,6 +30,17 @@ export const keyValueSchema = z.looseObject({
 })
 export type KeyValue = z.infer<typeof keyValueSchema>
 
+/**
+ * A Collection or Environment variable. The value of a `secret` variable is never
+ * written to the item file (it is stored in `.hachi-secrets.json`, see docs/schema.md).
+ */
+export const variableSchema = keyValueSchema.extend({
+  secret: z.boolean().default(false)
+})
+export type Variable = z.infer<typeof variableSchema>
+
+export const VARIABLES_MAX = 1000
+
 /** Auth settings. Editing UI arrives in Phase 2; `inherit` uses the parent folder / collection. */
 export const authSchema = z.discriminatedUnion('type', [
   z.looseObject({ type: z.literal('inherit') }),
@@ -61,7 +72,7 @@ const containerFields = {
 export const collectionFileSchema = z.looseObject({
   ...containerFields,
   auth: authSchema.default({ type: 'none' }),
-  variables: z.array(keyValueSchema).default([])
+  variables: z.array(variableSchema).default([])
 })
 export type CollectionFile = z.infer<typeof collectionFileSchema>
 

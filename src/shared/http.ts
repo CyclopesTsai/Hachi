@@ -2,7 +2,7 @@
  * Types exchanged between renderer and main for sending HTTP requests.
  * Types + pure helpers only, safe to import anywhere.
  */
-import type { Auth, KeyValue } from './schemas/collection'
+import type { Auth, KeyValue, Variable } from './schemas/collection'
 
 /** Bodies larger than this are not sent to the renderer unless the user asks. */
 export const DISPLAY_LIMIT_BYTES = 10 * 1024 * 1024
@@ -49,6 +49,8 @@ export interface HttpResponseData {
   /** The URL that was actually requested (after params, before redirects). */
   url: string
   redirects: number
+  /** `{{names}}` that had no value and were sent as-is. */
+  unresolvedVariables: string[]
 }
 
 export const HTTP_ERROR_CODES = [
@@ -73,6 +75,8 @@ export interface HttpErrorData {
   message: string
   url: string
   timings: { totalMs: number }
+  /** `{{names}}` that had no value and were sent as-is. */
+  unresolvedVariables: string[]
 }
 
 export type HttpResult = HttpResponseData | HttpErrorData
@@ -105,6 +109,8 @@ export interface ContainerSettingsData {
   kind: 'collection' | 'folder'
   headers: KeyValue[]
   auth: Auth
+  /** Collection variables, secret values included (always empty for folders). */
+  variables: Variable[]
   /** What this container inherits from the ones above it (empty for collections). */
   inherited: InheritedSettings
 }

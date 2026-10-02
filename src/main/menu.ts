@@ -9,8 +9,10 @@ export interface MenuActions {
   openRecentWorkspace(workspacePath: string): void
   clearRecentWorkspaces(): void
   switchWorkspace(): void
-  /** Saves the item open in the editor (CmdOrCtrl+S). */
+  /** Saves the active tab (CmdOrCtrl+S). */
   save(): void
+  /** Closes the active tab (CmdOrCtrl+W); the window when no tab is open. */
+  closeTab(): void
   openSettings(): void
 }
 
@@ -54,6 +56,7 @@ export function buildMenuTemplate(
         { label: 'Switch Workspace…', click: () => actions.switchWorkspace() },
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => actions.save() },
+        { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => actions.closeTab() },
         ...platform.fileMenuSettings(() => actions.openSettings()),
         { type: 'separator' },
         ...platform.fileMenuTail()

@@ -1,7 +1,10 @@
-import { AlertTriangle, Loader2, MousePointerClick, Radio } from 'lucide-react'
-import { useEffect } from 'react'
+import { AlertTriangle, Loader2, MousePointerClick, Plus, Radio } from 'lucide-react'
 import { findNode } from '@shared/tree'
-import { useEditorStore } from '@renderer/stores/editor-store'
+import { Button } from '@renderer/components/ui/button'
+import { EnvironmentsEditor } from '@renderer/features/environments/EnvironmentsEditor'
+import { TabBar } from '@renderer/features/tabs/TabBar'
+import { tabTitle, type Tab } from '@renderer/features/tabs/tab-model'
+import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { ContainerEditor } from './ContainerEditor'
 import { RequestEditor } from './RequestEditor'
@@ -15,38 +18,9 @@ function Placeholder({ icon, children }: { icon: React.ReactNode; children: Reac
   )
 }
 
-/** Right-hand side: the editor for the item selected in the tree. */
-export function EditorHost() {
-  const selectedId = useTreeStore((s) => s.selectedId)
-  const node = useTreeStore((s) =>
-    s.selectedId ? findNode(s.tree, s.selectedId)?.node : undefined
-  )
-  const doc = useEditorStore((s) => s.doc)
-  const docVersion = useEditorStore((s) => s.docVersion)
-  const loading = useEditorStore((s) => s.loading)
-  const loadError = useEditorStore((s) => s.loadError)
-
-  const editable =
-    node && !node.error && (node.kind !== 'request' || node.requestType === 'http')
-      ? node.kind
-      : null
-
-  // Open the selected item. Re-runs only when the selection (or its kind) changes,
-  // not when the tree is re-read, so unsaved edits are never replaced silently.
-  useEffect(() => {
-    const editor = useEditorStore.getState()
-    if (!selectedId || !editable) editor.close()
-    else if (editable === 'request') void editor.openRequest(selectedId)
-    else void editor.openContainer(selectedId)
-  }, [selectedId, editable])
-
-  if (!node) {
-    return (
-      <Placeholder icon={<MousePointerClick className="size-6" />}>
-        從左側選擇一個請求，或按右鍵新增項目。
-      </Placeholder>
-    )
-  }
+function StaticView({ itemId }: { itemId: string }) {
+  const node = useTreeStore((s) => findNode(s.tree, itemId)?.node)
+  if (!node) return null
   if (node.error) {
     return (
       <div className="flex flex-col gap-3 p-6" data-testid="item-details">
@@ -63,28 +37,61 @@ export function EditorHost() {
       </div>
     )
   }
-  if (node.kind === 'request' && node.requestType === 'websocket') {
-    return (
-      <Placeholder icon={<Radio className="size-6" />}>
-        WebSocket 連線「{node.name}」的設定與訊息功能將於 Phase 4 加入。
-      </Placeholder>
-    )
-  }
-  if (loadError) {
+  return (
+    <Placeholder icon={<Radio className="size-6" />}>
+      WebSocket 連線「{node.name}」的設定與訊息功能將於 Phase 4 加入。
+    </Placeholder>
+  )
+}
+
+function TabContent({ tab }: { tab: Tab }) {
+  const title = useTreeStore((s) => tabTitle(tab, s.tree))
+  if (tab.kind === 'static') return <StaticView itemId={tab.itemId} />
+  if (tab.status === 'error') {
     return (
       <Placeholder icon={<AlertTriangle className="size-6 text-destructive" />}>
-        無法開啟：{loadError}
+        無法開啟：{tab.loadError}
       </Placeholder>
     )
   }
-  if (loading || !doc || doc.id !== node.id) {
+  if (tab.status !== 'ready') {
     return <Placeholder icon={<Loader2 className="size-5 animate-spin" />}>載入中…</Placeholder>
   }
-  // A fresh editor per loaded document: no undo history leaking between requests.
-  const key = `${doc.id}:${docVersion}`
-  return doc.kind === 'request' ? (
-    <RequestEditor key={key} doc={doc} name={node.name} />
-  ) : (
-    <ContainerEditor key={key} doc={doc} name={node.name} />
+  // A fresh editor per loaded content: no undo history leaking between loads.
+  const key = `${tab.uid}:${tab.version}`
+  switch (tab.kind) {
+    case 'request':
+      return tab.draft ? <RequestEditor key={key} tab={tab} title={title} /> : null
+    case 'container':
+      return tab.draft ? <ContainerEditor key={key} tab={tab} title={title} /> : null
+    case 'environments':
+      return <EnvironmentsEditor key={key} tab={tab} />
+  }
+}
+
+/** Right-hand side: tab bar and the active tab's editor. */
+export function EditorHost() {
+  const active = useTabsStore((s) => s.tabs.find((t) => t.key === s.activeKey))
+  const hasTabs = useTabsStore((s) => s.tabs.length > 0)
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {hasTabs && <TabBar />}
+      {active ? (
+        <TabContent tab={active} />
+      ) : (
+        <Placeholder icon={<MousePointerClick className="size-6" />}>
+          從左側選擇一個請求，或按右鍵新增項目。
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() => useTabsStore.getState().newRequest()}
+          >
+            <Plus />
+            新增請求
+          </Button>
+        </Placeholder>
+      )}
+    </div>
   )
 }

@@ -16,8 +16,10 @@ import {
   requestFormat,
   type Auth,
   type KeyValue,
-  type RequestType
+  type RequestType,
+  type Variable
 } from '@shared/schemas/collection'
+import { mergeSecrets, splitSecrets } from '@shared/schemas/environment'
 import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
 import { parseVersioned, type VersionedFormat } from '@shared/schemas/versioned'
 import { WORKSPACE_FILE, WORKSPACE_LAYOUT, workspaceFormat } from '@shared/schemas/workspace'
@@ -36,7 +38,10 @@ import {
 } from '@shared/tree'
 import { isTempFileName, updateJsonAtomic, writeJsonAtomic } from './fs/atomic-write'
 import { readJsonFile, readVersionedJson } from './fs/json-file'
+import { uniqueFileName } from './fs/unique-name'
 import { resolveInherited, type ContainerLevel } from './http/build-request'
+import { copySecrets, getSecrets, setSecrets } from './secrets'
+import type { VariableLayer } from '@shared/variables'
 
 const httpRequestFormat: VersionedFormat<typeof httpRequestSchema> = {
   name: 'request file',
@@ -187,6 +192,39 @@ export class CollectionService {
     return this.run(() => this.readChain(this.requireEntry(id).parentId))
   }
 
+  /** Collections / folders from the collection down to `parentId` (inclusive); [] for null. */
+  getChainFor(parentId: string | null): Promise<ContainerLevel[]> {
+    return this.run(() => {
+      if (parentId !== null) this.requireContainer(parentId)
+      return this.readChain(parentId)
+    })
+  }
+
+  /** Headers / auth that an item placed inside `parentId` inherits. */
+  getInheritedFor(parentId: string | null): Promise<InheritedSettings> {
+    return this.getChainFor(parentId).then(resolveInherited)
+  }
+
+  /** Variables of the collection that contains `parentId` (secret values included). */
+  getCollectionLayer(parentId: string | null): Promise<VariableLayer | null> {
+    if (parentId === null) return Promise.resolve(null)
+    return this.run(async () => {
+      this.requireContainer(parentId)
+      let id = parentId
+      for (let p = this.requireEntry(id).parentId; p !== null; p = this.requireEntry(p).parentId) {
+        id = p
+      }
+      const entry = this.requireValid(id)
+      const meta = await readVersionedJson(entry.metaFile as string, collectionFormat)
+      const secrets = await getSecrets(this.requireRoot(), 'collections', id)
+      return {
+        source: 'collection',
+        sourceName: meta.name,
+        variables: mergeSecrets(meta.variables, secrets)
+      }
+    })
+  }
+
   /** Full content of an HTTP request plus what it inherits. */
   getRequest(id: string): Promise<{ request: HttpRequest; inherited: InheritedSettings }> {
     return this.run(async () => {
@@ -228,44 +266,67 @@ export class CollectionService {
 
   /** Shared headers / auth of a collection or folder, plus what a folder inherits. */
   getContainer(id: string): Promise<ContainerSettingsData> {
-    return this.run(async () => {
-      const entry = this.requireContainer(id)
-      const [own] = await this.readChainLevels([id])
-      const inherited = resolveInherited(await this.readChain(entry.parentId))
-      return {
-        kind: entry.kind as 'collection' | 'folder',
-        headers: own!.headers,
-        auth: own!.auth,
-        inherited
-      }
-    })
+    return this.run(() => this.readContainer(id))
   }
 
+  /**
+   * Saves shared headers / auth (and, for collections, variables). Secret variable
+   * values go to `.hachi-secrets.json`; collection.json keeps them empty.
+   */
   saveContainer(
     id: string,
-    data: { headers: KeyValue[]; auth: Auth }
+    data: { headers: KeyValue[]; auth: Auth; variables: Variable[] }
   ): Promise<ContainerSettingsData> {
     return this.run(async () => {
       const entry = this.requireContainer(id)
       const meta = entry.metaFile as string
+      const isCollection = entry.kind === 'collection'
       // A collection has nothing above it to inherit from.
       const auth =
-        entry.kind === 'collection' && data.auth.type === 'inherit'
-          ? { type: 'none' as const }
-          : data.auth
+        isCollection && data.auth.type === 'inherit' ? { type: 'none' as const } : data.auth
+      const { stored, secrets } = splitSecrets(data.variables)
+      if (isCollection) await setSecrets(this.requireRoot(), 'collections', id, secrets)
       await updateJsonAtomic(
         meta,
         () => readRawObject(meta),
-        (raw) => ({ ...raw, headers: data.headers, auth })
+        (raw) => ({
+          ...raw,
+          headers: data.headers,
+          auth,
+          ...(isCollection ? { variables: stored } : {})
+        })
       )
-      const [own] = await this.readChainLevels([id])
-      const inherited = resolveInherited(await this.readChain(entry.parentId))
-      return {
-        kind: entry.kind as 'collection' | 'folder',
-        headers: own!.headers,
-        auth: own!.auth,
-        inherited
-      }
+      return this.readContainer(id)
+    })
+  }
+
+  /**
+   * Creates a request with the given content (saving an unsaved tab, "Save As").
+   * Id, name and type come from the arguments, everything else from `request`.
+   */
+  createRequest(
+    parentId: string,
+    nameInput: string,
+    request: HttpRequest
+  ): Promise<{ id: string; request: HttpRequest; tree: WorkspaceTree }> {
+    return this.run(async () => {
+      const parent = this.requireContainer(parentId)
+      const name = nameInput.trim()
+      const id = this.newId()
+      const file = path.join(
+        parent.absPath,
+        await this.uniqueName(parent.absPath, slugify(name), '.json')
+      )
+      await writeJsonAtomic(file, {
+        ...request,
+        version: ITEM_VERSION,
+        id,
+        type: 'http',
+        name
+      })
+      await this.writeOrder(parentId, [...this.childIds(parentId), id])
+      const tree = await this.rescan()
+      return { id, request: await this.readHttpRequest(file), tree }
     })
   }
 
@@ -359,6 +420,9 @@ export class CollectionService {
       } else {
         const target = path.join(dir, await this.uniqueName(dir, slugify(name), ''))
         newId = await this.copyContainer(entry.absPath, target, entry.kind, name)
+        if (entry.kind === 'collection') {
+          await copySecrets(this.requireRoot(), 'collections', id, newId)
+        }
       }
 
       const ids = this.childIds(entry.parentId)
@@ -516,21 +580,11 @@ export class CollectionService {
     )
   }
 
-  /**
-   * `base + ext`, or `base-2 + ext`, `base-3 + ext`… — whichever is free in `dir`
-   * (case-insensitive). `keep` is the item's own current name, which counts as free.
-   */
-  private async uniqueName(dir: string, base: string, ext: string, keep?: string): Promise<string> {
-    const taken = new Set(
-      (await readdir(dir).catch(() => [] as string[]))
-        .filter((n) => n !== keep)
-        .map((n) => n.toLowerCase())
-    )
-    if (ext === '.json') for (const reserved of RESERVED_FILE_NAMES) taken.add(reserved)
-    for (let i = 1; ; i++) {
-      const candidate = `${i === 1 ? base : `${base}-${i}`}${ext}`
-      if (!taken.has(candidate.toLowerCase())) return candidate
-    }
+  private uniqueName(dir: string, base: string, ext: string, keep?: string): Promise<string> {
+    return uniqueFileName(dir, base, ext, {
+      keep,
+      reserved: ext === '.json' ? RESERVED_FILE_NAMES : []
+    })
   }
 
   /** Deep-copies a collection / folder, giving every item a new id. Returns the new root id. */
@@ -586,6 +640,25 @@ export class CollectionService {
       )
     }
     return newId
+  }
+
+  private async readContainer(id: string): Promise<ContainerSettingsData> {
+    const entry = this.requireContainer(id)
+    const [own] = await this.readChainLevels([id])
+    const inherited = resolveInherited(await this.readChain(entry.parentId))
+    let variables: Variable[] = []
+    if (entry.kind === 'collection') {
+      const meta = await readVersionedJson(entry.metaFile as string, collectionFormat)
+      const secrets = await getSecrets(this.requireRoot(), 'collections', id)
+      variables = mergeSecrets(meta.variables, secrets)
+    }
+    return {
+      kind: entry.kind as 'collection' | 'folder',
+      headers: own!.headers,
+      auth: own!.auth,
+      variables,
+      inherited
+    }
   }
 
   private async readHttpRequest(file: string): Promise<HttpRequest> {

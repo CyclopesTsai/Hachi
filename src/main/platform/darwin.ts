@@ -46,7 +46,8 @@ export const darwinAdapter: PlatformAdapter = {
   },
 
   fileMenuTail(): MenuItemConstructorOptions[] {
-    return [{ role: 'close' }]
+    // CmdOrCtrl+W closes the active tab (File → Close Tab).
+    return [{ role: 'close', label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W' }]
   },
 
   trailingMenus(): MenuItemConstructorOptions[] {

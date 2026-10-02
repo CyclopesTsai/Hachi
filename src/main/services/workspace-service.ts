@@ -9,13 +9,13 @@ import {
   WORKSPACE_GITIGNORE,
   WORKSPACE_LAYOUT,
   WORKSPACE_VERSION,
-  emptyHistoryFile,
   workspaceFileSchema,
   workspaceFormat,
   workspaceSettingsSchema,
   type WorkspaceFile,
   type WorkspaceSettings
 } from '@shared/schemas/workspace'
+import { emptyHistoryFile } from '@shared/schemas/history'
 import type { ConfigService } from './config-service'
 import type { TrashFn } from './collection-service'
 import { updateJsonAtomic, writeFileAtomic, writeJsonAtomic } from './fs/atomic-write'

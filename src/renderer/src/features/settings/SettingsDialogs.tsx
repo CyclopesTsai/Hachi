@@ -7,6 +7,7 @@ import {
   APP_SOURCE_URL
 } from '@shared/app-info'
 import { PROXY_MODES, type ProxySettings } from '@shared/schemas/app-config'
+import { HISTORY_LIMIT_MAX, HISTORY_LIMIT_MIN } from '@shared/schemas/history'
 import { MAX_REDIRECTS_LIMIT, type WorkspaceSettings } from '@shared/schemas/workspace'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -23,6 +24,7 @@ import { Label } from '@renderer/components/ui/label'
 import { CheckboxLabel } from '@renderer/components/ui/native-select'
 import { errorMessage } from '@renderer/lib/ipc'
 import { useAppStore } from '@renderer/stores/app-store'
+import { useHistoryStore } from '@renderer/stores/history-store'
 
 function Row({
   label,
@@ -174,23 +176,46 @@ const MODE_LABELS: Record<ProxySettings['mode'], string> = {
   custom: '自訂'
 }
 
-function AppSettingsForm({ initial, onDone }: { initial: ProxySettings; onDone: () => void }) {
+function AppSettingsForm({
+  initial,
+  initialHistoryLimit,
+  onDone
+}: {
+  initial: ProxySettings
+  initialHistoryLimit: number
+  onDone: () => void
+}) {
   const updateConfig = useAppStore((s) => s.updateConfig)
+  const usage = useHistoryStore((s) => s.usage)
   const [proxy, setProxy] = useState(initial)
   const [bypassText, setBypassText] = useState(initial.bypass.join('\n'))
+  const [historyLimit, setHistoryLimit] = useState(String(initialHistoryLimit))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const set = (patch: Partial<ProxySettings>) => setProxy({ ...proxy, ...patch })
+  const limit = clampInt(historyLimit, HISTORY_LIMIT_MIN, HISTORY_LIMIT_MAX)
+  const willRemove = usage && limit < usage.total ? usage.total - limit : 0
 
   async function submit(e: FormEvent): Promise<void> {
     e.preventDefault()
+    if (
+      willRemove > 0 &&
+      !window.confirm(
+        `歷史紀錄上限改為 ${limit} 筆後，會刪除所有 Workspace 中最舊的 ${willRemove} 筆紀錄。要繼續嗎？`
+      )
+    ) {
+      return
+    }
     setBusy(true)
     try {
       const bypass = bypassText
         .split(/[\n,]/)
         .map((s) => s.trim())
         .filter(Boolean)
-      await updateConfig({ proxy: { ...proxy, url: proxy.url.trim(), bypass } })
+      await updateConfig({
+        proxy: { ...proxy, url: proxy.url.trim(), bypass },
+        history: { maxEntries: limit }
+      })
       onDone()
     } catch (err) {
       setError(errorMessage(err))
@@ -204,7 +229,7 @@ function AppSettingsForm({ initial, onDone }: { initial: ProxySettings; onDone: 
       <DialogHeader>
         <DialogTitle>App 設定</DialogTitle>
         <DialogDescription>
-          Proxy 設定存在這台電腦（不會寫進 Workspace），適用所有 Workspace。
+          存在這台電腦（不會寫進 Workspace），適用所有 Workspace。
         </DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="Proxy 模式">
@@ -267,6 +292,28 @@ function AppSettingsForm({ initial, onDone }: { initial: ProxySettings; onDone: 
           />
         </div>
       )}
+      <div className="flex flex-col gap-2 border-t pt-3">
+        <Row label="歷史紀錄上限" htmlFor="history-limit">
+          <Input
+            id="history-limit"
+            type="number"
+            min={HISTORY_LIMIT_MIN}
+            max={HISTORY_LIMIT_MAX}
+            className="h-8 w-24"
+            value={historyLimit}
+            onChange={(e) => setHistoryLimit(e.target.value)}
+            onBlur={() => setHistoryLimit(String(limit))}
+          />
+          <span className="text-xs text-muted-foreground">
+            筆（{HISTORY_LIMIT_MIN}–{HISTORY_LIMIT_MAX}，所有 Workspace 共用）
+          </span>
+        </Row>
+        {usage && (
+          <p className="text-xs text-muted-foreground">
+            目前共 {usage.total} 筆。超過上限時，會刪除所有 Workspace 中最舊的紀錄。
+          </p>
+        )}
+      </div>
       <Footer busy={busy} error={error} />
     </form>
   )
@@ -314,10 +361,17 @@ export function AppSettingsDialog() {
   const open = useAppStore((s) => s.appSettingsOpen)
   const setOpen = useAppStore((s) => s.setAppSettingsOpen)
   const proxy = useAppStore((s) => s.config?.proxy)
+  const historyLimit = useAppStore((s) => s.config?.history.maxEntries)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent data-testid="app-settings-dialog" className="max-w-lg">
-        {open && proxy && <AppSettingsForm initial={proxy} onDone={() => setOpen(false)} />}
+        {open && proxy && historyLimit !== undefined && (
+          <AppSettingsForm
+            initial={proxy}
+            initialHistoryLimit={historyLimit}
+            onDone={() => setOpen(false)}
+          />
+        )}
         <LegalNotice />
       </DialogContent>
     </Dialog>

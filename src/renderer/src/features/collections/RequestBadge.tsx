@@ -10,8 +10,17 @@ const METHOD_COLORS: Record<string, string> = {
 }
 
 /** Short colored label in front of a request: the HTTP method, or "WS". */
-export function RequestBadge({ node, className }: { node: RequestNode; className?: string }) {
-  const label = node.requestType === 'websocket' ? 'WS' : (node.method ?? 'GET')
+export function RequestBadge({
+  node,
+  method,
+  className
+}: {
+  node: Pick<RequestNode, 'requestType' | 'method'>
+  /** Overrides the saved method (e.g. the unsaved method of an open tab). */
+  method?: string
+  className?: string
+}) {
+  const label = node.requestType === 'websocket' ? 'WS' : (method ?? node.method ?? 'GET')
   const color =
     node.requestType === 'websocket'
       ? 'text-teal-600 dark:text-teal-400'

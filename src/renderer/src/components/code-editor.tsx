@@ -2,10 +2,20 @@ import { json } from '@codemirror/lang-json'
 import { html } from '@codemirror/lang-html'
 import { xml } from '@codemirror/lang-xml'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import {
+  Decoration,
+  EditorView,
+  MatchDecorator,
+  ViewPlugin,
+  hoverTooltip,
+  type DecorationSet,
+  type ViewUpdate
+} from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import { useEffect, useRef } from 'react'
+import { findVariableTokens, type VariableMap } from '@shared/variables'
 import { cn } from '@renderer/lib/utils'
+import { describeVariable } from '@renderer/lib/variables'
 
 export type CodeLanguage = 'json' | 'html' | 'xml' | 'text'
 
@@ -20,6 +30,54 @@ function languageExtension(language: CodeLanguage): Extension {
     default:
       return []
   }
+}
+
+/** Colours `{{variables}}` by status and shows their value on hover. */
+function variableExtension(map: VariableMap | undefined): Extension {
+  if (!map) return []
+  const decorator = new MatchDecorator({
+    regexp: /\{\{([^{}]+)\}\}/g,
+    decoration: (match) => {
+      const name = (match[1] ?? '').trim()
+      if (name === '') return null
+      return Decoration.mark({
+        class: `cm-hachi-var cm-hachi-var-${describeVariable(name, map).status}`
+      })
+    }
+  })
+  const plugin = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = decorator.createDeco(view)
+      }
+      update(update: ViewUpdate) {
+        this.decorations = decorator.updateDeco(update, this.decorations)
+      }
+    },
+    { decorations: (v) => v.decorations }
+  )
+  const tooltip = hoverTooltip((view, pos) => {
+    const line = view.state.doc.lineAt(pos)
+    for (const token of findVariableTokens(line.text)) {
+      const from = line.from + token.from
+      const to = line.from + token.to
+      if (pos < from || pos > to) continue
+      return {
+        pos: from,
+        end: to,
+        above: true,
+        create: () => {
+          const dom = document.createElement('div')
+          dom.className = 'cm-hachi-var-tip'
+          dom.textContent = `{{${token.name}}} = ${describeVariable(token.name, map).detail}`
+          return { dom }
+        }
+      }
+    }
+    return null
+  })
+  return [plugin, tooltip]
 }
 
 /** Colors come from the app's CSS variables, so light / dark mode just works. */
@@ -49,7 +107,17 @@ const theme = EditorView.theme({
     border: 'none',
     color: 'var(--muted-foreground)'
   },
-  '.cm-panels': { backgroundColor: 'var(--card)', color: 'var(--card-foreground)' }
+  '.cm-panels': { backgroundColor: 'var(--card)', color: 'var(--card-foreground)' },
+  '.cm-hachi-var-defined, .cm-hachi-var-defined *': { color: 'oklch(0.62 0.15 155) !important' },
+  '.cm-hachi-var-dynamic, .cm-hachi-var-dynamic *': { color: 'oklch(0.62 0.14 240) !important' },
+  '.cm-hachi-var-missing, .cm-hachi-var-missing *': { color: 'oklch(0.62 0.2 25) !important' },
+  '.cm-tooltip.cm-tooltip-hover': {
+    backgroundColor: 'var(--popover)',
+    color: 'var(--popover-foreground)',
+    border: '1px solid var(--border)',
+    borderRadius: '6px'
+  },
+  '.cm-hachi-var-tip': { padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: '11px' }
 })
 
 export interface CodeEditorProps {
@@ -59,6 +127,8 @@ export interface CodeEditorProps {
   readOnly?: boolean
   /** Soft-wrap long lines (display only). */
   wrap?: boolean
+  /** Highlights `{{variables}}` against this map. */
+  variables?: VariableMap
   className?: string
   'aria-label'?: string
   'data-testid'?: string
@@ -71,6 +141,7 @@ export function CodeEditor({
   language = 'text',
   readOnly = false,
   wrap = false,
+  variables,
   className,
   ...rest
 }: CodeEditorProps) {
@@ -80,7 +151,8 @@ export function CodeEditor({
   const compartments = useRef({
     language: new Compartment(),
     wrap: new Compartment(),
-    readOnly: new Compartment()
+    readOnly: new Compartment(),
+    variables: new Compartment()
   })
 
   useEffect(() => {
@@ -99,6 +171,7 @@ export function CodeEditor({
           theme,
           c.language.of(languageExtension(language)),
           c.wrap.of(wrap ? EditorView.lineWrapping : []),
+          c.variables.of(variableExtension(variables)),
           c.readOnly.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current?.(update.state.doc.toString())
@@ -133,6 +206,12 @@ export function CodeEditor({
       effects: compartments.current.wrap.reconfigure(wrap ? EditorView.lineWrapping : [])
     })
   }, [wrap])
+
+  useEffect(() => {
+    view.current?.dispatch({
+      effects: compartments.current.variables.reconfigure(variableExtension(variables))
+    })
+  }, [variables])
 
   useEffect(() => {
     view.current?.dispatch({

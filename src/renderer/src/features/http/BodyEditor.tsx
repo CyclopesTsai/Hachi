@@ -1,4 +1,5 @@
 import { FileUp, Wand2 } from 'lucide-react'
+import { VARIABLE_PATTERN } from '@shared/variables'
 import {
   BODY_MODES,
   RAW_CONTENT_TYPES,
@@ -14,6 +15,7 @@ import { Button } from '@renderer/components/ui/button'
 import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-select'
 import { unwrap } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
+import { useVariables } from '@renderer/lib/variables'
 
 const MODE_LABELS: Record<BodyMode, string> = {
   none: 'none',
@@ -92,8 +94,10 @@ export function BodyEditor({
   onChange: (body: HttpBody) => void
 }) {
   const [wrap, setWrap] = useWrapPreference('requestBodyWrap')
+  const variables = useVariables()
   const set = (patch: Partial<HttpBody>) => onChange({ ...body, ...patch })
-  const error = body.mode === 'json' ? jsonError(body.json) : null
+  // `{{variables}}` may stand for numbers / objects, so check the JSON with them filled in.
+  const error = body.mode === 'json' ? jsonError(body.json.replace(VARIABLE_PATTERN, '0')) : null
   const hasFileField = body.formData.some((f) => f.type === 'file')
 
   return (
@@ -168,6 +172,7 @@ export function BodyEditor({
           className="flex-1"
           language="json"
           wrap={wrap}
+          variables={variables}
           value={body.json}
           onChange={(json) => set({ json })}
         />
@@ -179,6 +184,7 @@ export function BodyEditor({
           className="flex-1"
           language={rawLanguage(body.rawContentType)}
           wrap={wrap}
+          variables={variables}
           value={body.raw}
           onChange={(raw) => set({ raw })}
         />

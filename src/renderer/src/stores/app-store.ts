@@ -9,6 +9,10 @@ import type {
   WorkspaceInfo
 } from '@shared/ipc/api'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
+import { useTabsStore } from './tabs-store'
+
+/** Leaving the current Workspace asks about unsaved tabs first. */
+const guardLeave = () => useTabsStore.getState().guardLeave()
 
 export type BootStatus = 'loading' | 'ready' | 'error'
 
@@ -27,15 +31,19 @@ interface AppState {
   /** Request defaults of the current Workspace. */
   workspaceSettings: WorkspaceSettings | null
   appSettingsOpen: boolean
+  /** Error from an action without its own error display (e.g. a menu command). */
+  notice: string | null
 
   bootstrap(): Promise<void>
   loadWorkspaceSettings(): Promise<void>
   saveWorkspaceSettings(settings: WorkspaceSettings): Promise<void>
   updateConfig(input: ConfigUpdateInput): Promise<void>
   setAppSettingsOpen(open: boolean): void
+  setNotice(notice: string | null): void
   refreshRecent(): Promise<void>
-  createWorkspace(input: WorkspaceCreateInput): Promise<WorkspaceInfo>
-  openWorkspace(path: string): Promise<WorkspaceInfo>
+  /** These resolve null when the user cancelled (unsaved tabs prompt or folder picker). */
+  createWorkspace(input: WorkspaceCreateInput): Promise<WorkspaceInfo | null>
+  openWorkspace(path: string): Promise<WorkspaceInfo | null>
   openWorkspaceWithDialog(): Promise<WorkspaceInfo | null>
   removeRecent(path: string): Promise<void>
   /** Renames the current Workspace (display name only). */
@@ -61,6 +69,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   createFocusNonce: 0,
   workspaceSettings: null,
   appSettingsOpen: false,
+  notice: null,
 
   async loadWorkspaceSettings() {
     if (!get().currentWorkspace) {
@@ -86,6 +95,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
     set({ appSettingsOpen: open })
   },
 
+  setNotice(notice) {
+    set({ notice })
+  },
+
   async bootstrap() {
     try {
       const api = window.hachi
@@ -107,6 +120,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   async createWorkspace(input) {
+    if (!(await guardLeave())) return null
     const workspace = await unwrap(window.hachi.workspace.create(input))
     set({ currentWorkspace: workspace, welcomeRequested: false })
     await get().refreshRecent()
@@ -114,6 +128,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   async openWorkspace(path) {
+    if (get().currentWorkspace?.path === path) {
+      set({ welcomeRequested: false })
+      return get().currentWorkspace
+    }
+    if (!(await guardLeave())) return null
     const workspace = await unwrap(window.hachi.workspace.open({ path }))
     set({ currentWorkspace: workspace, welcomeRequested: false })
     await get().refreshRecent()
@@ -121,6 +140,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   async openWorkspaceWithDialog() {
+    if (!(await guardLeave())) return null
     const workspace = await unwrap(window.hachi.workspace.openWithDialog())
     if (workspace) {
       set({ currentWorkspace: workspace, welcomeRequested: false })
@@ -140,6 +160,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   async deleteWorkspace(path) {
+    if (get().currentWorkspace?.path === path && !(await guardLeave())) return
     const recent = await unwrap(window.hachi.workspace.delete({ path }))
     set((s) => ({
       recent,

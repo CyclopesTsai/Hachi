@@ -9,6 +9,8 @@
 export const INVOKE = {
   appGetInfo: 'app:getInfo',
   appGetDefaultWorkspaceDir: 'app:getDefaultWorkspaceDir',
+  appSetCloseGuard: 'app:setCloseGuard',
+  appConfirmClose: 'app:confirmClose',
   configGet: 'config:get',
   configUpdate: 'config:update',
   workspaceGetCurrent: 'workspace:getCurrent',
@@ -32,12 +34,26 @@ export const INVOKE = {
   itemMove: 'item:move',
   requestGet: 'request:get',
   requestSave: 'request:save',
+  requestSaveAs: 'request:saveAs',
+  requestGetInherited: 'request:getInherited',
   containerGet: 'container:get',
   containerSave: 'container:save',
   httpSend: 'http:send',
   httpCancel: 'http:cancel',
   httpGetBody: 'http:getBody',
-  httpSaveResponse: 'http:saveResponse'
+  httpSaveResponse: 'http:saveResponse',
+  envList: 'env:list',
+  envGet: 'env:get',
+  envCreate: 'env:create',
+  envSave: 'env:save',
+  envDuplicate: 'env:duplicate',
+  envDelete: 'env:delete',
+  historyList: 'history:list',
+  historyDelete: 'history:delete',
+  historyClear: 'history:clear',
+  historyGetUsage: 'history:getUsage',
+  sessionGet: 'session:get',
+  sessionSave: 'session:save'
 } as const
 
 export type InvokeChannel = (typeof INVOKE)[keyof typeof INVOKE]
@@ -47,7 +63,9 @@ export const EVENTS = {
   menuCommand: 'menu:command',
   workspaceChanged: 'workspace:changed',
   configChanged: 'config:changed',
-  treeChanged: 'tree:changed'
+  treeChanged: 'tree:changed',
+  historyChanged: 'history:changed',
+  appCloseRequested: 'app:closeRequested'
 } as const
 
 export type EventChannel = (typeof EVENTS)[keyof typeof EVENTS]
@@ -58,7 +76,10 @@ export const EVENT_CHANNELS: readonly EventChannel[] = Object.values(EVENTS)
 export const MENU_COMMANDS = [
   'workspace.new',
   'workspace.switch',
+  'workspace.open',
+  'workspace.openRecent',
   'request.save',
+  'tab.close',
   'app.settings'
 ] as const
 export type MenuCommand = (typeof MENU_COMMANDS)[number]

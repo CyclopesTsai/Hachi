@@ -19,7 +19,9 @@ function invoke<C extends InvokeChannel>(
 const api: HachiApi = {
   app: {
     getInfo: () => invoke(INVOKE.appGetInfo),
-    getDefaultWorkspaceDir: () => invoke(INVOKE.appGetDefaultWorkspaceDir)
+    getDefaultWorkspaceDir: () => invoke(INVOKE.appGetDefaultWorkspaceDir),
+    setCloseGuard: (input) => invoke(INVOKE.appSetCloseGuard, input),
+    confirmClose: () => invoke(INVOKE.appConfirmClose)
   },
   config: {
     get: () => invoke(INVOKE.configGet),
@@ -43,7 +45,9 @@ const api: HachiApi = {
   },
   request: {
     get: (input) => invoke(INVOKE.requestGet, input),
-    save: (input) => invoke(INVOKE.requestSave, input)
+    save: (input) => invoke(INVOKE.requestSave, input),
+    saveAs: (input) => invoke(INVOKE.requestSaveAs, input),
+    getInherited: (input) => invoke(INVOKE.requestGetInherited, input)
   },
   container: {
     get: (input) => invoke(INVOKE.containerGet, input),
@@ -54,6 +58,24 @@ const api: HachiApi = {
     cancel: (input) => invoke(INVOKE.httpCancel, input),
     getBody: (input) => invoke(INVOKE.httpGetBody, input),
     saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input)
+  },
+  env: {
+    list: () => invoke(INVOKE.envList),
+    get: (input) => invoke(INVOKE.envGet, input),
+    create: (input) => invoke(INVOKE.envCreate, input),
+    save: (input) => invoke(INVOKE.envSave, input),
+    duplicate: (input) => invoke(INVOKE.envDuplicate, input),
+    delete: (input) => invoke(INVOKE.envDelete, input)
+  },
+  history: {
+    list: () => invoke(INVOKE.historyList),
+    delete: (input) => invoke(INVOKE.historyDelete, input),
+    clear: () => invoke(INVOKE.historyClear),
+    getUsage: () => invoke(INVOKE.historyGetUsage)
+  },
+  session: {
+    get: () => invoke(INVOKE.sessionGet),
+    save: (input) => invoke(INVOKE.sessionSave, input)
   },
   item: {
     create: (input) => invoke(INVOKE.itemCreate, input),

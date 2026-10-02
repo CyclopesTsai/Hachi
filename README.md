@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前進度：**Phase 2**（HTTP 編輯器與回應檢視器）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
+> 目前進度：**Phase 3**（環境變數、多分頁、歷史紀錄）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
@@ -54,7 +54,7 @@ src/
 ├─ main/          Electron main process
 │  ├─ platform/   ★ 平台專屬程式碼（darwin.ts / default.ts），其他地方不判斷 process.platform
 │  ├─ ipc/        IPC 註冊、輸入驗證、sender 驗證
-│  └─ services/   設定檔、Workspace、原子寫入
+│  └─ services/   設定檔、Workspace、Collection、環境 / 機密值、歷史紀錄、分頁記憶、HTTP 引擎
 ├─ preload/       暴露 window.hachi 白名單 API
 └─ renderer/      React UI（features/、components/ui/、stores/）
 docs/
@@ -68,8 +68,9 @@ App 名稱、Bundle ID（`tw.com.cyclopes.hachi`）、版權字串集中在 **`s
 
 ## 資料存放位置
 
-- App 設定：`app.getPath('userData')/app-config.json`（macOS：`~/Library/Application Support/Hachi/`）
+- App 設定：`app.getPath('userData')/app-config.json`（macOS：`~/Library/Application Support/Hachi/`）；同一目錄另有 `history-index.json`（歷史紀錄共用上限的索引）與 `sessions/`（各 Workspace 開啟的分頁與目前環境）
 - Workspace：預設 `~/Documents/Hachi/<名稱>/`，可自選。詳細格式請見 [docs/schema.md](docs/schema.md)。
+- **機密變數**：環境 / Collection 變數勾選「機密」後，值只存在 `<workspace>/.hachi-secrets.json`（已列入 Workspace 的 `.gitignore`），環境檔與 `collection.json` 裡留空，可以放心提交到 git。`history.json` 也在 `.gitignore` 中。
 
 ## 打包（macOS）
 

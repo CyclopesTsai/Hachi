@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：**Phase 3（環境變數、多分頁、歷史紀錄）實作中**，設計已確認（決策 38–47）
+- **目前階段**：**Phase 3 實作完成，等待使用者確認**（設計見決策 38–47）
 - **最後更新**：2026-10-02
 
 ## Phase 進度
@@ -15,7 +15,7 @@
 | 0     | 專案骨架、視窗、原生選單、安全設定、首次啟動引導、app-config.json、docs 初版                        | ✅ 完成                                                   |
 | 1     | Workspace 切換 + Collection / 資料夾 / 請求樹狀（新增、重新命名、複製、刪除、拖曳排序），含檔案監聽 | ✅ 完成（檔案監聽於 Phase 2 改為手動重新讀取，見決策 20） |
 | 2     | HTTP 編輯器與回應檢視器                                                                             | ✅ 完成                                                   |
-| 3     | 環境變數、多分頁、歷史紀錄                                                                          | 🚧 實作中                                                 |
+| 3     | 環境變數、多分頁、歷史紀錄                                                                          | ✅ 完成（待確認）                                         |
 | 4     | WebSocket 完整功能                                                                                  | —                                                         |
 | 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | —                                                         |
 | 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | —                                                         |
@@ -56,6 +56,23 @@
 **驗證方式**：`npm run verify`（210 個單元測試，HTTP 引擎以本機 HTTP / HTTPS（自簽憑證）/ Proxy 測試伺服器實測）；`xvfb-run -a npm run test:e2e`（27 項冒煙檢查，含在 App 中對本機伺服器實際發送、儲存、取消、大型回應、下載、重新導向、Proxy、重新讀取）。macOS 尚未實機測試。
 
 **已知限制（Phase 3 處理）**：關閉視窗或從選單切換 Workspace 時，尚未儲存的修改不會提示（Phase 3 的多分頁會一併處理未儲存提示）；樹上的方法標籤顯示的是已儲存的方法。
+
+### Phase 3 完成內容
+
+- 環境：標題列右側切換目前環境；「管理環境…」分頁可新增 / 改名 / 複製 / 刪除環境並編輯變數（`environments/<slug>.json`）
+- 機密變數：環境與 Collection 變數都可勾選「機密」；值只存在 `.hachi-secrets.json`（已在 .gitignore），可提交的檔案中留空；預設遮罩，可勾選「顯示機密值」
+- Collection 設定新增 Variables 分頁（補上 Phase 2 延後的項目）
+- `{{變數}}` 替換（`src/shared/variables.ts`）：在 main 發送時替換 URL / Params / Headers / Body / Auth，環境 > Collection，可巢狀（最多 10 層、循環停止），動態變數 `$guid` / `$timestamp` / `$isoTimestamp` / `$randomInt`；找不到的照原樣送出並在回應區列出
+- 變數標示：URL、表格、Auth 欄位與 Body 編輯器中，綠色＝有值、藍色＝動態、紅色＝找不到；滑鼠移上去顯示值（機密值遮罩）
+- 多分頁：請求 / Collection / 資料夾 / 環境 / WebSocket（佔位）；預覽分頁（單擊開啟、斜體，任何動作即固定）；分頁列「+」開未儲存的新請求，儲存時選擇位置（Save As）；右鍵關閉其他 / 全部；CmdOrCtrl+W 關閉分頁（macOS 的 Close Window 改為 CmdOrCtrl+Shift+W）
+- 未儲存提示：關閉分頁、關閉視窗、結束 App、切換 / 開啟 / 刪除 Workspace、重新讀取時列出未儲存的分頁（補上 Phase 2 的已知限制）；樹上的方法標籤跟著分頁中編輯的方法
+- 樹上的項目被刪除：分頁沒修改就關閉，有修改就變成未儲存的新請求
+- 分頁記憶：每個 Workspace 開啟的分頁與目前環境存在 `<userData>/sessions/`，重新啟動或切回 Workspace 時還原
+- 歷史紀錄：每次發送自動記錄（未替換變數的請求 + 回應摘要，不含 Body）；側欄切換 Collections / History，依日期分組、單筆刪除、全部清除，點一下開成新的未儲存分頁
+- 歷史上限：所有 Workspace 共用（App 設定，預設 200，50–1000，調小前先確認）；`<userData>/history-index.json` 記錄每筆所屬 Workspace；視窗右下角圓餅圖顯示使用率
+- 樹上雙擊改為「固定分頁」（改名用 F2 或右鍵選單）
+
+**驗證方式**：`npm run verify`（269 個單元測試：變數替換、環境 / 機密值、跨 Workspace 歷史上限、分頁記憶、Collection 變數、分頁模型等）；`xvfb-run -a npm run test:e2e`（34 項冒煙檢查，新增：預覽分頁、Close Tab、環境與機密檔、Collection 變數、`+` 新請求的變數替換與標示、Save As、歷史紀錄與圓餅圖、關閉視窗 / 結束 App 的未儲存提示、重新啟動後還原分頁與環境）。macOS 尚未實機測試。
 
 ## 決策紀錄（已與使用者確認）
 
@@ -111,7 +128,7 @@
 
 ## 下一步
 
-- 完成 Phase 3 實作與驗證，向使用者報告後等待確認，再進入 Phase 4（WebSocket）
+- 等使用者確認 Phase 3，再進入 Phase 4（WebSocket）；開始前先說明規劃並詢問不確定的設計
 
 ## 開發環境注意事項
 

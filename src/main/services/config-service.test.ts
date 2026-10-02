@@ -40,7 +40,8 @@ describe('ConfigService', () => {
         username: '',
         password: ''
       },
-      ui: { requestBodyWrap: false, responseBodyWrap: false }
+      ui: { requestBodyWrap: false, responseBodyWrap: false },
+      history: { maxEntries: 200 }
     })
     expect(await readDisk()).toEqual(config)
   })

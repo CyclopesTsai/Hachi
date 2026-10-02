@@ -4,7 +4,16 @@
  */
 import { z } from 'zod'
 import { proxySettingsSchema, themeSchema } from '../schemas/app-config'
-import { REQUEST_TYPES, authSchema, itemNameSchema, keyValueSchema } from '../schemas/collection'
+import {
+  REQUEST_TYPES,
+  VARIABLES_MAX,
+  authSchema,
+  itemNameSchema,
+  keyValueSchema,
+  variableSchema
+} from '../schemas/collection'
+import { historySettingsSchema } from '../schemas/app-config'
+import { sessionDataSchema } from '../schemas/session'
 import { httpRequestSchema } from '../schemas/http-request'
 import { workspaceNameSchema, workspaceSettingsSchema } from '../schemas/workspace'
 import type { InvokeMap } from './api'
@@ -30,6 +39,8 @@ const itemIdSchema = z.string().min(1).max(1024)
 
 const runIdSchema = z.string().min(1).max(100)
 
+const variablesSchema = z.array(variableSchema).max(VARIABLES_MAX)
+
 const itemCreateSchema = z
   .strictObject({
     parentId: itemIdSchema.nullable(),
@@ -45,6 +56,8 @@ const itemCreateSchema = z
 export const inputSchemas = {
   [INVOKE.appGetInfo]: noInput,
   [INVOKE.appGetDefaultWorkspaceDir]: noInput,
+  [INVOKE.appSetCloseGuard]: z.strictObject({ dirty: z.boolean() }),
+  [INVOKE.appConfirmClose]: noInput,
   [INVOKE.configGet]: noInput,
   [INVOKE.configUpdate]: z.strictObject({
     theme: themeSchema.optional(),
@@ -55,7 +68,8 @@ export const inputSchemas = {
         requestBodyWrap: z.boolean().optional(),
         responseBodyWrap: z.boolean().optional()
       })
-      .optional()
+      .optional(),
+    history: historySettingsSchema.optional()
   }),
   [INVOKE.workspaceGetCurrent]: noInput,
   [INVOKE.workspaceCreate]: z.strictObject({
@@ -91,20 +105,45 @@ export const inputSchemas = {
   }),
   [INVOKE.requestGet]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.requestSave]: z.strictObject({ id: itemIdSchema, request: httpRequestSchema }),
+  [INVOKE.requestSaveAs]: z.strictObject({
+    parentId: itemIdSchema,
+    name: itemNameSchema,
+    request: httpRequestSchema
+  }),
+  [INVOKE.requestGetInherited]: z.strictObject({ parentId: itemIdSchema.nullable() }),
   [INVOKE.containerGet]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.containerSave]: z.strictObject({
     id: itemIdSchema,
     headers: z.array(keyValueSchema).max(1000),
-    auth: authSchema
+    auth: authSchema,
+    variables: variablesSchema
   }),
   [INVOKE.httpSend]: z.strictObject({
     runId: runIdSchema,
-    requestId: itemIdSchema,
+    requestId: itemIdSchema.nullable(),
+    parentId: itemIdSchema.nullable(),
+    environmentId: itemIdSchema.nullable(),
     request: httpRequestSchema
   }),
   [INVOKE.httpCancel]: z.strictObject({ runId: runIdSchema }),
   [INVOKE.httpGetBody]: z.strictObject({ runId: runIdSchema }),
-  [INVOKE.httpSaveResponse]: z.strictObject({ runId: runIdSchema })
+  [INVOKE.httpSaveResponse]: z.strictObject({ runId: runIdSchema }),
+  [INVOKE.envList]: noInput,
+  [INVOKE.envGet]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.envCreate]: z.strictObject({ name: itemNameSchema }),
+  [INVOKE.envSave]: z.strictObject({
+    id: itemIdSchema,
+    name: itemNameSchema,
+    variables: variablesSchema
+  }),
+  [INVOKE.envDuplicate]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.envDelete]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.historyList]: noInput,
+  [INVOKE.historyDelete]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.historyClear]: noInput,
+  [INVOKE.historyGetUsage]: noInput,
+  [INVOKE.sessionGet]: noInput,
+  [INVOKE.sessionSave]: sessionDataSchema
 } as const satisfies Record<InvokeChannel, z.ZodType>
 
 export type InputOf<C extends InvokeChannel> = z.output<(typeof inputSchemas)[C]>

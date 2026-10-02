@@ -587,7 +587,8 @@ describe('requests and container settings', () => {
     })
     await service.saveContainer(c.id, {
       headers: [{ id: 'h', key: 'X-Team', value: 'core', enabled: true }],
-      auth: { type: 'bearer', token: 'tok' }
+      auth: { type: 'bearer', token: 'tok' },
+      variables: []
     })
     const folder = await service.getContainer(f.id)
     expect(folder).toMatchObject({
@@ -605,7 +606,120 @@ describe('requests and container settings', () => {
 
   it('stores "inherit" on a collection as "none"', async () => {
     const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
-    const saved = await service.saveContainer(c.id, { headers: [], auth: { type: 'inherit' } })
+    const saved = await service.saveContainer(c.id, {
+      headers: [],
+      auth: { type: 'inherit' },
+      variables: []
+    })
     expect(saved.auth).toEqual({ type: 'none' })
+  })
+})
+
+describe('collection variables and secrets', () => {
+  const variable = (id: string, key: string, value: string, secret = false) => ({
+    id,
+    key,
+    value,
+    enabled: true,
+    secret
+  })
+
+  it('keeps secret values out of collection.json and merges them back on read', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'API' })
+    const saved = await service.saveContainer(c.id, {
+      headers: [],
+      auth: { type: 'none' },
+      variables: [variable('v1', 'base', 'https://x'), variable('v2', 'token', 's3cret', true)]
+    })
+    expect(saved.variables.map((v) => v.value)).toEqual(['https://x', 's3cret'])
+
+    const file = await readJson(col('api/collection.json'))
+    expect(file.variables).toMatchObject([
+      { key: 'base', value: 'https://x', secret: false },
+      { key: 'token', value: '', secret: true }
+    ])
+    const secrets = await readJson(path.join(root, '.hachi-secrets.json'))
+    expect(secrets).toEqual({
+      version: 1,
+      environments: {},
+      collections: { [c.id]: { v2: 's3cret' } }
+    })
+    expect(await readFile(path.join(root, '.gitignore'), 'utf8')).toContain('.hachi-secrets.json')
+
+    // Turning the secret flag off moves the value back into collection.json.
+    await service.saveContainer(c.id, {
+      headers: [],
+      auth: { type: 'none' },
+      variables: [variable('v2', 'token', 'plain')]
+    })
+    expect((await readJson(col('api/collection.json'))).variables).toMatchObject([
+      { value: 'plain' }
+    ])
+    expect((await readJson(path.join(root, '.hachi-secrets.json'))).collections).toEqual({})
+  })
+
+  it('provides the collection layer for any container inside it', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'API' })
+    const f = await service.create({ parentId: c.id, kind: 'folder', name: 'Sub' })
+    await service.saveContainer(c.id, {
+      headers: [],
+      auth: { type: 'none' },
+      variables: [variable('v', 'token', 'T', true)]
+    })
+    const layer = await service.getCollectionLayer(f.id)
+    expect(layer).toMatchObject({
+      source: 'collection',
+      sourceName: 'API',
+      variables: [{ key: 'token', value: 'T', secret: true }]
+    })
+    expect(await service.getCollectionLayer(null)).toBeNull()
+  })
+
+  it('folders have no variables, and duplicating a collection copies its secrets', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'API' })
+    const f = await service.create({ parentId: c.id, kind: 'folder', name: 'Sub' })
+    expect((await service.getContainer(f.id)).variables).toEqual([])
+    await service.saveContainer(c.id, {
+      headers: [],
+      auth: { type: 'none' },
+      variables: [variable('v', 'token', 'T', true)]
+    })
+    const copy = await service.duplicate(c.id)
+    expect((await service.getContainer(copy.id)).variables[0]?.value).toBe('T')
+  })
+})
+
+describe('createRequest (save as)', () => {
+  it('creates a request with the given content, a new id and the chosen name', async () => {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'API' })
+    const created = await service.createRequest(c.id, 'From Draft', {
+      version: 1,
+      id: 'draft-id',
+      type: 'http',
+      name: 'ignored',
+      method: 'POST',
+      url: '{{base}}/users',
+      params: [],
+      headers: [],
+      body: {
+        mode: 'json',
+        json: '{}',
+        raw: '',
+        rawContentType: 'text/plain',
+        formData: [],
+        urlencoded: []
+      },
+      auth: { type: 'inherit' },
+      settings: { timeoutMs: null, validateSSL: null, followRedirects: null, useProxy: true }
+    })
+    expect(created.request).toMatchObject({ name: 'From Draft', method: 'POST', id: created.id })
+    expect(created.id).not.toBe('draft-id')
+    expect(shape(created.tree)).toEqual([['API', ['From Draft']]])
+    expect(await readJson(col('api/from-draft.json'))).toMatchObject({ url: '{{base}}/users' })
+    expect((await service.getInheritedFor(c.id)).auth?.sourceName).toBe('API')
+    expect(await service.getInheritedFor(null)).toEqual({ headers: [], auth: null })
+    await expect(service.createRequest('nope', 'X', created.request)).rejects.toMatchObject({
+      code: 'NOT_FOUND'
+    })
   })
 })

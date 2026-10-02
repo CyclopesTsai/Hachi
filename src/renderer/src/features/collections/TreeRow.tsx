@@ -26,7 +26,8 @@ import {
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
 import { cn } from '@renderer/lib/utils'
-import { isDirty, useEditorStore } from '@renderer/stores/editor-store'
+import { isTabDirty, itemTabKey } from '@renderer/features/tabs/tab-model'
+import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
 import type { DropPosition, FlatRow } from './tree-model'
@@ -72,7 +73,7 @@ function InlineRename({
   )
 }
 
-function NodeIcon({ node, open }: { node: TreeNode; open: boolean }) {
+function NodeIcon({ node, open, method }: { node: TreeNode; open: boolean; method?: string }) {
   if (node.kind === 'request' && node.error) {
     return (
       <span className="flex w-11 shrink-0 justify-end">
@@ -85,7 +86,7 @@ function NodeIcon({ node, open }: { node: TreeNode; open: boolean }) {
     const Icon = open ? FolderOpen : Folder
     return <Icon className="size-4 shrink-0 text-muted-foreground" />
   }
-  return <RequestBadge node={node} />
+  return <RequestBadge node={node} method={method} />
 }
 
 export function TreeRow({
@@ -101,8 +102,18 @@ export function TreeRow({
   const selected = useTreeStore((s) => s.selectedId === node.id)
   const editing = useTreeStore((s) => s.editingId === node.id)
   const expanded = useTreeStore((s) => s.expanded.has(node.id))
-  const unsaved = useEditorStore((s) => s.doc?.id === node.id && isDirty(s.doc))
+  const tab = useTabsStore((s) => s.tabs.find((t) => t.key === itemTabKey(node.id)))
+  const unsaved = tab ? isTabDirty(tab) : false
+  // The method being edited in an open tab, so the tree matches the editor.
+  const method = tab?.kind === 'request' ? tab.draft?.method : undefined
   const { select, toggle, setEditing, rename, duplicate, create } = useTreeStore.getState()
+  const tabs = useTabsStore.getState()
+  const open = (preview: boolean) => {
+    select(node.id)
+    tabs.openItem(node.id, { preview })
+  }
+  const createAndOpen = (...args: Parameters<typeof create>) =>
+    void create(...args).then((id) => id && tabs.openItem(id, { preview: false }))
   const container = isContainer(node)
   const broken = node.error !== undefined
 
@@ -143,7 +154,7 @@ export function TreeRow({
       toggle(node.id)
     } else if (e.key === 'Enter') {
       if (container) toggle(node.id)
-      select(node.id)
+      open(false)
     }
   }
 
@@ -167,11 +178,15 @@ export function TreeRow({
           data-kind={node.kind}
           tabIndex={0}
           title={node.error ?? node.relPath}
+          // Single click: preview tab. Double click: keep the tab open (rename is F2).
           onClick={() => {
-            select(node.id)
+            open(true)
             if (container) toggle(node.id)
           }}
-          onDoubleClick={startRename}
+          onDoubleClick={() => {
+            open(false)
+            if (container) toggle(node.id)
+          }}
           onKeyDown={onKeyDown}
           className={cn(
             'relative flex h-7 cursor-default items-center gap-1.5 rounded-sm pr-2 text-sm outline-none',
@@ -201,7 +216,7 @@ export function TreeRow({
               />
             )}
           </span>
-          <NodeIcon node={node} open={expanded} />
+          <NodeIcon node={node} open={expanded} method={method} />
           {editing ? (
             <InlineRename
               initial={node.name}
@@ -237,15 +252,15 @@ export function TreeRow({
       >
         {container && !broken && (
           <>
-            <ContextMenuItem onSelect={() => void create(node.id, 'request', 'http')}>
+            <ContextMenuItem onSelect={() => createAndOpen(node.id, 'request', 'http')}>
               <FilePlus2 />
               新增 HTTP 請求
             </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void create(node.id, 'request', 'websocket')}>
+            <ContextMenuItem onSelect={() => createAndOpen(node.id, 'request', 'websocket')}>
               <Radio />
               新增 WebSocket
             </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void create(node.id, 'folder')}>
+            <ContextMenuItem onSelect={() => createAndOpen(node.id, 'folder')}>
               <FolderPlus />
               新增資料夾
             </ContextMenuItem>
@@ -259,16 +274,16 @@ export function TreeRow({
               重新命名
               <ContextMenuShortcut>F2</ContextMenuShortcut>
             </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void duplicate(node.id)}>
+            <ContextMenuItem
+              onSelect={() => void duplicate(node.id).then((id) => id && tabs.openItem(id))}
+            >
               <Copy />
               複製
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
-        <ContextMenuItem
-          onSelect={() => void useEditorStore.getState().reload({ scope: 'item', id: node.id })}
-        >
+        <ContextMenuItem onSelect={() => void tabs.reload({ scope: 'item', id: node.id })}>
           <RefreshCw />
           重新讀取
         </ContextMenuItem>

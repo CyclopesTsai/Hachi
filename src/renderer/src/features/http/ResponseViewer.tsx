@@ -12,7 +12,8 @@ import { Button } from '@renderer/components/ui/button'
 import { CheckboxLabel } from '@renderer/components/ui/native-select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { cn } from '@renderer/lib/utils'
-import { useEditorStore } from '@renderer/stores/editor-store'
+import type { RequestTab } from '@renderer/features/tabs/tab-model'
+import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useWrapPreference } from '@renderer/hooks/use-wrap-preference'
 
 const ERROR_TITLES: Record<HttpErrorCode, string> = {
@@ -52,10 +53,12 @@ function prettyJson(text: string): string | null {
 
 type BodyView = 'pretty' | 'raw' | 'preview'
 
-function BodyPanel({ result }: { result: HttpResponseData }) {
+function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: string }) {
   const [wrap, setWrap] = useWrapPreference('responseBodyWrap')
-  const fullBody = useEditorStore((s) => s.fullBodies[result.runId])
-  const { showFullBody, downloadResponse } = useEditorStore.getState()
+  const fullBody = useTabsStore((s) => s.fullBodies[result.runId])
+  const tabs = useTabsStore.getState()
+  const showFullBody = (runId: string) => tabs.showFullBody(tabKey, runId)
+  const downloadResponse = (runId: string) => tabs.downloadResponse(tabKey, runId)
   const [view, setView] = useState<BodyView>('pretty')
   const [busy, setBusy] = useState(false)
 
@@ -236,10 +239,27 @@ function CookiesPanel({ result }: { result: HttpResponseData }) {
   )
 }
 
-export function ResponseViewer({ requestId }: { requestId: string }) {
-  const result: HttpResult | undefined = useEditorStore((s) => s.results[requestId])
-  const running = useEditorStore((s) => s.run?.requestId === requestId)
-  const cancel = useEditorStore((s) => s.cancel)
+/** Variables that had no value: they were sent as `{{name}}`. */
+function UnresolvedNotice({ names }: { names: string[] }) {
+  if (names.length === 0) return null
+  return (
+    <p
+      className="flex items-start gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400"
+      data-testid="unresolved-variables"
+    >
+      <AlertTriangle className="mt-px size-3.5 shrink-0" />
+      <span>
+        找不到變數，已照原樣送出：
+        <span className="font-mono">{names.map((n) => `{{${n}}}`).join('、')}</span>
+      </span>
+    </p>
+  )
+}
+
+export function ResponseViewer({ tab }: { tab: RequestTab }) {
+  const result: HttpResult | null = tab.result
+  const running = tab.runId !== null
+  const cancel = () => useTabsStore.getState().cancel(tab.key)
 
   if (running) {
     return (
@@ -262,17 +282,20 @@ export function ResponseViewer({ requestId }: { requestId: string }) {
   }
   if (result.kind === 'error') {
     return (
-      <div className="flex h-full flex-col gap-2 p-4" data-testid="response-error">
-        <p className="flex items-center gap-2 font-medium text-destructive">
-          <AlertTriangle className="size-4" />
-          {ERROR_TITLES[result.code]}
-        </p>
-        <p className="font-mono text-xs break-all text-muted-foreground select-text">
-          {result.message}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {result.url} · {formatDuration(result.timings.totalMs)}
-        </p>
+      <div className="flex h-full flex-col" data-testid="response-error">
+        <UnresolvedNotice names={result.unresolvedVariables} />
+        <div className="flex flex-col gap-2 p-4">
+          <p className="flex items-center gap-2 font-medium text-destructive">
+            <AlertTriangle className="size-4" />
+            {ERROR_TITLES[result.code]}
+          </p>
+          <p className="font-mono text-xs break-all text-muted-foreground select-text">
+            {result.message}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {result.url} · {formatDuration(result.timings.totalMs)}
+          </p>
+        </div>
       </div>
     )
   }
@@ -315,8 +338,9 @@ export function ResponseViewer({ requestId }: { requestId: string }) {
           <span className="text-xs text-muted-foreground">重新導向 {result.redirects} 次</span>
         )}
       </div>
+      <UnresolvedNotice names={result.unresolvedVariables} />
       <TabsContent value="body" className="min-h-0 flex-1">
-        <BodyPanel key={result.runId} result={result} />
+        <BodyPanel key={result.runId} result={result} tabKey={tab.key} />
       </TabsContent>
       <TabsContent value="headers" className="min-h-0 flex-1">
         <HeadersPanel headers={result.headers} />

@@ -11,6 +11,8 @@ import {
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
 import { CollectionSidebar } from '@renderer/features/collections/CollectionSidebar'
+import { EnvironmentSelect } from '@renderer/features/environments/EnvironmentSelect'
+import { HistoryUsageIndicator } from '@renderer/features/history/HistoryUsageIndicator'
 import { EditorHost } from '@renderer/features/http/EditorHost'
 import { WorkspaceSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
 import { useAppStore } from '@renderer/stores/app-store'
@@ -73,6 +75,8 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
         >
           {workspace.path}
         </span>
+        <div className="flex-1" />
+        <EnvironmentSelect />
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -81,6 +85,10 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
           <EditorHost />
         </main>
       </div>
+
+      <footer className="flex h-6 shrink-0 items-center justify-end gap-2 border-t px-2 text-[11px]">
+        <HistoryUsageIndicator />
+      </footer>
 
       <RenameWorkspaceDialog
         open={renaming}

@@ -1,6 +1,6 @@
 # Hachi 資料結構（JSON Schema）
 
-> 版本：Phase 2。標示「✅ 已實作」的格式已定案並有 zod schema；標示「📝 草案」的格式會在對應 Phase 實作時定案，並同步更新本文件。
+> 版本：Phase 3。標示「✅ 已實作」的格式已定案並有 zod schema；標示「📝 草案」的格式會在對應 Phase 實作時定案，並同步更新本文件。
 >
 > zod schema 位置：`src/shared/schemas/`
 
@@ -27,19 +27,20 @@
 ```
 <userData>/                          # macOS: ~/Library/Application Support/Hachi
 ├─ app-config.json                   ✅ App 設定
-└─ sessions/<sha1(workspacePath)>.json  📝 Phase 3：各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
+├─ history-index.json                ✅ Phase 3：所有 Workspace 歷史紀錄的索引（共用筆數上限用）
+└─ sessions/<sha1(workspacePath)>.json  ✅ Phase 3：各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
 
 <workspace>/                         # 預設 ~/Documents/Hachi/<名稱>/，可自選
 ├─ workspace.json                    ✅（settings 於 Phase 2 擴充）
 ├─ .gitignore                        ✅
-├─ history.json                      ✅ 骨架（entries 格式 📝 Phase 3）
-├─ .hachi-secrets.json               📝 Phase 3：機密變數值（已列入 .gitignore）
+├─ history.json                      ✅ Phase 3：請求歷史（已列入 .gitignore）
+├─ .hachi-secrets.json               ✅ Phase 3：機密變數值（已列入 .gitignore；沒有機密變數時不建立）
 ├─ environments/
-│  └─ <env>.json                     📝 Phase 3
+│  └─ <env>.json                     ✅ Phase 3（檔名為 slug）
 └─ collections/
    └─ <collection>/                  ✅ Phase 1（資料夾名為 slug）
       ├─ collection.json             ✅ Phase 1
-      ├─ <request>.json              ✅ 共通欄位（Phase 1）；HTTP 完整欄位 📝 Phase 2、WebSocket 📝 Phase 4
+      ├─ <request>.json              ✅ 共通欄位（Phase 1）；HTTP 完整欄位 ✅ Phase 2、WebSocket 📝 Phase 4
       └─ <folder>/                   ✅ 可多層巢狀
          ├─ folder.json              ✅ Phase 1
          └─ <request>.json
@@ -76,11 +77,14 @@
   "ui": {
     "requestBodyWrap": false, // 請求 Body 編輯器自動換行（僅影響顯示）
     "responseBodyWrap": false // 回應 Body 自動換行（僅影響顯示）
+  },
+  "history": {
+    "maxEntries": 200 // 歷史紀錄筆數上限，所有 Workspace 共用（50–1000）
   }
 }
 ```
 
-`proxy` 與 `ui` 於 Phase 2 加入（新增欄位附預設值，不升版）。
+`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3 加入（新增欄位附預設值，不升版）。
 
 ## ✅ `workspace.json`
 
@@ -114,36 +118,50 @@ history.json
 *.tmp
 ```
 
-## ✅ / 📝 `history.json`
+## ✅ `history.json`（Phase 3）
 
-Phase 0 建立骨架 `{ "version": 1, "entries": [] }`。Entry 格式於 Phase 3 定案，方向：
+每個 Workspace 一份，**新的在前**。只存未替換變數的請求（`{{token}}` 不會變成實際值）與回應摘要，**不存回應 Body**。檔案已列入 `.gitignore`。
 
 ```jsonc
 {
   "version": 1,
   "entries": [
-    // 新的在前，上限約 200 筆
     {
       "id": "…",
       "type": "http",
-      "timestamp": "…",
-      "request": {/* 未替換變數的原始請求快照（不含機密值） */},
-      "response": { "status": 200, "timeMs": 123, "sizeBytes": 456 } // 只存摘要，不存 body
-    },
-    {
-      "id": "…",
-      "type": "websocket",
-      "timestamp": "…",
-      "url": "wss://…",
-      "connectedAt": "…",
-      "closedAt": "…",
-      "closeCode": 1000,
-      "closeReason": "",
-      "messageCount": 12 // 訊息內容不存檔
+      "sentAt": "2026-10-02T03:04:05.678Z",
+      "requestId": "9a2e…", // 發送的請求項目；未儲存的分頁為 null
+      "environmentName": "dev", // 發送時的環境（僅供顯示）；無環境為 null
+      "request": {/* 完整的 HTTP 請求（同請求檔格式），變數未替換 */},
+      "result": {
+        "kind": "response",
+        "status": 200,
+        "statusText": "OK",
+        "timeMs": 123,
+        "sizeBytes": 456
+      }
+      // 或 { "kind": "error", "code": "TIMEOUT", "message": "…", "timeMs": 30000 }
     }
+    // Phase 4 加入 type: "websocket"；看不懂的 type 會原樣保留
   ]
 }
 ```
+
+- 取消的請求不記錄。
+- 檔案損毀時改名為 `history.json.corrupt-<時間>` 後重新開始（歷史紀錄可以捨棄）。
+- **筆數上限由所有 Workspace 共用**（`app-config.json` 的 `history.maxEntries`，預設 200）：超過時刪除所有 Workspace 中最舊的紀錄。為了不用每次讀取所有 Workspace，`<userData>/history-index.json` 記錄每一筆的 Workspace 與時間：
+
+```jsonc
+// <userData>/history-index.json
+{
+  "version": 1,
+  "entries": [{ "workspacePath": "/Users/me/Documents/Hachi/My API", "id": "…", "sentAt": "…" }]
+}
+```
+
+- 開啟 Workspace 時以該 Workspace 的 `history.json` 重建它在索引中的紀錄（例如資料夾從別台電腦同步過來）。
+- App 啟動時，`history.json` 已不存在的 Workspace（被搬走或刪除）會從索引移除；刪除 Workspace 時也會移除。
+- 索引損毀時直接重建（從開啟的 Workspace 慢慢補回）。
 
 ---
 
@@ -170,7 +188,7 @@ Phase 0 建立骨架 `{ "version": 1, "entries": [] }`。Entry 格式於 Phase 3
   "name": "Users API", // 顯示名稱（1–100 字元）
   "headers": [], // KeyValue[]，共用 Headers
   "auth": { "type": "none" }, // Auth
-  "variables": [], // KeyValue[]，Collection 層級變數
+  "variables": [], // Variable[]：KeyValue + "secret": boolean；機密變數的 value 一律留空（值在 .hachi-secrets.json）
   "order": ["9a2e…", "c41d…"] // 子項目（資料夾 / 請求）的 id，依顯示順序
 }
 ```
@@ -188,7 +206,7 @@ Phase 0 建立骨架 `{ "version": 1, "entries": [] }`。Entry 格式於 Phase 3
 }
 ```
 
-Collection / 資料夾的 Headers 與 Auth 在 Phase 2 有編輯介面（點選 Collection 或資料夾）。Collection 的 `auth` 不可為 `inherit`（存檔時改為 `none`）。Collection 變數的編輯介面在 Phase 3 與環境變數一起加入。
+Collection / 資料夾的 Headers 與 Auth 在 Phase 2 有編輯介面（點選 Collection 或資料夾）。Collection 的 `auth` 不可為 `inherit`（存檔時改為 `none`）。Collection 變數於 Phase 3 加入（Collection 設定的 Variables 分頁）；同名時環境變數優先。複製 Collection 時機密值一併複製。
 
 ### 排序規則（`order` 與 `collectionOrder`）
 
@@ -277,10 +295,10 @@ WebSocket（Phase 4 定案）：
 }
 ```
 
-## 📝 `environments/<env>.json` 與 `.hachi-secrets.json`（Phase 3）
+## ✅ `environments/<env>.json` 與 `.hachi-secrets.json`（Phase 3）
 
 ```jsonc
-// environments/dev.json（可提交）
+// environments/dev.json（可提交；檔名為名稱的 slug，改名時一併改檔名）
 {
   "version": 1,
   "id": "env-uuid",
@@ -294,8 +312,30 @@ WebSocket（Phase 4 定案）：
 // .hachi-secrets.json（已在 .gitignore，不提交）
 {
   "version": 1,
-  "environments": { "env-uuid": { "v2": "actual-secret-value" } }   // 以 environment id → variable id 對應
+  "environments": { "env-uuid": { "v2": "actual-secret-value" } },   // 環境 id → 變數 id → 值
+  "collections": { "collection-uuid": { "v9": "…" } }                // Collection id → 變數 id → 值
 }
 ```
 
-之後若接 macOS Keychain，會作為另一種機密儲存後端（以 Workspace id + 變數 id 為 key），`.hachi-secrets.json` 保留為預設 / 後備。
+- 儲存時先寫 `.hachi-secrets.json`，再寫環境檔 / `collection.json`，所以即使中途失敗，可提交的檔案也不會含有機密值。取消「機密」勾選時，值移回可提交的檔案並從機密檔刪除。
+- `.hachi-secrets.json` 損毀時回報 `INVALID_FILE`，不會覆寫（避免機密值遺失）。
+- 刪除環境 / Collection 時保留機密值（從垃圾桶還原後仍可使用）。
+- 兩個環境檔的 `id` 相同（例如在 Finder 複製）時，依檔名排序後讀到的那個改用新的 id。
+- 之後若接 macOS Keychain，會作為另一種機密儲存後端（以 Workspace id + 變數 id 為 key），`.hachi-secrets.json` 保留為預設 / 後備。
+
+## ✅ `<userData>/sessions/<sha1(workspacePath)>.json`（Phase 3）
+
+每個 Workspace 在這台電腦上次開啟的分頁與目前環境。存在 userData（不進 Workspace / git）；損毀或遺失時當作沒有分頁。
+
+```jsonc
+{
+  "version": 1,
+  "workspacePath": "/Users/me/Documents/Hachi/My API", // 方便人工查看；檔名是這個路徑的 SHA-1
+  "tabs": [{ "kind": "item", "id": "9a2e…" }, { "kind": "environments" }], // 最多 100 個
+  "activeTab": 0, // tabs 的索引；null = 沒有
+  "activeEnvironmentId": "env-uuid" // null = 無環境
+}
+```
+
+- 未儲存的新請求分頁不記錄；關閉前一定會詢問是否儲存，所以不保存未儲存的內容。
+- 已不存在的項目在還原時略過。刪除 Workspace 時一併刪除它的 session 檔。
