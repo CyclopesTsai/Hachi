@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；**5a（匯入匯出＋程式碼產生）完成，等使用者確認**後再做 5b。已改由本機（macOS）的 Claude Code 桌面版接手
+- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a 已確認；**目前進行：5b 腳本與斷言**（決策 81–85），完成後給使用者確認再做 5c。已改由本機（macOS）的 Claude Code 桌面版接手
 - **最後更新**：2026-10-03
 
 ## Phase 進度
@@ -17,7 +17,7 @@
 | 2     | HTTP 編輯器與回應檢視器                                                                             | ✅ 完成                                                   |
 | 3     | 環境變數、多分頁、歷史紀錄                                                                          | ✅ 完成                                                   |
 | 4     | WebSocket 完整功能                                                                                  | ✅ 完成                                                   |
-| 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | 🚧 5a 完成待確認；5b / 5c 未開始（決策 64）               |
+| 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | 🚧 5a ✅；5b 進行中；5c 未開始（決策 64）                 |
 | 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | —                                                         |
 
 ### Phase 0 完成內容
@@ -90,7 +90,7 @@
 
 **驗證方式**：`npm run verify`（292 個單元測試，WebSocket 以本機 ws / wss（自簽憑證）伺服器與 Proxy 實測：變數、繼承的 Headers / Auth、子協定、Text / Binary、Ping / Pong、Close Code、401 拒絕、連線逾時、取消、TLS 驗證、Proxy 帳密、兩種心跳）；`xvfb-run -a npm run test:e2e`（39 項冒煙檢查，新增：在 App 中連線本機 WebSocket 伺服器、變數與機密 Header、子協定、送出 JSON 並收到回音、伺服器推送 Binary、Ping / Pong、搜尋、匯出、範本存檔、關閉連線中分頁的提示、Close Code 1000、歷史紀錄）。macOS 尚未實機測試。
 
-### Phase 5a 完成內容（待使用者確認）
+### Phase 5a 完成內容
 
 - 匯入（File → Import… 或拖放檔案到視窗）：Postman Collection v2.0 / v2.1 → 新的 Collection（資料夾、請求、Params、Headers、五種 Body、GraphQL 轉 JSON、Bearer / Basic / API Key、Path 變數代入、SSL / 重新導向設定、腳本、Collection 變數）；Postman Environment / Globals → 新環境（`secret` 類型存 `.hachi-secrets.json`）。無法對應的設定列在匯入報告（同一訊息合併並附項目路徑）
 - 匯入 cURL（File → Import cURL… 或拖放內容是 curl 的文字檔）：POSIX shell 與 Windows cmd（瀏覽器 Copy as cURL）兩種引號規則、常用選項，開成未儲存的新分頁
@@ -100,7 +100,7 @@
 - 動態變數擴充（決策 78）：`$randomUUID`、`$randomString`、`$randomAlphaNumeric`、`$randomEmail`、`$randomBoolean`
 - 新 IPC：`http:resolve`、`transfer:importFile`、`transfer:importText`、`transfer:exportPostman`；選單指令 `import.file`、`import.curl`（皆無快捷鍵）
 - 新套件：`@codemirror/lang-javascript`、`@codemirror/lang-python`（MIT，程式碼與 5b 腳本的語法標示）
-- 自行決定的小細節（使用者可再調整）：程式碼產生上次選的語言記在 renderer 的 localStorage；匯入的檔案上限 50 MB、項目 20,000 個、資料夾 32 層、一次拖放最多 20 個檔案；cURL 的 `-L` 不轉成設定（沿用 Workspace 的跟隨重新導向）
+- 小細節（使用者已確認）：程式碼產生上次選的語言記在 renderer 的 localStorage；匯入的檔案上限 50 MB、項目 20,000 個、資料夾 32 層、一次拖放最多 20 個檔案；cURL 的 `-L` 不轉成設定（沿用 Workspace 的跟隨重新導向）
 - 修正：`npm install` 不會下載 Electron 執行檔（加上 `postinstall: install-electron`）
 
 **驗證方式**：`npm run verify`（342 個單元測試，新增：Postman 匯入 / 匯出與往返、cURL 解析（含瀏覽器 Copy as cURL 的 POSIX / cmd 格式）、四種程式碼產生，且產生的 cURL 與 fetch 程式碼**實際對本機伺服器執行**、Python 以 `ast.parse` 檢查語法、`http:resolve` 的機密值保留、實際寫檔的匯入 / 匯出）；`npm run test:e2e`（**首次在 macOS 實機**跑完全部冒煙檢查，新增 4 項：Import cURL 並發送、Code 對話框（機密值、Python、複製）、拖放 Postman Collection + Environment 並發送匯入的請求、匯出後用 File → Import… 讀回）。
@@ -191,10 +191,15 @@
 | 78  | 動態變數擴充        | 新增 `$randomUUID`、`$randomString`、`$randomEmail`、`$randomBoolean`、`$randomAlphaNumeric`（決策 41 的延續）                                                                                                                                                                                                                                                                                                                                                  |
 | 79  | Cookie Jar          | 延後（不在 Phase 5）                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 80  | 全域搜尋            | 依決策 51 只在側欄上方預留停用的搜尋框，不實作、不設快捷鍵                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 81  | 擷取變數預設        | 「從回應擷取變數」每列預設存到**暫存變數**，可逐列改成目前環境                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 82  | 暫存變數介面        | 放在「管理環境…」分頁最上方的區塊：列出名稱 / 值，可單筆刪除或全部清除                                                                                                                                                                                                                                                                                                                                                                                          |
+| 83  | CryptoJS            | 沙箱內附 `crypto-js`（MIT）：全域 `CryptoJS` 與 `require('crypto-js')`；只在腳本用到時載入（約多 20 ms）；另有 `btoa` / `atob`                                                                                                                                                                                                                                                                                                                                  |
+| 84  | 腳本信任            | 每個 Workspace 第一次要執行腳本時詢問「信任這個 Workspace 的腳本？」（信任並執行 / 這次不執行腳本 / 取消），記在本機 `app-config.json`（依 Workspace 路徑）；Workspace 設定可取消信任。斷言與擷取表格不是腳本，不需要信任                                                                                                                                                                                                                                       |
+| 85  | 腳本執行位置        | 腳本在 Electron `utilityProcess`（獨立程序）中的 QuickJS 執行，卡住時可直接結束該程序；沙箱只拿到變數 / 請求 / 回應的複本，執行完回傳變更，由 main 寫檔                                                                                                                                                                                                                                                                                                         |
 
 ## 下一步
 
-- Phase 5a 已完成，等使用者確認後做 5b（腳本與斷言）、5c（Runner）
+- Phase 5b（腳本與斷言）實作中；完成後給使用者確認，再做 5c（Runner）
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 - Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽
