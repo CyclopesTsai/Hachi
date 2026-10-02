@@ -1,7 +1,7 @@
 import { Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { formatDuration } from '@shared/http'
-import type { HttpHistoryEntry } from '@shared/schemas/history'
+import type { HistoryEntry } from '@shared/schemas/history'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,33 +19,62 @@ import { useHistoryStore } from '@renderer/stores/history-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { groupByDay } from './history-model'
 
-function statusClass(entry: HttpHistoryEntry): string {
-  if (entry.result.kind === 'error') return 'text-red-600 dark:text-red-400'
-  const s = entry.result.status
-  if (s >= 500) return 'text-red-600 dark:text-red-400'
-  if (s >= 400) return 'text-amber-700 dark:text-amber-400'
-  if (s >= 300) return 'text-sky-700 dark:text-sky-400'
-  return 'text-emerald-700 dark:text-emerald-400'
+const tone = {
+  ok: 'text-emerald-700 dark:text-emerald-400',
+  redirect: 'text-sky-700 dark:text-sky-400',
+  warn: 'text-amber-700 dark:text-amber-400',
+  error: 'text-red-600 dark:text-red-400'
 }
 
-function HistoryRow({ entry }: { entry: HttpHistoryEntry }) {
+/** Short status shown on the right of a row, with its colour. */
+function statusOf(entry: HistoryEntry): { label: string; className: string } {
+  if (entry.type === 'websocket') {
+    const r = entry.result
+    if (r.error) return { label: '錯誤', className: tone.error }
+    if (r.closeCode === null) return { label: '—', className: tone.warn }
+    return { label: String(r.closeCode), className: r.closeCode === 1000 ? tone.ok : tone.warn }
+  }
+  if (entry.result.kind === 'error') return { label: '錯誤', className: tone.error }
+  const s = entry.result.status
+  const className =
+    s >= 500 ? tone.error : s >= 400 ? tone.warn : s >= 300 ? tone.redirect : tone.ok
+  return { label: String(s), className }
+}
+
+function detailOf(entry: HistoryEntry): string {
+  const lines: (string | null)[] = [entry.request.name]
+  if (entry.type === 'websocket') {
+    const r = entry.result
+    lines.unshift(`WebSocket ${entry.request.url}`)
+    lines.push(
+      r.error
+        ? `錯誤：${r.error}`
+        : `Close Code ${r.closeCode ?? '—'}${r.closeReason ? `：${r.closeReason}` : ''}`,
+      `送出 ${r.sent} 則 · 收到 ${r.received} 則`
+    )
+  } else {
+    lines.unshift(`${entry.request.method} ${entry.request.url}`)
+    lines.push(
+      entry.result.kind === 'response'
+        ? `${entry.result.status} ${entry.result.statusText} · ${formatDuration(entry.result.timeMs)}`
+        : entry.result.message
+    )
+  }
+  lines.push(
+    entry.environmentName ? `環境：${entry.environmentName}` : null,
+    new Date(entry.sentAt).toLocaleString()
+  )
+  return lines.filter(Boolean).join('\n')
+}
+
+function HistoryRow({ entry }: { entry: HistoryEntry }) {
   const time = new Date(entry.sentAt).toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23'
   })
-  const status = entry.result.kind === 'response' ? String(entry.result.status) : '錯誤'
-  const detail = [
-    `${entry.request.method} ${entry.request.url}`,
-    entry.request.name,
-    entry.environmentName ? `環境：${entry.environmentName}` : null,
-    entry.result.kind === 'response'
-      ? `${entry.result.status} ${entry.result.statusText} · ${formatDuration(entry.result.timeMs)}`
-      : entry.result.message,
-    new Date(entry.sentAt).toLocaleString()
-  ]
-    .filter(Boolean)
-    .join('\n')
+  const status = statusOf(entry)
+  const detail = detailOf(entry)
   return (
     <li>
       <button
@@ -56,12 +85,18 @@ function HistoryRow({ entry }: { entry: HttpHistoryEntry }) {
         className="group flex h-7 w-full items-center gap-1.5 rounded-sm pr-1 text-left text-xs hover:bg-accent/70"
         onClick={() => void useTabsStore.getState().openHistoryEntry(entry)}
       >
-        <RequestBadge node={{ requestType: 'http', method: entry.request.method }} />
+        <RequestBadge
+          node={
+            entry.type === 'websocket'
+              ? { requestType: 'websocket' }
+              : { requestType: 'http', method: entry.request.method }
+          }
+        />
         <span className="min-w-0 flex-1 truncate font-mono">
           {entry.request.url || '（空白 URL）'}
         </span>
-        <span className={cn('shrink-0 font-mono text-[10px] font-semibold', statusClass(entry))}>
-          {status}
+        <span className={cn('shrink-0 font-mono text-[10px] font-semibold', status.className)}>
+          {status.label}
         </span>
         <span className="shrink-0 text-right text-[10px] whitespace-nowrap text-muted-foreground tabular-nums group-hover:hidden">
           {time}

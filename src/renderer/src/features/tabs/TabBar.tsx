@@ -8,11 +8,39 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
 import { RequestBadge } from '@renderer/features/collections/RequestBadge'
+import { isLive, useWsStore } from '@renderer/stores/ws-store'
 import { cn } from '@renderer/lib/utils'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isDraftTab, isTabDirty, tabItemId, tabTitle, type Tab } from './tab-model'
+
+/** "WS" badge with a green dot while connected. */
+function WsTabIcon({ uid }: { uid: string }) {
+  const live = useWsStore((s) => isLive(s.sessions[uid]))
+  const open = useWsStore((s) => s.sessions[uid]?.state?.status === 'open')
+  return (
+    <span className="relative flex shrink-0 items-center">
+      <RequestBadge node={{ requestType: 'websocket' }} className="w-auto" />
+      {live && (
+        <span
+          className={cn(
+            'absolute -top-1 -right-1.5 size-1.5 rounded-full',
+            open ? 'bg-emerald-500' : 'bg-amber-500'
+          )}
+          aria-label="連線中"
+          data-testid="tab-live"
+        />
+      )}
+    </span>
+  )
+}
 
 function TabIcon({ tab }: { tab: Tab }) {
   const node = useTreeStore((s) => {
@@ -25,6 +53,7 @@ function TabIcon({ tab }: { tab: Tab }) {
       <RequestBadge node={{ requestType: 'http', method: tab.draft?.method }} className="w-auto" />
     )
   }
+  if (tab.kind === 'websocket') return <WsTabIcon uid={tab.uid} />
   if (tab.kind === 'container') {
     return tab.containerKind === 'collection' ? (
       <Layers className="size-3.5 shrink-0 text-primary" />
@@ -139,16 +168,27 @@ export function TabBar() {
           <TabButton key={tab.uid} tab={tab} active={tab.key === activeKey} />
         ))}
       </div>
-      <button
-        type="button"
-        aria-label="新增請求"
-        title="新增請求（尚未儲存，可直接發送）"
-        data-testid="new-tab"
-        className="flex w-9 shrink-0 items-center justify-center text-muted-foreground hover:bg-background/60 hover:text-foreground"
-        onClick={() => useTabsStore.getState().newRequest()}
-      >
-        <Plus className="size-4" />
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="新增"
+            title="新增請求（尚未儲存，可直接使用）"
+            data-testid="new-tab"
+            className="flex w-9 shrink-0 items-center justify-center text-muted-foreground hover:bg-background/60 hover:text-foreground"
+          >
+            <Plus className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onSelect={() => useTabsStore.getState().newRequest('http')}>
+            HTTP 請求
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => useTabsStore.getState().newRequest('websocket')}>
+            WebSocket
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

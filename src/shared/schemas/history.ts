@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { HTTP_ERROR_CODES } from '../http'
 import { httpRequestSchema } from './http-request'
+import { wsRequestSchema } from './ws-request'
 import type { VersionedFormat } from './versioned'
 
 export const HISTORY_VERSION = 1
@@ -48,9 +49,38 @@ export const httpHistoryEntrySchema = z.looseObject({
 })
 export type HttpHistoryEntry = z.infer<typeof httpHistoryEntrySchema>
 
+/** One WebSocket connection, from connecting until it closed. Messages are not stored. */
+export const wsHistoryEntrySchema = z.looseObject({
+  id: z.string().min(1),
+  type: z.literal('websocket'),
+  /** When connecting started. */
+  sentAt: z.string(),
+  requestId: z.string().nullable().default(null),
+  environmentName: z.string().nullable().default(null),
+  /** The connection settings as edited, before variable substitution. */
+  request: wsRequestSchema,
+  result: z.object({
+    openedAt: z.string().nullable(),
+    closedAt: z.string(),
+    /** null when the connection never got a close frame / socket (e.g. invalid URL). */
+    closeCode: z.number().int().nullable(),
+    closeReason: z.string().default(''),
+    error: z.string().nullable().default(null),
+    sent: z.number().int().min(0),
+    received: z.number().int().min(0)
+  })
+})
+export type WsHistoryEntry = z.infer<typeof wsHistoryEntrySchema>
+
+export const historyEntrySchema = z.discriminatedUnion('type', [
+  httpHistoryEntrySchema,
+  wsHistoryEntrySchema
+])
+export type HistoryEntry = z.infer<typeof historyEntrySchema>
+
 /**
  * Entries are only checked for the fields every type shares, so entries written
- * by a newer build (e.g. WebSocket in Phase 4) are kept when the file is rewritten.
+ * by a newer build (unknown types) are kept when the file is rewritten.
  */
 const storedEntrySchema = z.looseObject({
   id: z.string().min(1),

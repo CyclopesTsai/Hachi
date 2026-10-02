@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { httpRequestSchema } from '@shared/schemas/http-request'
+import { wsRequestSchema } from '@shared/schemas/ws-request'
 import type { ChildNode, CollectionNode, WorkspaceTree } from '@shared/tree'
 import {
   collectionIdOf,
@@ -95,7 +96,7 @@ describe('createItemTab', () => {
       containerKind: 'folder'
     })
     expect(createItemTab(node('C1'), false)).toMatchObject({ containerKind: 'collection' })
-    expect(createItemTab(node('ws'), false)).toMatchObject({ kind: 'static', status: 'ready' })
+    expect(createItemTab(node('ws'), false)).toMatchObject({ kind: 'websocket', status: 'idle' })
     expect(createItemTab({ ...node('r2'), error: 'bad' } as ChildNode, false).kind).toBe('static')
   })
 })
@@ -114,6 +115,24 @@ describe('dirty state', () => {
     expect(isTabDirty(draft)).toBe(false)
     expect(isTabDirty({ ...draft, saved: null })).toBe(true)
     expect(isTabDirty({ ...draft, draft: { ...draft.draft!, url: 'x' } })).toBe(true)
+  })
+})
+
+describe('WebSocket tabs', () => {
+  it('creates unsaved WebSocket tabs that behave like unsaved requests', () => {
+    const ws = createDraftTab(
+      wsRequestSchema.parse({ version: 1, id: 'w', type: 'websocket', name: 'Live' }),
+      { parentId: 'F1' }
+    )
+    expect(ws).toMatchObject({ kind: 'websocket', composer: { format: 'text', content: '' } })
+    expect(isDraftTab(ws)).toBe(true)
+    expect(isTabDirty(ws)).toBe(false)
+    expect(tabTitle(ws, tree)).toBe('Live')
+    expect(contextParentId(ws, tree)).toBe('F1')
+    expect(toSession([ws], ws.key, null).tabs).toEqual([])
+    // Typing a message never makes the tab dirty; editing the request does.
+    expect(isTabDirty({ ...ws, composer: { format: 'json', content: '{}' } })).toBe(false)
+    expect(isTabDirty({ ...ws, draft: { ...ws.draft!, url: 'wss://x' } })).toBe(true)
   })
 })
 

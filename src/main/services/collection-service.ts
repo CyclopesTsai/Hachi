@@ -20,8 +20,8 @@ import {
   type Variable
 } from '@shared/schemas/collection'
 import { mergeSecrets, splitSecrets } from '@shared/schemas/environment'
-import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
-import { parseVersioned, type VersionedFormat } from '@shared/schemas/versioned'
+import { anyRequestFormat, type AnyRequest } from '@shared/schemas/request'
+import { parseVersioned } from '@shared/schemas/versioned'
 import { WORKSPACE_FILE, WORKSPACE_LAYOUT, workspaceFormat } from '@shared/schemas/workspace'
 import type { ContainerSettingsData, InheritedSettings } from '@shared/http'
 import {
@@ -42,12 +42,6 @@ import { uniqueFileName } from './fs/unique-name'
 import { resolveInherited, type ContainerLevel } from './http/build-request'
 import { copySecrets, getSecrets, setSecrets } from './secrets'
 import type { VariableLayer } from '@shared/variables'
-
-const httpRequestFormat: VersionedFormat<typeof httpRequestSchema> = {
-  name: 'request file',
-  currentVersion: ITEM_VERSION,
-  schema: httpRequestSchema
-}
 
 /** Moves a file or folder to the system trash. Injected so tests don't touch the real trash. */
 export type TrashFn = (absPath: string) => Promise<void>
@@ -226,11 +220,11 @@ export class CollectionService {
   }
 
   /** Full content of an HTTP request plus what it inherits. */
-  getRequest(id: string): Promise<{ request: HttpRequest; inherited: InheritedSettings }> {
+  getRequest(id: string): Promise<{ request: AnyRequest; inherited: InheritedSettings }> {
     return this.run(async () => {
       const entry = this.requireValid(id)
       if (entry.kind !== 'request') throw new HachiError('INVALID_OPERATION', 'Not a request')
-      const request = await this.readHttpRequest(entry.absPath)
+      const request = await this.readRequest(entry.absPath)
       return { request, inherited: resolveInherited(await this.readChain(entry.parentId)) }
     })
   }
@@ -241,12 +235,15 @@ export class CollectionService {
    */
   saveRequest(
     id: string,
-    request: HttpRequest
-  ): Promise<{ request: HttpRequest; tree: WorkspaceTree }> {
+    request: AnyRequest
+  ): Promise<{ request: AnyRequest; tree: WorkspaceTree }> {
     return this.run(async () => {
       const entry = this.requireValid(id)
       if (entry.kind !== 'request') throw new HachiError('INVALID_OPERATION', 'Not a request')
-      await this.readHttpRequest(entry.absPath) // must still be a valid HTTP request
+      const current = await this.readRequest(entry.absPath) // must still be valid
+      if (current.type !== request.type) {
+        throw new HachiError('INVALID_OPERATION', 'The request type cannot be changed')
+      }
       await updateJsonAtomic(
         entry.absPath,
         () => readRawObject(entry.absPath),
@@ -255,12 +252,12 @@ export class CollectionService {
           ...request,
           version: ITEM_VERSION,
           id: raw.id,
-          type: 'http',
+          type: current.type,
           name: raw.name
         })
       )
       const tree = await this.rescanItem(id)
-      return { request: await this.readHttpRequest(entry.absPath), tree }
+      return { request: await this.readRequest(entry.absPath), tree }
     })
   }
 
@@ -307,8 +304,8 @@ export class CollectionService {
   createRequest(
     parentId: string,
     nameInput: string,
-    request: HttpRequest
-  ): Promise<{ id: string; request: HttpRequest; tree: WorkspaceTree }> {
+    request: AnyRequest
+  ): Promise<{ id: string; request: AnyRequest; tree: WorkspaceTree }> {
     return this.run(async () => {
       const parent = this.requireContainer(parentId)
       const name = nameInput.trim()
@@ -321,12 +318,12 @@ export class CollectionService {
         ...request,
         version: ITEM_VERSION,
         id,
-        type: 'http',
+        type: request.type,
         name
       })
       await this.writeOrder(parentId, [...this.childIds(parentId), id])
       const tree = await this.rescan()
-      return { id, request: await this.readHttpRequest(file), tree }
+      return { id, request: await this.readRequest(file), tree }
     })
   }
 
@@ -661,16 +658,8 @@ export class CollectionService {
     }
   }
 
-  private async readHttpRequest(file: string): Promise<HttpRequest> {
-    const raw = await readJsonFile(file)
-    if (
-      typeof raw === 'object' &&
-      raw !== null &&
-      (raw as { type?: unknown }).type === 'websocket'
-    ) {
-      throw new HachiError('INVALID_OPERATION', 'WebSocket requests are edited in Phase 4')
-    }
-    return parseVersioned(httpRequestFormat, raw)
+  private async readRequest(file: string): Promise<AnyRequest> {
+    return parseVersioned(anyRequestFormat, await readJsonFile(file))
   }
 
   /** Container levels from the collection down to `parentId` (inclusive). */

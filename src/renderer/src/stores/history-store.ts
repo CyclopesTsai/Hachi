@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import type { HistoryUsage } from '@shared/ipc/api'
-import type { HttpHistoryEntry } from '@shared/schemas/history'
+import type { HistoryEntry } from '@shared/schemas/history'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 
 export type SidebarMode = 'collections' | 'history'
 
 interface HistoryState {
-  entries: HttpHistoryEntry[]
+  entries: HistoryEntry[]
   usage: HistoryUsage | null
   loaded: boolean
   error: string | null

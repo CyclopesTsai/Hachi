@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 3 已確認；**Phase 4（WebSocket）實作中**，設計已確認（決策 52–63）
+- **目前階段**：**Phase 4 實作完成，等待使用者確認**（設計見決策 52–63）
 - **最後更新**：2026-10-02
 
 ## Phase 進度
@@ -16,7 +16,7 @@
 | 1     | Workspace 切換 + Collection / 資料夾 / 請求樹狀（新增、重新命名、複製、刪除、拖曳排序），含檔案監聽 | ✅ 完成（檔案監聽於 Phase 2 改為手動重新讀取，見決策 20） |
 | 2     | HTTP 編輯器與回應檢視器                                                                             | ✅ 完成                                                   |
 | 3     | 環境變數、多分頁、歷史紀錄                                                                          | ✅ 完成                                                   |
-| 4     | WebSocket 完整功能                                                                                  | 🚧 實作中                                                 |
+| 4     | WebSocket 完整功能                                                                                  | ✅ 完成（待確認）                                         |
 | 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | —                                                         |
 | 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | —                                                         |
 
@@ -74,6 +74,21 @@
 - 快捷鍵整理（決策 48–51）：刪除使用者指定的快捷鍵；修正 Windows / Linux 上 Ctrl+W 與 Window → Close 撞鍵；Reload / Developer Tools 只在開發模式出現（避免 ⌘R 丟失未儲存的分頁）；E2E 檢查選單只剩允許的快捷鍵
 
 **驗證方式**：`npm run verify`（269 個單元測試：變數替換、環境 / 機密值、跨 Workspace 歷史上限、分頁記憶、Collection 變數、分頁模型等）；`xvfb-run -a npm run test:e2e`（35 項冒煙檢查，新增：選單只剩允許的快捷鍵、預覽分頁、Close Tab、環境與機密檔、Collection 變數、`+` 新請求的變數替換與標示、Save As、歷史紀錄與圓餅圖、關閉視窗 / 結束 App 的未儲存提示、重新啟動後還原分頁與環境）。macOS 尚未實機測試。
+
+### Phase 4 完成內容
+
+- WebSocket 連線在 main 執行（`ws` + `https-proxy-agent`，皆 MIT）：ws / wss、Params、Headers 與 Auth（沿用上層，同 HTTP）、子協定、連線逾時、SSL 驗證、App Proxy（HTTP CONNECT，可個別關閉）
+- `{{變數}}`：網址 / Params / Headers / Auth / 子協定在連線時替換，訊息內容在送出時替換；找不到的變數會提示
+- 狀態：未連線 / 連線中 / 已連線 / 中斷中 / 已關閉 / 錯誤，顯示 Close Code 與原因；「中斷」送出設定的 Close Code（預設 1000）與原因；連線中可取消；不自動重連
+- 訊息：Text / JSON（格式檢查）/ Binary（Hex 或 Base64）；`{{變數}}` 標示；訊息範本存在請求檔，一鍵送出 / 載入 / 改名 / 刪除
+- 訊息串：送出 / 收到 / 系統事件、毫秒時間戳、大小、JSON 美化、Binary 以 Hex / Base64 / UTF-8 顯示、搜尋、篩選、清除、匯出（JSON / 純文字）；超過 1 MB 的訊息摺疊；每個分頁最多 100 則（App 設定 10–5000）
+- 心跳：WebSocket Ping（顯示 Pong 延遲）或自訂文字訊息，可定時；也可手動 Ping；伺服器的 Ping 自動回應
+- 多個 WebSocket 分頁各自連線，切換分頁時連線保持；分頁上的綠點表示連線中
+- 關閉連線中的分頁會先詢問；切換 Workspace / 關閉視窗時與未儲存的分頁一起詢問；切換 Workspace、關閉視窗、畫面重新載入時 main 關閉所有連線
+- 歷史紀錄：每次連線記一筆（設定、時間、Close Code、訊息數，不含內容），點選開成新的未儲存 WebSocket 分頁
+- 分頁列「+」改為下拉選單（HTTP 請求 / WebSocket）
+
+**驗證方式**：`npm run verify`（292 個單元測試，WebSocket 以本機 ws / wss（自簽憑證）伺服器與 Proxy 實測：變數、繼承的 Headers / Auth、子協定、Text / Binary、Ping / Pong、Close Code、401 拒絕、連線逾時、取消、TLS 驗證、Proxy 帳密、兩種心跳）；`xvfb-run -a npm run test:e2e`（39 項冒煙檢查，新增：在 App 中連線本機 WebSocket 伺服器、變數與機密 Header、子協定、送出 JSON 並收到回音、伺服器推送 Binary、Ping / Pong、搜尋、匯出、範本存檔、關閉連線中分頁的提示、Close Code 1000、歷史紀錄）。macOS 尚未實機測試。
 
 ## 決策紀錄（已與使用者確認）
 
@@ -145,7 +160,7 @@
 
 ## 下一步
 
-- 完成 Phase 4 實作與驗證，向使用者報告後等待確認，再進入 Phase 5
+- 等使用者確認 Phase 4，再進入 Phase 5；開始前先說明規劃並詢問不確定的設計（全域搜尋只預留空間，見決策 51）
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 - Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽
 

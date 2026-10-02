@@ -73,6 +73,12 @@ const api: HachiApi = {
     clear: () => invoke(INVOKE.historyClear),
     getUsage: () => invoke(INVOKE.historyGetUsage)
   },
+  ws: {
+    connect: (input) => invoke(INVOKE.wsConnect, input),
+    send: (input) => invoke(INVOKE.wsSend, input),
+    ping: (input) => invoke(INVOKE.wsPing, input),
+    disconnect: (input) => invoke(INVOKE.wsDisconnect, input)
+  },
   session: {
     get: () => invoke(INVOKE.sessionGet),
     save: (input) => invoke(INVOKE.sessionSave, input)
@@ -86,7 +92,8 @@ const api: HachiApi = {
   },
   dialog: {
     selectDirectory: (input) => invoke(INVOKE.dialogSelectDirectory, input),
-    selectFile: (input) => invoke(INVOKE.dialogSelectFile, input)
+    selectFile: (input) => invoke(INVOKE.dialogSelectFile, input),
+    saveTextFile: (input) => invoke(INVOKE.dialogSaveTextFile, input)
   },
   on<C extends EventChannel>(channel: C, listener: (payload: EventPayloads[C]) => void) {
     if (!EVENT_CHANNELS.includes(channel)) {

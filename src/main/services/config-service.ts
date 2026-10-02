@@ -8,6 +8,7 @@ import {
   defaultAppConfig,
   type AppConfig,
   type HistorySettings,
+  type WebsocketSettings,
   type ProxySettings,
   type Theme,
   type UiSettings,
@@ -105,6 +106,12 @@ export class ConfigService {
   setHistory(history: HistorySettings): Promise<AppConfig> {
     return this.update((c) => {
       c.history = history
+    })
+  }
+
+  setWebsocket(websocket: WebsocketSettings): Promise<AppConfig> {
+    return this.update((c) => {
+      c.websocket = websocket
     })
   }
 

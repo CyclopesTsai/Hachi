@@ -157,9 +157,12 @@ export function newRequestFile(
     subprotocols: [],
     auth: { type: 'inherit' },
     settings: {
-      autoReconnect: false,
-      reconnectIntervalMs: 3000,
-      heartbeat: { enabled: false, intervalMs: 30000, payload: '' }
+      connectTimeoutMs: null,
+      validateSSL: null,
+      useProxy: true,
+      heartbeat: { enabled: false, mode: 'ping', intervalMs: 30000, payload: '' },
+      closeCode: 1000,
+      closeReason: ''
     },
     messageTemplates: []
   }

@@ -4,7 +4,7 @@ import { app, ipcMain, nativeTheme, type BrowserWindow } from 'electron'
 import { APP_ID, APP_NAME } from '@shared/app-info'
 import { HachiError } from '@shared/errors'
 import type { HttpResult } from '@shared/http'
-import type { HttpSendInput, WorkspaceInfo } from '@shared/ipc/api'
+import type { HttpSendInput, WorkspaceInfo, WsConnectInput } from '@shared/ipc/api'
 import { INVOKE, type InvokeChannel } from '@shared/ipc/channels'
 import { selectDirectory, selectFile, selectSavePath } from '../dialogs'
 import type { CollectionService } from '../services/collection-service'
@@ -12,6 +12,7 @@ import type { ConfigService } from '../services/config-service'
 import type { EnvironmentService } from '../services/environment-service'
 import type { HistoryService } from '../services/history-service'
 import type { SessionService } from '../services/session-service'
+import type { WsService } from '../services/ws/ws-service'
 import type { HttpService } from '../services/http/http-service'
 import type { WorkspaceService } from '../services/workspace-service'
 import { createHandler, forbidden, type Handler } from './handler'
@@ -26,6 +27,9 @@ export interface IpcContext {
   sessions: SessionService
   /** Sends a request and records it in the history. */
   sendHttp(input: HttpSendInput): Promise<HttpResult>
+  ws: WsService
+  /** Opens a WebSocket connection; it is recorded in the history when it ends. */
+  connectWs(input: WsConnectInput): Promise<{ unresolvedVariables: string[] }>
   setCloseGuard(dirty: boolean): void
   confirmClose(): void
   getWindow(): BrowserWindow | null
@@ -67,6 +71,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
         await ctx.config.setHistory(input.history)
         await ctx.history.applyLimit(ctx.workspaces.getCurrent()?.path ?? null)
       }
+      if (input.websocket) await ctx.config.setWebsocket(input.websocket)
       return ctx.config.get()
     },
     [INVOKE.workspaceGetCurrent]: () => ctx.workspaces.getCurrent(),
@@ -86,6 +91,15 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.workspaceSaveSettings]: (input) => ctx.workspaces.saveSettings(input),
     [INVOKE.dialogSelectDirectory]: (input) => selectDirectory(ctx.getWindow(), input),
     [INVOKE.dialogSelectFile]: (input) => selectFile(ctx.getWindow(), input),
+    [INVOKE.dialogSaveTextFile]: async (input) => {
+      const target = await selectSavePath(ctx.getWindow(), {
+        title: input.title ?? 'Save',
+        defaultPath: path.join(app.getPath('downloads'), path.basename(input.defaultName))
+      })
+      if (!target) return null
+      await writeFile(target, input.content, 'utf8')
+      return target
+    },
     [INVOKE.treeGet]: () => ctx.collections.getTree(),
     [INVOKE.treeReload]: async (input) => {
       if (input.scope === 'item') return ctx.collections.refreshItem(input.id)
@@ -137,7 +151,12 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.historyClear]: () => ctx.history.clear(workspacePath()),
     [INVOKE.historyGetUsage]: () => ctx.history.usage(ctx.workspaces.getCurrent()?.path ?? null),
     [INVOKE.sessionGet]: () => ctx.sessions.get(workspacePath()),
-    [INVOKE.sessionSave]: (input) => ctx.sessions.save(workspacePath(), input)
+    [INVOKE.sessionSave]: (input) => ctx.sessions.save(workspacePath(), input),
+    [INVOKE.wsConnect]: (input) => ctx.connectWs(input),
+    [INVOKE.wsSend]: (input) => ctx.ws.send(input),
+    [INVOKE.wsPing]: (input) => ctx.ws.ping(input.connectionId),
+    [INVOKE.wsDisconnect]: (input) =>
+      ctx.ws.disconnect(input.connectionId, input.code, input.reason)
   }
 
   for (const channel of Object.keys(handlers) as InvokeChannel[]) {

@@ -13,6 +13,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
+import { WebSocketServer } from 'ws'
 
 const require = createRequire(import.meta.url)
 const electronPath = require('electron')
@@ -66,6 +67,34 @@ const testServer = await new Promise((resolve) => {
       url: `http://127.0.0.1:${server.address().port}`,
       close: () => {
         server.closeAllConnections()
+        server.close()
+      }
+    })
+  )
+})
+
+// Local WebSocket echo server for the Phase 4 checks.
+const wsSeen = []
+const wsServer = await new Promise((resolve) => {
+  const server = new WebSocketServer({
+    port: 0,
+    host: '127.0.0.1',
+    handleProtocols: (protocols) => (protocols.has('chat.v2') ? 'chat.v2' : false)
+  })
+  server.on('connection', (socket, req) => {
+    const seen = { url: req.url, headers: req.headers, protocol: socket.protocol, closeCode: null }
+    wsSeen.push(seen)
+    socket.on('message', (data, isBinary) => socket.send(data, { binary: isBinary }))
+    socket.on('close', (code) => {
+      seen.closeCode = code
+    })
+  })
+  server.on('listening', () =>
+    resolve({
+      url: `ws://127.0.0.1:${server.address().port}`,
+      broadcast: (data) => server.clients.forEach((c) => c.send(data)),
+      close: () => {
+        server.clients.forEach((c) => c.terminate())
         server.close()
       }
     })
@@ -190,7 +219,8 @@ try {
       'request',
       'session',
       'tree',
-      'workspace'
+      'workspace',
+      'ws'
     ],
     workspaceKeys: [
       'create',
@@ -509,7 +539,7 @@ try {
   assert.equal(await t.row('Get Users').getByLabel('有未儲存的修改').count(), 1)
   const tabByTitle = (title) => page.locator(`[data-testid="tab"][data-title="${title}"]`)
   await t.row('Live Feed').click()
-  assert.ok((await page.locator('main').innerText()).includes('Phase 4'))
+  await page.getByTestId('ws-editor').waitFor()
   assert.equal(await page.getByTestId('unsaved-dialog').count(), 0, 'switching tabs never asks')
   assert.equal(await tabByTitle('Get Users').getAttribute('data-dirty'), 'true')
   await tabByTitle('Get Users').getByTestId('tab-close').click()
@@ -711,6 +741,7 @@ try {
 
   // ---- Phase 3: unsaved request tab + {{variables}} ----
   await page.getByTestId('new-tab').click()
+  await page.getByRole('menuitem', { name: 'HTTP 請求' }).click()
   await page.getByTestId('url-input').fill('{{baseUrl}}/echo?id={{$randomInt}}&m={{missing}}')
   const urlBox = page.getByTestId('url-input').locator('..')
   assert.equal(await urlBox.locator('[data-variable="defined"]').count(), 1)
@@ -780,6 +811,119 @@ try {
   await page.getByTestId('sidebar-collections').click()
   step(
     `history: ${total} entries with unresolved variables (no secrets, no bodies); usage ring; opening an entry adds a new unsaved tab`
+  )
+
+  // ---- Phase 4: WebSocket ----
+  await t.row('Live Feed').click()
+  const wsEditor = page.getByTestId('ws-editor')
+  await wsEditor.waitFor()
+  await page.getByTestId('ws-url-input').fill(`${wsServer.url}/chat?room={{team}}`)
+  await wsEditor.getByRole('tab', { name: /Headers/ }).click()
+  await wsEditor.getByTestId('headers-table').getByLabel('Key').last().fill('X-Token')
+  await wsEditor.getByTestId('headers-table').getByLabel('Value').first().fill('{{token}}')
+  await wsEditor.getByRole('tab', { name: 'Settings' }).click()
+  await wsEditor.getByLabel('子協定').fill('chat.v2')
+  await wsEditor.getByRole('button', { name: '連線' }).click()
+  const wsStatus = page.getByTestId('ws-status')
+  await waitUntil(async () => (await wsStatus.getAttribute('data-status')) === 'open', 'ws open')
+  const seenWs = wsSeen.at(-1)
+  assert.equal(seenWs.url, '/chat?room=from-collection')
+  assert.equal(seenWs.headers['x-token'], 's3cret-value')
+  assert.equal(seenWs.protocol, 'chat.v2')
+  assert.equal(await tabByTitle('Live Feed').getByTestId('tab-live').count(), 1)
+  step('WebSocket connects in main with {{variables}}, secret header and subprotocol')
+
+  const composer = page.getByTestId('ws-composer')
+  await composer.getByLabel('訊息格式').selectOption('json')
+  await page.locator('[data-testid="ws-message-editor"] .cm-content').click()
+  await page.keyboard.insertText('{"hello":"{{team}}"}')
+  await composer.getByRole('button', { name: '送出', exact: true }).click()
+  const logRows = (kind) => page.locator(`[data-testid="ws-log-row"][data-kind="${kind}"]`)
+  await waitUntil(async () => (await logRows('received').count()) === 1, 'echo received')
+  assert.ok((await logRows('sent').first().innerText()).includes('{"hello":"from-collection"}'))
+  wsServer.broadcast(Buffer.from([1, 2, 255]))
+  await waitUntil(async () => (await logRows('received').count()) === 2, 'binary push')
+  assert.ok((await logRows('received').last().innerText()).includes('01 02 ff'))
+  await composer.getByRole('button', { name: 'Ping' }).click()
+  await page.locator('[data-testid="ws-log-row"][data-event="pong"]').waitFor()
+  await page.getByTestId('ws-search').fill('hello')
+  await waitUntil(
+    async () => (await page.getByTestId('ws-log-count').innerText()).startsWith('2 /'),
+    'search filters the log'
+  )
+  await page.getByTestId('ws-search').fill('')
+  await logRows('received').first().getByRole('button').click()
+  assert.ok(
+    (await page.getByTestId('ws-log-detail').innerText()).includes('"hello": "from-collection"')
+  )
+  await page.screenshot({ path: path.join(shots, '9-websocket.png') })
+  step(
+    'WebSocket messages: JSON sent with variables, echo + binary push (hex) received, ping / pong, search'
+  )
+
+  const exportPath = path.join(tmp, 'ws-export.json')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
+  }, exportPath)
+  await page.getByTestId('ws-message-log').getByRole('button', { name: '匯出' }).click()
+  await page.getByRole('menuitem', { name: /JSON/ }).click()
+  await waitUntil(() => exists(exportPath), 'export written')
+  const exported = await readJson(exportPath)
+  assert.ok(
+    exported.some((e) => e.type === 'received' && e.format === 'binary' && e.data === 'AQL/')
+  )
+  assert.ok(exported.some((e) => e.type === 'event' && e.event === 'open'))
+
+  await composer.getByRole('button', { name: '存成範本' }).click()
+  await page.getByTestId('ws-template').waitFor()
+  await wsEditor.getByRole('button', { name: '儲存', exact: true }).click()
+  const liveFile = path.join(usersDir, 'live-feed.json')
+  await waitUntil(
+    async () => (await readJson(liveFile)).messageTemplates?.length === 1,
+    'template saved'
+  )
+  const liveSaved = await readJson(liveFile)
+  assert.equal(liveSaved.url, `${wsServer.url}/chat?room={{team}}`)
+  assert.deepEqual(liveSaved.subprotocols, ['chat.v2'])
+  assert.deepEqual(liveSaved.messageTemplates[0], {
+    ...liveSaved.messageTemplates[0],
+    format: 'json',
+    content: '{"hello":"{{team}}"}'
+  })
+  step('export the log as JSON; message templates are saved in the request file')
+
+  await tabByTitle('Live Feed').getByTestId('tab-close').click()
+  const disconnectDialog = page.getByTestId('unsaved-dialog')
+  await disconnectDialog.getByText('中斷連線並關閉？').waitFor()
+  await disconnectDialog.getByRole('button', { name: '取消' }).click()
+  assert.equal(await wsStatus.getAttribute('data-status'), 'open')
+  await wsEditor.getByRole('button', { name: '中斷' }).click()
+  await waitUntil(
+    async () => (await wsStatus.getAttribute('data-status')) === 'closed',
+    'ws closed'
+  )
+  await waitUntil(async () => seenWs.closeCode === 1000, 'server saw close 1000')
+  await waitUntil(
+    async () =>
+      (await readJson(path.join(wsDir, 'history.json'))).entries.some(
+        (e) => e.type === 'websocket' && e.result.closeCode === 1000
+      ),
+    'websocket history entry'
+  )
+  const wsHistory = (await readJson(path.join(wsDir, 'history.json'))).entries.find(
+    (e) => e.type === 'websocket'
+  )
+  assert.equal(wsHistory.request.headers[0].value, '{{token}}', 'history keeps variables')
+  assert.equal(wsHistory.result.sent, 1)
+  assert.equal(wsHistory.result.received, 2)
+  await page.getByTestId('new-tab').click()
+  await page.getByRole('menuitem', { name: 'WebSocket' }).click()
+  await page.getByTestId('ws-editor').getByText('尚未儲存的 WebSocket').waitFor()
+  await page.locator('[data-testid="tab"][data-draft]').last().getByTestId('tab-close').click()
+  await t.row('Cookies').click()
+  await page.getByTestId('request-editor').waitFor()
+  step(
+    'closing a connected tab asks first; 中斷 sends 1000; the connection is recorded in history; "+" opens an unsaved WebSocket'
   )
 
   await app.evaluate(({ Menu }) => {
@@ -877,5 +1021,6 @@ try {
   console.log(`\nAll smoke checks passed. Screenshots: ${shots}`)
 } finally {
   testServer.close()
+  wsServer.close()
   await rm(tmp, { recursive: true, force: true })
 }

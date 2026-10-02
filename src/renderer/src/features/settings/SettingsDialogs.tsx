@@ -6,7 +6,12 @@ import {
   APP_NAME,
   APP_SOURCE_URL
 } from '@shared/app-info'
-import { PROXY_MODES, type ProxySettings } from '@shared/schemas/app-config'
+import {
+  PROXY_MODES,
+  WS_MESSAGE_LIMIT_MAX,
+  WS_MESSAGE_LIMIT_MIN,
+  type ProxySettings
+} from '@shared/schemas/app-config'
 import { HISTORY_LIMIT_MAX, HISTORY_LIMIT_MIN } from '@shared/schemas/history'
 import { MAX_REDIRECTS_LIMIT, type WorkspaceSettings } from '@shared/schemas/workspace'
 import { Button } from '@renderer/components/ui/button'
@@ -179,10 +184,12 @@ const MODE_LABELS: Record<ProxySettings['mode'], string> = {
 function AppSettingsForm({
   initial,
   initialHistoryLimit,
+  initialMessageLimit,
   onDone
 }: {
   initial: ProxySettings
   initialHistoryLimit: number
+  initialMessageLimit: number
   onDone: () => void
 }) {
   const updateConfig = useAppStore((s) => s.updateConfig)
@@ -190,6 +197,8 @@ function AppSettingsForm({
   const [proxy, setProxy] = useState(initial)
   const [bypassText, setBypassText] = useState(initial.bypass.join('\n'))
   const [historyLimit, setHistoryLimit] = useState(String(initialHistoryLimit))
+  const [messageLimitText, setMessageLimitText] = useState(String(initialMessageLimit))
+  const messageLimit = clampInt(messageLimitText, WS_MESSAGE_LIMIT_MIN, WS_MESSAGE_LIMIT_MAX)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const set = (patch: Partial<ProxySettings>) => setProxy({ ...proxy, ...patch })
@@ -214,7 +223,8 @@ function AppSettingsForm({
         .filter(Boolean)
       await updateConfig({
         proxy: { ...proxy, url: proxy.url.trim(), bypass },
-        history: { maxEntries: limit }
+        history: { maxEntries: limit },
+        websocket: { messageLimit }
       })
       onDone()
     } catch (err) {
@@ -313,6 +323,21 @@ function AppSettingsForm({
             目前共 {usage.total} 筆。超過上限時，會刪除所有 Workspace 中最舊的紀錄。
           </p>
         )}
+        <Row label="WebSocket 訊息" htmlFor="ws-message-limit">
+          <Input
+            id="ws-message-limit"
+            type="number"
+            min={WS_MESSAGE_LIMIT_MIN}
+            max={WS_MESSAGE_LIMIT_MAX}
+            className="h-8 w-24"
+            value={messageLimitText}
+            onChange={(e) => setMessageLimitText(e.target.value)}
+            onBlur={() => setMessageLimitText(String(messageLimit))}
+          />
+          <span className="text-xs text-muted-foreground">
+            則／分頁（{WS_MESSAGE_LIMIT_MIN}–{WS_MESSAGE_LIMIT_MAX}，超過時刪除最舊的）
+          </span>
+        </Row>
       </div>
       <Footer busy={busy} error={error} />
     </form>
@@ -362,13 +387,15 @@ export function AppSettingsDialog() {
   const setOpen = useAppStore((s) => s.setAppSettingsOpen)
   const proxy = useAppStore((s) => s.config?.proxy)
   const historyLimit = useAppStore((s) => s.config?.history.maxEntries)
+  const messageLimit = useAppStore((s) => s.config?.websocket.messageLimit)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent data-testid="app-settings-dialog" className="max-w-lg">
-        {open && proxy && historyLimit !== undefined && (
+        {open && proxy && historyLimit !== undefined && messageLimit !== undefined && (
           <AppSettingsForm
             initial={proxy}
             initialHistoryLimit={historyLimit}
+            initialMessageLimit={messageLimit}
             onDone={() => setOpen(false)}
           />
         )}

@@ -1,8 +1,8 @@
-import type { HttpHistoryEntry } from '@shared/schemas/history'
+import type { HistoryEntry } from '@shared/schemas/history'
 
 export interface HistoryGroup {
   label: string
-  entries: HttpHistoryEntry[]
+  entries: HistoryEntry[]
 }
 
 function dayKey(date: Date): string {
@@ -10,7 +10,7 @@ function dayKey(date: Date): string {
 }
 
 /** Groups entries (newest first) by local day: 今天 / 昨天 / date. */
-export function groupByDay(entries: readonly HttpHistoryEntry[], now: Date): HistoryGroup[] {
+export function groupByDay(entries: readonly HistoryEntry[], now: Date): HistoryGroup[] {
   const today = dayKey(now)
   const yesterday = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
   const groups: HistoryGroup[] = []

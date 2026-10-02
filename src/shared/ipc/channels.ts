@@ -25,6 +25,7 @@ export const INVOKE = {
   workspaceSaveSettings: 'workspace:saveSettings',
   dialogSelectDirectory: 'dialog:selectDirectory',
   dialogSelectFile: 'dialog:selectFile',
+  dialogSaveTextFile: 'dialog:saveTextFile',
   treeGet: 'tree:get',
   treeReload: 'tree:reload',
   itemCreate: 'item:create',
@@ -53,7 +54,11 @@ export const INVOKE = {
   historyClear: 'history:clear',
   historyGetUsage: 'history:getUsage',
   sessionGet: 'session:get',
-  sessionSave: 'session:save'
+  sessionSave: 'session:save',
+  wsConnect: 'ws:connect',
+  wsSend: 'ws:send',
+  wsPing: 'ws:ping',
+  wsDisconnect: 'ws:disconnect'
 } as const
 
 export type InvokeChannel = (typeof INVOKE)[keyof typeof INVOKE]
@@ -65,6 +70,7 @@ export const EVENTS = {
   configChanged: 'config:changed',
   treeChanged: 'tree:changed',
   historyChanged: 'history:changed',
+  wsEvent: 'ws:event',
   appCloseRequested: 'app:closeRequested'
 } as const
 

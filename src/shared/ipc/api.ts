@@ -7,13 +7,17 @@ import type { ContainerSettingsData, HttpResult, InheritedSettings } from '../ht
 import type {
   AppConfig,
   HistorySettings,
+  WebsocketSettings,
   ProxySettings,
   Theme,
   UiSettings
 } from '../schemas/app-config'
 import type { Auth, KeyValue, RequestType, Variable } from '../schemas/collection'
-import type { HttpHistoryEntry } from '../schemas/history'
+import type { HistoryEntry } from '../schemas/history'
+import type { AnyRequest } from '../schemas/request'
+import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
 import type { HttpRequest } from '../schemas/http-request'
+import type { WsEventPayload } from '../ws'
 import type { SessionData } from '../schemas/session'
 import type { WorkspaceSettings } from '../schemas/workspace'
 import type { ItemKind, WorkspaceTree } from '../tree'
@@ -51,6 +55,7 @@ export interface ConfigUpdateInput {
   ui?: Partial<UiSettings>
   /** Lowering the limit removes the oldest entries (in all Workspaces) right away. */
   history?: HistorySettings
+  websocket?: WebsocketSettings
 }
 
 export interface WorkspaceCreateInput {
@@ -105,17 +110,19 @@ export interface SelectFileInput {
 }
 
 export interface RequestData {
-  request: HttpRequest
+  /** HTTP or WebSocket (by `type`). */
+  request: AnyRequest
   inherited: InheritedSettings
 }
 
 export interface RequestSaveInput {
   id: string
-  request: HttpRequest
+  /** Must have the same `type` as the file. */
+  request: AnyRequest
 }
 
 export interface RequestSaveResult {
-  request: HttpRequest
+  request: AnyRequest
   tree: WorkspaceTree
 }
 
@@ -123,12 +130,12 @@ export interface RequestSaveAsInput {
   /** Collection / folder to create the request in. */
   parentId: string
   name: string
-  request: HttpRequest
+  request: AnyRequest
 }
 
 export interface RequestSaveAsResult {
   id: string
-  request: HttpRequest
+  request: AnyRequest
   tree: WorkspaceTree
 }
 
@@ -198,8 +205,47 @@ export interface HistoryUsage {
 
 export interface HistoryListResult {
   /** Newest first. */
-  entries: HttpHistoryEntry[]
+  entries: HistoryEntry[]
   usage: HistoryUsage
+}
+
+export interface WsConnectInput {
+  /** Chosen by the renderer (UUID), new for every connection attempt. */
+  connectionId: string
+  /** The saved request this tab edits (recorded in history); null for unsaved ones. */
+  requestId: string | null
+  parentId: string | null
+  environmentId: string | null
+  /** As edited, before variable substitution. */
+  request: WsRequest
+}
+
+export interface WsSendInput {
+  connectionId: string
+  /** Used to resolve `{{variables}}` at send time. */
+  parentId: string | null
+  environmentId: string | null
+  format: WsMessageFormat
+  content: string
+}
+
+export interface WsDisconnectInput {
+  connectionId: string
+  /** 1000 or 3000–4999; default 1000. */
+  code?: number
+  reason?: string
+}
+
+export interface UnresolvedResult {
+  /** `{{names}}` that had no value and were sent as-is. */
+  unresolvedVariables: string[]
+}
+
+export interface SaveTextFileInput {
+  title?: string
+  /** Suggested file name (saved under Downloads by default). */
+  defaultName: string
+  content: string
 }
 
 export interface CloseGuardInput {
@@ -270,6 +316,11 @@ export interface InvokeMap {
   'history:getUsage': { input: void; output: HistoryUsage }
   'session:get': { input: void; output: SessionData }
   'session:save': { input: SessionData; output: void }
+  'ws:connect': { input: WsConnectInput; output: UnresolvedResult }
+  'ws:send': { input: WsSendInput; output: UnresolvedResult }
+  'ws:ping': { input: { connectionId: string }; output: void }
+  'ws:disconnect': { input: WsDisconnectInput; output: boolean }
+  'dialog:saveTextFile': { input: SaveTextFileInput; output: string | null }
 }
 
 // Compile-time guarantee that InvokeMap and the channel constants list the same channels.
@@ -294,6 +345,7 @@ export interface EventPayloads {
   'config:changed': AppConfig
   'tree:changed': WorkspaceTree
   'history:changed': HistoryUsage
+  'ws:event': WsEventPayload
   'app:closeRequested': CloseRequest
 }
 
@@ -366,6 +418,14 @@ export interface HachiApi {
     clear: InvokeFn<'history:clear'>
     getUsage: InvokeFn<'history:getUsage'>
   }
+  ws: {
+    /** Starts connecting; state and messages arrive as `ws:event`. */
+    connect: InvokeFn<'ws:connect'>
+    send: InvokeFn<'ws:send'>
+    ping: InvokeFn<'ws:ping'>
+    /** Closes (or aborts while connecting). False if there is no such connection. */
+    disconnect: InvokeFn<'ws:disconnect'>
+  }
   session: {
     /** Open tabs and active environment of the current Workspace (this computer only). */
     get: InvokeFn<'session:get'>
@@ -384,6 +444,8 @@ export interface HachiApi {
     selectDirectory: InvokeFn<'dialog:selectDirectory'>
     /** Returns the chosen absolute file path, or `null` if cancelled. */
     selectFile: InvokeFn<'dialog:selectFile'>
+    /** Save dialog, then writes `content` (UTF-8). Returns the path, or null if cancelled. */
+    saveTextFile: InvokeFn<'dialog:saveTextFile'>
   }
   /** Subscribes to a main → renderer event. Returns an unsubscribe function. */
   on<C extends EventChannel>(channel: C, listener: (payload: EventPayloads[C]) => void): () => void

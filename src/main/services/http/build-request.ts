@@ -88,18 +88,22 @@ function encodeQuery(text: string): string {
 export function buildUrl(
   rawUrl: string,
   params: readonly KeyValue[],
-  extra: [string, string][] = []
+  extra: [string, string][] = [],
+  protocols: { default: string; allowed: readonly string[] } = {
+    default: 'http',
+    allowed: ['http:', 'https:']
+  }
 ): string {
   let input = rawUrl.trim()
   if (input === '') throw new HttpBuildError('INVALID_URL', 'URL is empty')
-  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(input)) input = `http://${input}`
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(input)) input = `${protocols.default}://${input}`
   let url: URL
   try {
     url = new URL(input)
   } catch {
     throw new HttpBuildError('INVALID_URL', `Invalid URL: ${rawUrl}`)
   }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+  if (!protocols.allowed.includes(url.protocol)) {
     throw new HttpBuildError('INVALID_URL', `Unsupported protocol: ${url.protocol}`)
   }
   const pairs = [
@@ -113,7 +117,7 @@ export function buildUrl(
   return url.toString()
 }
 
-function hasHeader(headers: [string, string][], name: string): boolean {
+export function hasHeader(headers: [string, string][], name: string): boolean {
   const lower = name.toLowerCase()
   return headers.some(([k]) => k.toLowerCase() === lower)
 }
@@ -173,18 +177,22 @@ export interface BuildInput {
   readFile: (absPath: string) => Promise<Uint8Array>
 }
 
-export async function buildRequest(input: BuildInput): Promise<BuiltRequest> {
-  const { request, inherited, workspace } = input
-  const auth = effectiveAuth(request.auth, inherited)
-
+/**
+ * Headers (own > inherited) plus auth. Bearer / Basic add `Authorization` unless it
+ * was set explicitly; API Key goes to a header or, as `authQuery`, to the query.
+ */
+export function buildHeaders(
+  own: readonly KeyValue[],
+  inherited: InheritedSettings,
+  auth: Auth
+): { headers: [string, string][]; authQuery: [string, string][] } {
   const authQuery: [string, string][] =
     auth.type === 'apiKey' && auth.in === 'query' && auth.key.trim() !== ''
       ? [[auth.key.trim(), auth.value]]
       : []
-  const url = buildUrl(request.url, request.params, authQuery)
 
   // Request headers win over inherited ones with the same name.
-  const headers: [string, string][] = request.headers
+  const headers: [string, string][] = own
     .filter(isActive)
     .map((h): [string, string] => [h.key.trim(), h.value])
   for (const h of inherited.headers) {
@@ -200,6 +208,14 @@ export async function buildRequest(input: BuildInput): Promise<BuiltRequest> {
   } else if (auth.type === 'apiKey' && auth.in === 'header' && auth.key.trim() !== '') {
     if (!hasHeader(headers, auth.key.trim())) headers.push([auth.key.trim(), auth.value])
   }
+  return { headers, authQuery }
+}
+
+export async function buildRequest(input: BuildInput): Promise<BuiltRequest> {
+  const { request, inherited, workspace } = input
+  const auth = effectiveAuth(request.auth, inherited)
+  const { headers, authQuery } = buildHeaders(request.headers, inherited, auth)
+  const url = buildUrl(request.url, request.params, authQuery)
 
   const { body, contentType } = await buildBody(request.body, request.method, input.readFile)
   if (contentType && !hasHeader(headers, 'content-type'))

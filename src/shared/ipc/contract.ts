@@ -15,6 +15,14 @@ import {
 import { historySettingsSchema } from '../schemas/app-config'
 import { sessionDataSchema } from '../schemas/session'
 import { httpRequestSchema } from '../schemas/http-request'
+import { anyRequestSchema } from '../schemas/request'
+import {
+  MAX_WS_MESSAGE_TEXT,
+  WS_MESSAGE_FORMATS,
+  wsCloseCodeSchema,
+  wsRequestSchema
+} from '../schemas/ws-request'
+import { websocketSettingsSchema } from '../schemas/app-config'
 import { workspaceNameSchema, workspaceSettingsSchema } from '../schemas/workspace'
 import type { InvokeMap } from './api'
 import { INVOKE, type InvokeChannel } from './channels'
@@ -69,7 +77,8 @@ export const inputSchemas = {
         responseBodyWrap: z.boolean().optional()
       })
       .optional(),
-    history: historySettingsSchema.optional()
+    history: historySettingsSchema.optional(),
+    websocket: websocketSettingsSchema.optional()
   }),
   [INVOKE.workspaceGetCurrent]: noInput,
   [INVOKE.workspaceCreate]: z.strictObject({
@@ -89,6 +98,11 @@ export const inputSchemas = {
     defaultPath: absolutePathSchema.optional()
   }),
   [INVOKE.dialogSelectFile]: z.strictObject({ title: z.string().max(200).optional() }),
+  [INVOKE.dialogSaveTextFile]: z.strictObject({
+    title: z.string().max(200).optional(),
+    defaultName: z.string().min(1).max(200),
+    content: z.string().max(512 * 1024 * 1024)
+  }),
   [INVOKE.treeGet]: noInput,
   [INVOKE.treeReload]: z.discriminatedUnion('scope', [
     z.strictObject({ scope: z.literal('workspace') }),
@@ -104,11 +118,11 @@ export const inputSchemas = {
     index: z.number().int().min(0).max(1_000_000)
   }),
   [INVOKE.requestGet]: z.strictObject({ id: itemIdSchema }),
-  [INVOKE.requestSave]: z.strictObject({ id: itemIdSchema, request: httpRequestSchema }),
+  [INVOKE.requestSave]: z.strictObject({ id: itemIdSchema, request: anyRequestSchema }),
   [INVOKE.requestSaveAs]: z.strictObject({
     parentId: itemIdSchema,
     name: itemNameSchema,
-    request: httpRequestSchema
+    request: anyRequestSchema
   }),
   [INVOKE.requestGetInherited]: z.strictObject({ parentId: itemIdSchema.nullable() }),
   [INVOKE.containerGet]: z.strictObject({ id: itemIdSchema }),
@@ -143,7 +157,27 @@ export const inputSchemas = {
   [INVOKE.historyClear]: noInput,
   [INVOKE.historyGetUsage]: noInput,
   [INVOKE.sessionGet]: noInput,
-  [INVOKE.sessionSave]: sessionDataSchema
+  [INVOKE.sessionSave]: sessionDataSchema,
+  [INVOKE.wsConnect]: z.strictObject({
+    connectionId: runIdSchema,
+    requestId: itemIdSchema.nullable(),
+    parentId: itemIdSchema.nullable(),
+    environmentId: itemIdSchema.nullable(),
+    request: wsRequestSchema
+  }),
+  [INVOKE.wsSend]: z.strictObject({
+    connectionId: runIdSchema,
+    parentId: itemIdSchema.nullable(),
+    environmentId: itemIdSchema.nullable(),
+    format: z.enum(WS_MESSAGE_FORMATS),
+    content: z.string().max(MAX_WS_MESSAGE_TEXT)
+  }),
+  [INVOKE.wsPing]: z.strictObject({ connectionId: runIdSchema }),
+  [INVOKE.wsDisconnect]: z.strictObject({
+    connectionId: runIdSchema,
+    code: wsCloseCodeSchema.optional(),
+    reason: z.string().max(123).optional()
+  })
 } as const satisfies Record<InvokeChannel, z.ZodType>
 
 export type InputOf<C extends InvokeChannel> = z.output<(typeof inputSchemas)[C]>

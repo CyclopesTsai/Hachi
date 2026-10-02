@@ -7,11 +7,11 @@ import {
   emptyHistoryFile,
   historyFormat,
   historyIndexFormat,
-  httpHistoryEntrySchema,
+  historyEntrySchema,
   type HistoryFile,
   type HistoryIndex,
   type HistoryIndexEntry,
-  type HttpHistoryEntry
+  type HistoryEntry
 } from '@shared/schemas/history'
 import { WORKSPACE_LAYOUT } from '@shared/schemas/workspace'
 import { updateJsonAtomic, writeJsonAtomic } from './fs/atomic-write'
@@ -82,18 +82,18 @@ export class HistoryService {
     })
   }
 
-  list(workspacePath: string): Promise<HttpHistoryEntry[]> {
+  list(workspacePath: string): Promise<HistoryEntry[]> {
     const ws = path.resolve(workspacePath)
     return this.run(async () => {
       const file = await this.readFile(ws)
       return file.entries.flatMap((raw) => {
-        const parsed = httpHistoryEntrySchema.safeParse(raw)
+        const parsed = historyEntrySchema.safeParse(raw)
         return parsed.success ? [parsed.data] : []
       })
     })
   }
 
-  add(workspacePath: string, entry: HttpHistoryEntry): Promise<HistoryUsage> {
+  add(workspacePath: string, entry: HistoryEntry): Promise<HistoryUsage> {
     const ws = path.resolve(workspacePath)
     return this.run(async () => {
       await this.updateFile(ws, (file) => ({ ...file, entries: [entry, ...file.entries] }))

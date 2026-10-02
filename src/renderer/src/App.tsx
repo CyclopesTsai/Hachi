@@ -22,6 +22,7 @@ import { useEnvStore } from '@renderer/stores/env-store'
 import { useHistoryStore } from '@renderer/stores/history-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
+import { isLive, useWsStore } from '@renderer/stores/ws-store'
 
 function useMainProcessEvents(): void {
   useEffect(() => {
@@ -34,6 +35,7 @@ function useMainProcessEvents(): void {
       window.hachi.on(EVENTS.historyChanged, (usage) =>
         useHistoryStore.getState().usageChanged(usage)
       ),
+      window.hachi.on(EVENTS.wsEvent, (payload) => useWsStore.getState().handleEvent(payload)),
       // Closing the window / quitting while tabs have unsaved changes.
       window.hachi.on(EVENTS.appCloseRequested, () => {
         void useTabsStore
@@ -91,15 +93,24 @@ function useSessionPersistence(): void {
       clearTimeout(timer)
       timer = setTimeout(save, 300)
     }
+    // Closing the window asks first while tabs are unsaved or WebSocket tabs are connected.
     let dirty = false
+    const updateGuard = () => {
+      const now =
+        useTabsStore.getState().tabs.some(isTabDirty) ||
+        Object.values(useWsStore.getState().sessions).some(isLive)
+      if (now !== dirty) {
+        dirty = now
+        void window.hachi.app.setCloseGuard({ dirty })
+      }
+    }
     const offTabs = useTabsStore.subscribe((s, prev) => {
       if (s.sessionReady && !prev.sessionReady) last = ''
       if (s.tabs !== prev.tabs || s.activeKey !== prev.activeKey) schedule()
-      const nowDirty = s.tabs.some(isTabDirty)
-      if (nowDirty !== dirty) {
-        dirty = nowDirty
-        void window.hachi.app.setCloseGuard({ dirty })
-      }
+      updateGuard()
+    })
+    const offWs = useWsStore.subscribe((s, prev) => {
+      if (s.sessions !== prev.sessions) updateGuard()
     })
     const offEnv = useEnvStore.subscribe((s, prev) => {
       if (s.activeId !== prev.activeId) schedule()
@@ -107,6 +118,7 @@ function useSessionPersistence(): void {
     return () => {
       clearTimeout(timer)
       offTabs()
+      offWs()
       offEnv()
     }
   }, [])
@@ -116,6 +128,7 @@ function useSessionPersistence(): void {
 function useWorkspaceData(workspaceId: string | null): void {
   useEffect(() => {
     useTabsStore.getState().reset()
+    useWsStore.getState().reset()
     useEnvStore.getState().reset()
     useHistoryStore.getState().reset()
     useTreeStore.getState().reset()
@@ -174,6 +187,12 @@ export function App() {
   }, [bootstrap])
 
   useWorkspaceData(currentWorkspace?.id ?? null)
+
+  // WebSocket log size (App setting).
+  const messageLimit = useAppStore((s) => s.config?.websocket.messageLimit)
+  useEffect(() => {
+    if (messageLimit) useWsStore.getState().setMessageLimit(messageLimit)
+  }, [messageLimit])
 
   if (status === 'loading') {
     return (

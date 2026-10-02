@@ -1,6 +1,6 @@
 # Hachi 資料結構（JSON Schema）
 
-> 版本：Phase 3。標示「✅ 已實作」的格式已定案並有 zod schema；標示「📝 草案」的格式會在對應 Phase 實作時定案，並同步更新本文件。
+> 版本：Phase 4。標示「✅ 已實作」的格式已定案並有 zod schema；標示「📝 草案」的格式會在對應 Phase 實作時定案，並同步更新本文件。
 >
 > zod schema 位置：`src/shared/schemas/`
 
@@ -40,7 +40,7 @@
 └─ collections/
    └─ <collection>/                  ✅ Phase 1（資料夾名為 slug）
       ├─ collection.json             ✅ Phase 1
-      ├─ <request>.json              ✅ 共通欄位（Phase 1）；HTTP 完整欄位 ✅ Phase 2、WebSocket 📝 Phase 4
+      ├─ <request>.json              ✅ 共通欄位（Phase 1）；HTTP 完整欄位 ✅ Phase 2、WebSocket ✅ Phase 4
       └─ <folder>/                   ✅ 可多層巢狀
          ├─ folder.json              ✅ Phase 1
          └─ <request>.json
@@ -80,11 +80,14 @@
   },
   "history": {
     "maxEntries": 200 // 歷史紀錄筆數上限，所有 Workspace 共用（50–1000）
+  },
+  "websocket": {
+    "messageLimit": 100 // 每個 WebSocket 分頁的訊息串最多保留幾則（10–5000），超過時刪除最舊的
   }
 }
 ```
 
-`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3 加入（新增欄位附預設值，不升版）。
+`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3、`websocket` 於 Phase 4 加入（新增欄位附預設值，不升版）。
 
 ## ✅ `workspace.json`
 
@@ -141,13 +144,31 @@ history.json
         "sizeBytes": 456
       }
       // 或 { "kind": "error", "code": "TIMEOUT", "message": "…", "timeMs": 30000 }
+    },
+    {
+      // Phase 4：一次 WebSocket 連線（從開始連線到關閉），不存訊息內容
+      "id": "…",
+      "type": "websocket",
+      "sentAt": "…", // 開始連線的時間
+      "requestId": "…", // 或 null
+      "environmentName": "dev",
+      "request": {/* 完整的 WebSocket 請求（同請求檔格式），變數未替換 */},
+      "result": {
+        "openedAt": "…", // 連線成功的時間；沒連上為 null
+        "closedAt": "…",
+        "closeCode": 1000, // 沒有建立連線（例如網址錯誤）時為 null
+        "closeReason": "",
+        "error": null, // 失敗原因（例如 "Unexpected server response: 401"）
+        "sent": 3, // 送出的訊息數（含文字心跳）
+        "received": 5
+      }
     }
-    // Phase 4 加入 type: "websocket"；看不懂的 type 會原樣保留
+    // 看不懂的 type（較新版本寫入的）會原樣保留
   ]
 }
 ```
 
-- 取消的請求不記錄。
+- 取消的 HTTP 請求不記錄；WebSocket 每次連線（不論成功與否）都記錄一筆。
 - 檔案損毀時改名為 `history.json.corrupt-<時間>` 後重新開始（歷史紀錄可以捨棄）。
 - **筆數上限由所有 Workspace 共用**（`app-config.json` 的 `history.maxEntries`，預設 200）：超過時刪除所有 Workspace 中最舊的紀錄。為了不用每次讀取所有 Workspace，`<userData>/history-index.json` 記錄每一筆的 Workspace 與時間：
 
@@ -235,7 +256,7 @@ Phase 1 驗證所有請求共通的欄位：
 | `name`    | string（1–100）         | 顯示名稱                    |
 | `method`  | string（選填）          | HTTP 方法，樹狀清單的標籤用 |
 
-WebSocket 的其餘欄位在 Phase 4 定案，以「新增欄位附預設值」的方式加入，不升版。
+HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一律附預設值，不升版）。
 
 ### ✅ HTTP 請求（Phase 2 定案，`src/shared/schemas/http-request.ts`）
 
@@ -273,7 +294,9 @@ WebSocket 的其餘欄位在 Phase 4 定案，以「新增欄位附預設值」�
 }
 ```
 
-WebSocket（Phase 4 定案）：
+### ✅ WebSocket 請求（Phase 4 定案，`src/shared/schemas/ws-request.ts`）
+
+所有欄位都有預設值；Phase 1 建立的檔案（含舊的 `autoReconnect` 等欄位）可直接讀取，不認識的欄位會保留。
 
 ```jsonc
 {
@@ -281,19 +304,35 @@ WebSocket（Phase 4 定案）：
   "id": "…",
   "type": "websocket",
   "name": "Chat",
-  "url": "",
-  "params": [],
-  "headers": [],
-  "subprotocols": [],
-  "auth": { "type": "inherit" },
+  "url": "wss://chat.example.com/socket", // 沒有 scheme 時補 ws://；只接受 ws / wss
+  "params": [], // KeyValue[]，連線時接在 URL 後面
+  "headers": [], // KeyValue[]，握手時送出（沿用上層 Headers，同 HTTP）
+  "subprotocols": ["chat.v2"], // Sec-WebSocket-Protocol（空字串忽略）
+  "auth": { "type": "inherit" }, // 同 HTTP；API Key 可加在 Header 或 Query
   "settings": {
-    "autoReconnect": false,
-    "reconnectIntervalMs": 3000,
-    "heartbeat": { "enabled": false, "intervalMs": 30000, "payload": "" }
+    "connectTimeoutMs": null, // 握手逾時；null = 沿用 Workspace 的 timeout，0 = 不限
+    "validateSSL": null, // null = 沿用 Workspace
+    "useProxy": true, // 使用 App 的 Proxy（HTTP CONNECT）
+    "heartbeat": {
+      "enabled": false,
+      "mode": "ping", // "ping"：WebSocket Ping frame；"text"：送出 payload 文字訊息
+      "intervalMs": 30000, // 1000–3600000
+      "payload": "" // mode 為 text 時送出的內容，可用 {{變數}}
+    },
+    "closeCode": 1000, // 按「中斷」時送出：1000 或 3000–4999
+    "closeReason": "" // 最多 123 bytes（UTF-8）
   },
-  "messageTemplates": [] // { id, name, format: text | json | binary-hex | binary-base64, content }
+  "messageTemplates": [
+    // 訊息範本（會提交到 git，機密請用 {{變數}}）
+    { "id": "…", "name": "Hello", "format": "json", "content": "{\"hi\":\"{{user}}\"}" }
+    // format：text | json | binary-hex | binary-base64
+  ]
 }
 ```
+
+- 不提供自動重連（決策 54）。
+- 網址、Params、Headers、Auth、子協定的 `{{變數}}` 在連線時替換；訊息內容（含範本、文字心跳）在送出時替換（決策 52）。
+- 訊息紀錄只存在記憶體（每個分頁最多 `app-config.json` 的 `websocket.messageLimit` 則），需要時從畫面匯出成 JSON 或純文字。
 
 ## ✅ `environments/<env>.json` 與 `.hachi-secrets.json`（Phase 3）
 

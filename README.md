@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前進度：**Phase 3**（環境變數、多分頁、歷史紀錄）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
+> 目前進度：**Phase 4**（WebSocket）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
@@ -13,6 +13,7 @@ Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP �
 | UI         | React 19、TypeScript（strict）、Tailwind CSS 4、shadcn/ui（Radix UI）、lucide 圖示 |
 | 狀態管理   | Zustand                                                                            |
 | HTTP       | undici（在 main process 發送）                                                     |
+| WebSocket  | ws + https-proxy-agent（在 main process 連線）                                     |
 | 編輯器     | CodeMirror 6                                                                       |
 | 驗證       | zod（IPC 輸入與 JSON 檔案）                                                        |
 | 測試       | Vitest（單元測試）、Playwright（Electron E2E 冒煙測試）                            |
@@ -54,7 +55,7 @@ src/
 ├─ main/          Electron main process
 │  ├─ platform/   ★ 平台專屬程式碼（darwin.ts / default.ts），其他地方不判斷 process.platform
 │  ├─ ipc/        IPC 註冊、輸入驗證、sender 驗證
-│  └─ services/   設定檔、Workspace、Collection、環境 / 機密值、歷史紀錄、分頁記憶、HTTP 引擎
+│  └─ services/   設定檔、Workspace、Collection、環境 / 機密值、歷史紀錄、分頁記憶、HTTP 引擎、WebSocket 連線
 ├─ preload/       暴露 window.hachi 白名單 API
 └─ renderer/      React UI（features/、components/ui/、stores/）
 docs/

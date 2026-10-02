@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { HttpResult } from '@shared/http'
-import type { HttpHistoryEntry } from '@shared/schemas/history'
+import type { HistoryEntry } from '@shared/schemas/history'
 import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
+import { wsRequestSchema, type WsRequest } from '@shared/schemas/ws-request'
 import type { SessionData } from '@shared/schemas/session'
 import { findNode, isSelfOrDescendant, type WorkspaceTree } from '@shared/tree'
 import {
@@ -14,6 +15,7 @@ import {
   fromSession,
   insertTab,
   isDraftTab,
+  isRequestLike,
   isTabDirty,
   itemTabKey,
   nextActiveKey,
@@ -23,13 +25,17 @@ import {
   type ContainerContent,
   type ContainerTab,
   type EnvironmentsTab,
+  type RequestLikeTab,
   type RequestTab,
   type Tab,
-  type TabKey
+  type TabKey,
+  type WsComposer,
+  type WsTab
 } from '@renderer/features/tabs/tab-model'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useEnvStore } from './env-store'
 import { useTreeStore } from './tree-store'
+import { isLive, useWsStore } from './ws-store'
 
 export type ReloadScope = { scope: 'workspace' } | { scope: 'item'; id: string }
 
@@ -63,10 +69,10 @@ interface TabsState {
   /** Opens a tree item; `preview` (single click) reuses the preview tab. */
   openItem(id: string, options?: { preview?: boolean }): void
   openEnvironments(): void
-  /** New unsaved HTTP request ("+" button). */
-  newRequest(): void
+  /** New unsaved HTTP or WebSocket request ("+" button). */
+  newRequest(type?: 'http' | 'websocket'): void
   /** Opens a history entry as a new unsaved request. */
-  openHistoryEntry(entry: HttpHistoryEntry): Promise<void>
+  openHistoryEntry(entry: HistoryEntry): Promise<void>
   pin(key: TabKey): void
   /** Closes a tab, asking first if it has unsaved changes. Resolves false if cancelled. */
   close(key: TabKey): Promise<boolean>
@@ -76,6 +82,9 @@ interface TabsState {
   closeActive(): Promise<void>
 
   updateRequest(key: TabKey, change: (draft: HttpRequest) => HttpRequest): void
+  updateWs(key: TabKey, change: (draft: WsRequest) => WsRequest): void
+  /** The message being written in a WebSocket tab (does not make the tab dirty). */
+  updateComposer(key: TabKey, composer: WsComposer): void
   updateContainer(key: TabKey, change: (draft: ContainerContent) => ContainerContent): void
   updateEnvironment(
     key: TabKey,
@@ -121,6 +130,24 @@ function newHttpRequest(): HttpRequest {
   })
 }
 
+function newWsRequest(): WsRequest {
+  return wsRequestSchema.parse({
+    version: 1,
+    id: crypto.randomUUID(),
+    type: 'websocket',
+    name: 'New WebSocket'
+  })
+}
+
+/** A connected (or connecting) WebSocket tab: closing it drops the connection and its log. */
+function isLiveTab(tab: Tab): boolean {
+  return tab.kind === 'websocket' && isLive(useWsStore.getState().sessions[tab.uid])
+}
+
+/** Tabs that need a confirmation before they go away: unsaved or connected. */
+const attentionKeys = (tabs: readonly Tab[]) =>
+  tabs.filter((t) => isTabDirty(t) || isLiveTab(t)).map((t) => t.key)
+
 export const useTabsStore = create<TabsState>()((set, get) => {
   const find = (key: TabKey) => get().tabs.find((t) => t.key === key)
 
@@ -148,20 +175,27 @@ export const useTabsStore = create<TabsState>()((set, get) => {
 
   async function load(key: TabKey): Promise<void> {
     const tab = find(key)
-    if (!tab || tab.kind === 'static' || (tab.kind === 'request' && !tab.itemId)) return
+    if (!tab || tab.kind === 'static' || (isRequestLike(tab) && !tab.itemId)) return
     patch(key, (t) => ({ ...t, status: 'loading', loadError: null }))
     try {
-      if (tab.kind === 'request') {
+      if (isRequestLike(tab)) {
         const id = tab.itemId as string
         const { request, inherited } = await unwrap(window.hachi.request.get({ id }))
-        patch<RequestTab>(key, (t) => ({
-          ...t,
-          status: 'ready',
-          saved: request,
-          draft: request,
-          inherited,
-          version: t.version + 1
-        }))
+        if (request.type !== (tab.kind === 'request' ? 'http' : 'websocket')) {
+          throw new Error('The request type changed; reload the Workspace')
+        }
+        patch<RequestLikeTab>(
+          key,
+          (t) =>
+            ({
+              ...t,
+              status: 'ready',
+              saved: request,
+              draft: request,
+              inherited,
+              version: t.version + 1
+            }) as RequestLikeTab
+        )
       } else if (tab.kind === 'container') {
         const data = await unwrap(window.hachi.container.get({ id: tab.itemId }))
         const content = { headers: data.headers, auth: data.auth, variables: data.variables }
@@ -209,6 +243,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
   function removeTab(key: TabKey): void {
     const tab = find(key)
     if (tab?.kind === 'request' && tab.runId) void window.hachi.http.cancel({ runId: tab.runId })
+    if (tab?.kind === 'websocket') useWsStore.getState().remove(tab.uid)
     const next = nextActiveKey(get().tabs, key, get().activeKey)
     set((s) => ({ tabs: s.tabs.filter((t) => t.key !== key) }))
     setActive(next)
@@ -286,8 +321,12 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       else addTab(createEnvironmentsTab())
     },
 
-    newRequest() {
-      addTab(createDraftTab(newHttpRequest(), { parentId: null }))
+    newRequest(type = 'http') {
+      addTab(
+        type === 'websocket'
+          ? createDraftTab(newWsRequest(), { parentId: null })
+          : createDraftTab(newHttpRequest(), { parentId: null })
+      )
     },
 
     async openHistoryEntry(entry) {
@@ -307,20 +346,20 @@ export const useTabsStore = create<TabsState>()((set, get) => {
     async close(key) {
       const tab = find(key)
       if (!tab) return true
-      if (isTabDirty(tab) && !(await ask([key], 'save'))) return false
+      if ((isTabDirty(tab) || isLiveTab(tab)) && !(await ask([key], 'save'))) return false
       removeTab(key)
       return true
     },
 
     async closeOthers(key) {
       const others = get().tabs.filter((t) => t.key !== key)
-      if (!(await ask(dirtyKeys(others), 'save'))) return
+      if (!(await ask(attentionKeys(others), 'save'))) return
       for (const t of others) removeTab(t.key)
       setActive(key)
     },
 
     async closeAll() {
-      if (!(await ask(dirtyKeys(get().tabs), 'save'))) return false
+      if (!(await ask(attentionKeys(get().tabs), 'save'))) return false
       for (const t of get().tabs) removeTab(t.key)
       return true
     },
@@ -335,6 +374,16 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       patch<RequestTab>(key, (t) =>
         t.kind === 'request' && t.draft ? { ...t, preview: false, draft: change(t.draft) } : t
       )
+    },
+
+    updateWs(key, change) {
+      patch<WsTab>(key, (t) =>
+        t.kind === 'websocket' && t.draft ? { ...t, preview: false, draft: change(t.draft) } : t
+      )
+    },
+
+    updateComposer(key, composer) {
+      patch<WsTab>(key, (t) => (t.kind === 'websocket' ? { ...t, composer } : t))
     },
 
     updateContainer(key, change) {
@@ -392,13 +441,13 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       if (isDraftTab(tab)) return get().requestSaveAs(tab.key)
       patch(tab.key, (t) => ({ ...t, saving: true, saveError: null, preview: false }))
       try {
-        if (tab.kind === 'request' && tab.draft && tab.itemId) {
+        if (isRequestLike(tab) && tab.draft && tab.itemId) {
           const sent = tab.draft
           const { request, tree: next } = await unwrap(
             window.hachi.request.save({ id: tab.itemId, request: sent })
           )
           useTreeStore.getState().applyTree(next)
-          afterSave<RequestTab>(tab.key, sent, request)
+          afterSave<RequestLikeTab>(tab.key, sent, request as RequestLikeTab['saved'])
         } else if (tab.kind === 'container' && tab.draft) {
           const sent = tab.draft
           const data = await unwrap(window.hachi.container.save({ id: tab.itemId, ...sent }))
@@ -433,7 +482,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
     async commitSaveAs(parentId, name) {
       const pending = get().saveAs
       const tab = pending ? find(pending.key) : undefined
-      if (!pending || tab?.kind !== 'request' || !tab.draft) return
+      if (!pending || !tab || !isRequestLike(tab) || !tab.draft) return
       const sent = tab.draft
       const result = await unwrap(window.hachi.request.saveAs({ parentId, name, request: sent }))
       useTreeStore.getState().applyTree(result.tree)
@@ -443,7 +492,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       const newKey = itemTabKey(result.id)
       set((s) => ({
         tabs: s.tabs.map((t) => {
-          if (t.key !== pending.key || t.kind !== 'request') return t
+          if (t.key !== pending.key || !isRequestLike(t)) return t
           const unchanged = JSON.stringify(t.draft) === JSON.stringify(sent)
           return {
             ...t,
@@ -455,7 +504,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
             saved: result.request,
             draft: unchanged ? result.request : t.draft,
             inherited
-          }
+          } as RequestLikeTab
         }),
         activeKey: s.activeKey === pending.key ? newKey : s.activeKey,
         saveAs: null
@@ -561,7 +610,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
     },
 
     guardLeave() {
-      return ask(dirtyKeys(get().tabs), 'save')
+      return ask(attentionKeys(get().tabs), 'save')
     },
 
     async resolvePrompt(choice) {
@@ -570,8 +619,10 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       set({ prompt: null })
       if (choice === 'cancel') return prompt.resolve(false)
       if (choice === 'discard') return prompt.resolve(true)
+      // Connected-but-saved tabs only need the confirmation, not a save.
       for (const key of prompt.keys) {
-        if (!(await get().save(key))) return prompt.resolve(false)
+        const tab = find(key)
+        if (tab && isTabDirty(tab) && !(await get().save(key))) return prompt.resolve(false)
       }
       prompt.resolve(true)
     },

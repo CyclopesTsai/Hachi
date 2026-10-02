@@ -565,7 +565,7 @@ describe('requests and container settings', () => {
     expect(tree.collections[0]!.children[0]).toMatchObject({ method: 'POST' })
   })
 
-  it('refuses WebSocket requests in the HTTP editor', async () => {
+  it('loads and saves WebSocket requests, keeping the type', async () => {
     const c = await service.create({ parentId: null, kind: 'collection', name: 'C' })
     const w = await service.create({
       parentId: c.id,
@@ -573,7 +573,55 @@ describe('requests and container settings', () => {
       name: 'W',
       requestType: 'websocket'
     })
-    await expect(service.getRequest(w.id)).rejects.toMatchObject({ code: 'INVALID_OPERATION' })
+    const { request } = await service.getRequest(w.id)
+    expect(request).toMatchObject({
+      type: 'websocket',
+      url: '',
+      subprotocols: [],
+      settings: { closeCode: 1000, heartbeat: { enabled: false, mode: 'ping' } },
+      messageTemplates: []
+    })
+    if (request.type !== 'websocket') throw new Error('expected websocket')
+    const saved = await service.saveRequest(w.id, {
+      ...request,
+      url: 'wss://echo.test/{{room}}',
+      messageTemplates: [{ id: 't1', name: 'Hello', format: 'json', content: '{"hi":1}' }]
+    })
+    expect(saved.request).toMatchObject({
+      type: 'websocket',
+      name: 'W',
+      url: 'wss://echo.test/{{room}}',
+      messageTemplates: [{ name: 'Hello', format: 'json' }]
+    })
+    // The type of a file cannot change through save.
+    const http = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'H',
+      requestType: 'http'
+    })
+    await expect(service.saveRequest(http.id, saved.request)).rejects.toMatchObject({
+      code: 'INVALID_OPERATION'
+    })
+  })
+
+  it('reads Phase 1 WebSocket files (old settings) with defaults', async () => {
+    await service.create({ parentId: null, kind: 'collection', name: 'C' })
+    await writeFile(
+      col('c/old-ws.json'),
+      JSON.stringify({
+        version: 1,
+        id: 'old',
+        type: 'websocket',
+        name: 'Old',
+        settings: { autoReconnect: true, reconnectIntervalMs: 3000 }
+      })
+    )
+    await service.refresh()
+    const { request } = await service.getRequest('old')
+    expect(request).toMatchObject({
+      settings: { autoReconnect: true, closeCode: 1000, useProxy: true }
+    })
   })
 
   it('saves container headers / auth and resolves inheritance down the chain', async () => {

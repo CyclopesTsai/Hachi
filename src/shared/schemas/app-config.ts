@@ -52,6 +52,15 @@ export const uiSettingsSchema = z.object({
 })
 export type UiSettings = z.infer<typeof uiSettingsSchema>
 
+export const WS_MESSAGE_LIMIT_MIN = 10
+export const WS_MESSAGE_LIMIT_MAX = 5000
+
+/** WebSocket message log of each tab (kept in memory only). */
+export const websocketSettingsSchema = z.object({
+  messageLimit: z.number().int().min(WS_MESSAGE_LIMIT_MIN).max(WS_MESSAGE_LIMIT_MAX).default(100)
+})
+export type WebsocketSettings = z.infer<typeof websocketSettingsSchema>
+
 /** History is limited across all Workspaces together (see docs/schema.md). */
 export const historySettingsSchema = z.object({
   maxEntries: z
@@ -71,7 +80,8 @@ export const appConfigSchema = z.object({
   window: windowStateSchema.nullable().default(null),
   proxy: proxySettingsSchema.prefault({}),
   ui: uiSettingsSchema.prefault({}),
-  history: historySettingsSchema.prefault({})
+  history: historySettingsSchema.prefault({}),
+  websocket: websocketSettingsSchema.prefault({})
 })
 export type AppConfig = z.infer<typeof appConfigSchema>
 

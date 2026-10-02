@@ -2,8 +2,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { HttpHistoryEntry } from '@shared/schemas/history'
+import type { HistoryEntry } from '@shared/schemas/history'
 import { httpRequestSchema } from '@shared/schemas/http-request'
+import { wsRequestSchema } from '@shared/schemas/ws-request'
 import { HistoryService } from './history-service'
 
 let tmp: string
@@ -21,7 +22,7 @@ const historyIds = async (ws: string) =>
     }
   ).entries.map((e) => e.id)
 
-function entry(id: string): HttpHistoryEntry {
+function entry(id: string): HistoryEntry {
   clock += 1000
   return {
     id,
@@ -131,6 +132,28 @@ describe('HistoryService', () => {
     expect(
       await readFile(path.join(wsA, 'history.json.corrupt-1970-01-01T00-00-00-000Z'), 'utf8')
     ).toBe('{ broken')
+  })
+
+  it('lists WebSocket entries too', async () => {
+    await service.add(wsA, entry('a1'))
+    await service.add(wsA, {
+      id: 'w1',
+      type: 'websocket',
+      sentAt: new Date(++clock).toISOString(),
+      requestId: null,
+      environmentName: null,
+      request: wsRequestSchema.parse({ version: 1, id: 'w', type: 'websocket', name: 'W' }),
+      result: {
+        openedAt: null,
+        closedAt: new Date(clock).toISOString(),
+        closeCode: 1000,
+        closeReason: '',
+        error: null,
+        sent: 2,
+        received: 3
+      }
+    })
+    expect((await service.list(wsA)).map((e) => e.type)).toEqual(['websocket', 'http'])
   })
 
   it('starts over when the index is corrupt and skips unknown entry types in lists', async () => {

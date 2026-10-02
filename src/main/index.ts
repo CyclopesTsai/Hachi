@@ -3,7 +3,13 @@ import path from 'node:path'
 import { BrowserWindow, app, dialog, nativeTheme, session, shell } from 'electron'
 import { APP_NAME, WORKSPACE_DIR_NAME } from '@shared/app-info'
 import { isHachiError } from '@shared/errors'
-import type { CloseRequest, EventPayloads, HttpSendInput, WorkspaceInfo } from '@shared/ipc/api'
+import type {
+  CloseRequest,
+  EventPayloads,
+  HttpSendInput,
+  WorkspaceInfo,
+  WsConnectInput
+} from '@shared/ipc/api'
 import type { HttpResult } from '@shared/http'
 import { HISTORY_INDEX_FILE } from '@shared/schemas/history'
 import { SESSIONS_DIR } from '@shared/schemas/session'
@@ -19,6 +25,7 @@ import { APP_CONFIG_FILE, ConfigService } from './services/config-service'
 import { EnvironmentService } from './services/environment-service'
 import { HistoryService } from './services/history-service'
 import { SessionService } from './services/session-service'
+import { WsService } from './services/ws/ws-service'
 import { resolveInherited } from './services/http/build-request'
 import { HttpService } from './services/http/http-service'
 import { WorkspaceService } from './services/workspace-service'
@@ -78,6 +85,7 @@ async function bootstrap(): Promise<void> {
     openedPath = current?.path ?? null
     void collections.open(current?.path ?? null, current?.id ?? null)
     environments.open(current?.path ?? null)
+    ws.disconnectAll()
     if (current) void history.sync(current.path).catch(showError)
   })
   collections.onChange((tree) => send(EVENTS.treeChanged, tree))
@@ -87,10 +95,10 @@ async function bootstrap(): Promise<void> {
       .then((usage) => send(EVENTS.historyChanged, usage))
   })
 
-  const http = new HttpService({
-    getContainerChain: (parentId) => collections.getChainFor(parentId),
+  const requestDeps = {
+    getContainerChain: (parentId: string | null) => collections.getChainFor(parentId),
     resolveInherited,
-    getVariableLayers: async (parentId, environmentId) => {
+    getVariableLayers: async (parentId: string | null, environmentId: string | null) => {
       const layers = [
         await environments.layer(environmentId),
         await collections.getCollectionLayer(parentId)
@@ -100,9 +108,64 @@ async function bootstrap(): Promise<void> {
     getWorkspaceSettings: () => workspaces.getSettings(),
     getProxySettings: () => config.get().proxy,
     // Platform-specific system proxy lookup is delegated to Chromium (macOS / Windows / Linux).
-    resolveSystemProxy: (url) => session.defaultSession.resolveProxy(url),
+    resolveSystemProxy: (url: string) => session.defaultSession.resolveProxy(url),
     userAgent: `${APP_NAME}/${app.getVersion()}`
+  }
+  const http = new HttpService(requestDeps)
+
+  const environmentName = (id: string | null): Promise<string | null> =>
+    id
+      ? environments
+          .get(id)
+          .then((e) => e.name)
+          .catch(() => null)
+      : Promise.resolve(null)
+
+  // WebSocket connections are recorded in the history of the Workspace they were opened in.
+  const wsContext = new Map<
+    string,
+    { workspacePath: string; requestId: string | null; environmentName: string | null }
+  >()
+  const ws = new WsService({
+    ...requestDeps,
+    emit: (payload) => send(EVENTS.wsEvent, payload),
+    onFinished: (summary) => {
+      const context = wsContext.get(summary.connectionId)
+      wsContext.delete(summary.connectionId)
+      if (!context) return
+      void history
+        .add(context.workspacePath, {
+          id: randomUUID(),
+          type: 'websocket',
+          sentAt: new Date(summary.startedAt).toISOString(),
+          requestId: context.requestId,
+          environmentName: context.environmentName,
+          request: summary.request,
+          result: {
+            openedAt: summary.openedAt ? new Date(summary.openedAt).toISOString() : null,
+            closedAt: new Date(summary.closedAt).toISOString(),
+            closeCode: summary.closeCode,
+            closeReason: summary.closeReason,
+            error: summary.error,
+            sent: summary.sent,
+            received: summary.received
+          }
+        })
+        .catch((error: unknown) => console.warn(`[history] not recorded: ${String(error)}`))
+    }
   })
+
+  const connectWs = async (input: WsConnectInput) => {
+    const workspace = workspaces.getCurrent()
+    if (workspace) {
+      wsContext.set(input.connectionId, {
+        workspacePath: workspace.path,
+        requestId: input.requestId,
+        environmentName: await environmentName(input.environmentId)
+      })
+    }
+    return ws.connect(input)
+  }
 
   /** Sends, then records the request (unresolved, no response body) in the history. */
   const sendHttp = async (input: HttpSendInput): Promise<HttpResult> => {
@@ -110,19 +173,13 @@ async function bootstrap(): Promise<void> {
     const sentAt = new Date().toISOString()
     const result = await http.send(input)
     if (workspace && !(result.kind === 'error' && result.code === 'CANCELLED')) {
-      const environmentName = input.environmentId
-        ? await environments
-            .get(input.environmentId)
-            .then((e) => e.name)
-            .catch(() => null)
-        : null
       await history
         .add(workspace.path, {
           id: randomUUID(),
           type: 'http',
           sentAt,
           requestId: input.requestId,
-          environmentName,
+          environmentName: await environmentName(input.environmentId),
           request: input.request,
           result:
             result.kind === 'response'
@@ -173,15 +230,18 @@ async function bootstrap(): Promise<void> {
     })
     created.on('closed', () => {
       if (mainWindow === created) mainWindow = null
+      ws.disconnectAll()
       closeGuardDirty = false
       closeConfirmed = false
     })
     // A reloaded or crashed renderer has lost its tabs: nothing left to protect.
     created.webContents.on('did-start-loading', () => {
       closeGuardDirty = false
+      ws.disconnectAll()
     })
     created.webContents.on('render-process-gone', () => {
       closeGuardDirty = false
+      ws.disconnectAll()
     })
     await new Promise<void>((resolve) =>
       created.webContents.once('did-finish-load', () => resolve())
@@ -249,6 +309,8 @@ async function bootstrap(): Promise<void> {
     history,
     sessions,
     sendHttp,
+    ws,
+    connectWs,
     setCloseGuard: (dirty) => {
       closeGuardDirty = dirty
     },

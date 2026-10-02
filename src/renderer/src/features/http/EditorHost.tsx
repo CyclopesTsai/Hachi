@@ -1,4 +1,5 @@
 import { AlertTriangle, Loader2, MousePointerClick, Plus, Radio } from 'lucide-react'
+import { WebSocketEditor } from '@renderer/features/websocket/WebSocketEditor'
 import { findNode } from '@shared/tree'
 import { Button } from '@renderer/components/ui/button'
 import { EnvironmentsEditor } from '@renderer/features/environments/EnvironmentsEditor'
@@ -37,11 +38,7 @@ function StaticView({ itemId }: { itemId: string }) {
       </div>
     )
   }
-  return (
-    <Placeholder icon={<Radio className="size-6" />}>
-      WebSocket 連線「{node.name}」的設定與訊息功能將於 Phase 4 加入。
-    </Placeholder>
-  )
+  return null
 }
 
 function TabContent({ tab }: { tab: Tab }) {
@@ -64,6 +61,8 @@ function TabContent({ tab }: { tab: Tab }) {
       return tab.draft ? <RequestEditor key={key} tab={tab} title={title} /> : null
     case 'container':
       return tab.draft ? <ContainerEditor key={key} tab={tab} title={title} /> : null
+    case 'websocket':
+      return tab.draft ? <WebSocketEditor key={key} tab={tab} title={title} /> : null
     case 'environments':
       return <EnvironmentsEditor key={key} tab={tab} />
   }
@@ -81,15 +80,24 @@ export function EditorHost() {
       ) : (
         <Placeholder icon={<MousePointerClick className="size-6" />}>
           從左側選擇一個請求，或按右鍵新增項目。
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            onClick={() => useTabsStore.getState().newRequest()}
-          >
-            <Plus />
-            新增請求
-          </Button>
+          <div className="mt-2 flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => useTabsStore.getState().newRequest('http')}
+            >
+              <Plus />
+              新增 HTTP 請求
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => useTabsStore.getState().newRequest('websocket')}
+            >
+              <Radio />
+              新增 WebSocket
+            </Button>
+          </div>
         </Placeholder>
       )}
     </div>

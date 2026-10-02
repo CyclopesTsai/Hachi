@@ -41,7 +41,8 @@ describe('ConfigService', () => {
         password: ''
       },
       ui: { requestBodyWrap: false, responseBodyWrap: false },
-      history: { maxEntries: 200 }
+      history: { maxEntries: 200 },
+      websocket: { messageLimit: 100 }
     })
     expect(await readDisk()).toEqual(config)
   })
