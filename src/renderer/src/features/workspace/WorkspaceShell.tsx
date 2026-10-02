@@ -15,6 +15,7 @@ import { EnvironmentSelect } from '@renderer/features/environments/EnvironmentSe
 import { HistoryUsageIndicator } from '@renderer/features/history/HistoryUsageIndicator'
 import { EditorHost } from '@renderer/features/http/EditorHost'
 import { WorkspaceSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
+import { FileDropZone } from '@renderer/features/transfer/TransferDialogs'
 import { useAppStore } from '@renderer/stores/app-store'
 import { DeleteWorkspaceDialog, RenameWorkspaceDialog } from './WorkspaceDialogs'
 
@@ -31,7 +32,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
   }, [workspace.id, loadWorkspaceSettings])
 
   return (
-    <div className="flex h-full flex-col" data-testid="workspace-shell">
+    <FileDropZone className="flex h-full flex-col" data-testid="workspace-shell">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
         <AppLogo />
         <span className="text-muted-foreground">/</span>
@@ -100,6 +101,6 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
         target={deleting ? workspace : null}
         onClose={() => setDeleting(false)}
       />
-    </div>
+    </FileDropZone>
   )
 }

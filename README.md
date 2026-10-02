@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前進度：**Phase 4**（WebSocket）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
+> 目前進度：**Phase 5a**（匯入匯出：Postman Collection / Environment、cURL；程式碼產生：cURL / fetch / axios / Python requests）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
@@ -32,18 +32,18 @@ npm run dev          # 啟動開發模式（renderer 支援 HMR）
 
 常用指令：
 
-| 指令                              | 說明                                                                                   |
-| --------------------------------- | -------------------------------------------------------------------------------------- |
-| `npm run dev`                     | 開發模式                                                                               |
-| `npm run build`                   | 建置到 `out/`                                                                          |
-| `npm start`                       | 以建置結果啟動（preview）                                                              |
-| `npm test`                        | 單元測試                                                                               |
-| `npm run test:e2e`                | 建置後啟動真正的 App 跑冒煙測試（Linux 無桌面環境請用 `xvfb-run -a npm run test:e2e`） |
-| `npm run typecheck`               | TypeScript 型別檢查                                                                    |
-| `npm run lint` / `npm run format` | ESLint / Prettier                                                                      |
-| `npm run check:licenses`          | 檢查所有隨 App 發佈的套件授權（只允許寬鬆授權，見 CONTRIBUTING.md）                    |
-| `npm run verify`                  | 以上檢查一次跑完                                                                       |
-| `npm run dist:mac`                | 打包 macOS `.dmg`（Phase 6 完善）                                                      |
+| 指令                              | 說明                                                                                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | 開發模式                                                                                                          |
+| `npm run build`                   | 建置到 `out/`                                                                                                     |
+| `npm start`                       | 以建置結果啟動（preview）                                                                                         |
+| `npm test`                        | 單元測試                                                                                                          |
+| `npm run test:e2e`                | 建置後啟動真正的 App 跑冒煙測試（測試期間會跳出 Hachi 視窗；Linux 無桌面環境請用 `xvfb-run -a npm run test:e2e`） |
+| `npm run typecheck`               | TypeScript 型別檢查                                                                                               |
+| `npm run lint` / `npm run format` | ESLint / Prettier                                                                                                 |
+| `npm run check:licenses`          | 檢查所有隨 App 發佈的套件授權（只允許寬鬆授權，見 CONTRIBUTING.md）                                               |
+| `npm run verify`                  | 以上檢查一次跑完                                                                                                  |
+| `npm run dist:mac`                | 打包 macOS `.dmg`（Phase 6 完善）                                                                                 |
 
 開發用環境變數：
 

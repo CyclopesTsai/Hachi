@@ -42,6 +42,9 @@ export const absolutePathSchema = z
 
 const noInput = z.undefined()
 
+/** Import files are limited to 50 MB (bytes); a JS string of that file is at most this long. */
+const MAX_IMPORT_TEXT = 50 * 1024 * 1024
+
 /** Item ids come from the tree the renderer received; paths are never accepted. */
 const itemIdSchema = z.string().min(1).max(1024)
 
@@ -142,6 +145,18 @@ export const inputSchemas = {
   [INVOKE.httpCancel]: z.strictObject({ runId: runIdSchema }),
   [INVOKE.httpGetBody]: z.strictObject({ runId: runIdSchema }),
   [INVOKE.httpSaveResponse]: z.strictObject({ runId: runIdSchema }),
+  [INVOKE.httpResolve]: z.strictObject({
+    parentId: itemIdSchema.nullable(),
+    environmentId: itemIdSchema.nullable(),
+    request: httpRequestSchema,
+    revealSecrets: z.boolean()
+  }),
+  [INVOKE.transferImportFile]: noInput,
+  [INVOKE.transferImportText]: z.strictObject({
+    fileName: z.string().max(1000),
+    text: z.string().max(MAX_IMPORT_TEXT)
+  }),
+  [INVOKE.transferExportPostman]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.envList]: noInput,
   [INVOKE.envGet]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.envCreate]: z.strictObject({ name: itemNameSchema }),

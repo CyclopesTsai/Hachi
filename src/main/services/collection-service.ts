@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { access, copyFile, mkdir, readdir, rename } from 'node:fs/promises'
+import { access, copyFile, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { HachiError, isHachiError } from '@shared/errors'
 import { copyName, slugify } from '@shared/file-names'
 import {
   COLLECTION_FILE,
   FOLDER_FILE,
+  ITEM_NAME_MAX,
   RESERVED_FILE_NAMES,
   collectionFormat,
   folderFormat,
@@ -20,6 +21,8 @@ import {
   type Variable
 } from '@shared/schemas/collection'
 import { mergeSecrets, splitSecrets } from '@shared/schemas/environment'
+import { requestScriptsSchema, type RequestScripts } from '@shared/schemas/http-request'
+import type { PortableCollection, PortableContainer, PortableItem } from '@shared/transfer/portable'
 import { anyRequestFormat, type AnyRequest } from '@shared/schemas/request'
 import { parseVersioned } from '@shared/schemas/versioned'
 import { WORKSPACE_FILE, WORKSPACE_LAYOUT, workspaceFormat } from '@shared/schemas/workspace'
@@ -70,6 +73,8 @@ export interface CreateItemInput {
 }
 
 const EMPTY_TREE: WorkspaceTree = { workspaceId: null, collections: [] }
+
+const hasScripts = (s: RequestScripts) => s.preRequest.trim() !== '' || s.postResponse.trim() !== ''
 
 function isHidden(name: string): boolean {
   return name.startsWith('.') || isTempFileName(name)
@@ -376,6 +381,73 @@ export class CollectionService {
     })
   }
 
+  /**
+   * Writes an imported Collection (new ids everywhere). A name already used by another
+   * Collection gets " copy" (decision 15). Half-written imports are removed on failure.
+   */
+  importCollection(collection: PortableCollection): Promise<{ id: string; tree: WorkspaceTree }> {
+    return this.run(async () => {
+      const root = this.requireRoot()
+      const siblings = this.tree.collections.map((c) => c.name)
+      const taken = new Set(siblings.map((n) => n.toLowerCase()))
+      const name = (
+        taken.has(collection.name.toLowerCase())
+          ? copyName(collection.name, siblings)
+          : collection.name
+      )
+        .slice(0, ITEM_NAME_MAX)
+        .trim()
+      const collectionsDir = path.join(root, WORKSPACE_LAYOUT.collectionsDir)
+      await mkdir(collectionsDir, { recursive: true })
+      const dir = path.join(
+        collectionsDir,
+        await this.uniqueName(collectionsDir, slugify(name), '')
+      )
+      const id = this.newId()
+      try {
+        await mkdir(dir)
+        const order = await this.writePortableChildren(dir, collection.children)
+        const { stored, secrets } = splitSecrets(collection.variables)
+        await setSecrets(root, 'collections', id, secrets)
+        await writeJsonAtomic(path.join(dir, COLLECTION_FILE), {
+          ...newCollectionFile(id, name),
+          headers: collection.headers,
+          auth: collection.auth.type === 'inherit' ? { type: 'none' } : collection.auth,
+          variables: stored,
+          order,
+          ...(collection.scripts ? { scripts: collection.scripts } : {})
+        })
+      } catch (error) {
+        await rm(dir, { recursive: true, force: true }).catch(() => undefined)
+        throw error
+      }
+      await this.writeOrder(null, [...this.childIds(null), id])
+      return { id, tree: await this.rescan() }
+    })
+  }
+
+  /**
+   * A Collection as a plain tree (for export). Secret variable values stay empty;
+   * unreadable items are left out and listed in `unreadable`.
+   */
+  exportCollection(id: string): Promise<{ collection: PortableCollection; unreadable: string[] }> {
+    return this.run(async () => {
+      const entry = this.requireContainer(id)
+      const node = findNode(this.tree, id)?.node
+      if (entry.kind !== 'collection' || node?.kind !== 'collection') {
+        throw new HachiError('INVALID_OPERATION', 'Only Collections can be exported')
+      }
+      const meta = entry.metaFile as string
+      const file = await readVersionedJson(meta, collectionFormat)
+      const unreadable: string[] = []
+      const container = await this.portableContainer(node, meta, [], unreadable)
+      return {
+        collection: { ...container, auth: file.auth, variables: file.variables },
+        unreadable
+      }
+    })
+  }
+
   rename(id: string, nameInput: string): Promise<WorkspaceTree> {
     return this.run(async () => {
       const entry = this.requireValid(id)
@@ -582,6 +654,73 @@ export class CollectionService {
       keep,
       reserved: ext === '.json' ? RESERVED_FILE_NAMES : []
     })
+  }
+
+  /** Writes imported folders / requests into `dir`; returns their new ids in order. */
+  private async writePortableChildren(dir: string, children: PortableItem[]): Promise<string[]> {
+    const ids: string[] = []
+    for (const child of children) {
+      const id = this.newId()
+      ids.push(id)
+      if (child.kind === 'folder') {
+        const sub = path.join(dir, await this.uniqueName(dir, slugify(child.name), ''))
+        await mkdir(sub)
+        const order = await this.writePortableChildren(sub, child.children)
+        await writeJsonAtomic(path.join(sub, FOLDER_FILE), {
+          ...newFolderFile(id, child.name),
+          headers: child.headers,
+          auth: child.auth,
+          order,
+          ...(child.scripts ? { scripts: child.scripts } : {})
+        })
+      } else {
+        const name = child.request.name
+        const file = path.join(dir, await this.uniqueName(dir, slugify(name), '.json'))
+        await writeJsonAtomic(file, { ...child.request, version: ITEM_VERSION, id, name })
+      }
+    }
+    return ids
+  }
+
+  private async portableContainer(
+    node: ContainerNode,
+    metaFile: string,
+    trail: string[],
+    unreadable: string[]
+  ): Promise<PortableContainer> {
+    const [level] = await this.readChainLevels([node.id])
+    const scripts = requestScriptsSchema.safeParse((await readRawObject(metaFile)).scripts)
+    const children: PortableItem[] = []
+    for (const child of node.children) {
+      const where = [...trail, child.name]
+      const entry = this.index.get(child.id)
+      if (!entry || entry.invalid) {
+        unreadable.push(where.join(' / '))
+        continue
+      }
+      try {
+        if (child.kind === 'request') {
+          children.push({ kind: 'request', request: await this.readRequest(entry.absPath) })
+        } else {
+          const inner = await this.portableContainer(
+            child,
+            entry.metaFile as string,
+            where,
+            unreadable
+          )
+          children.push({ kind: 'folder', ...inner })
+        }
+      } catch {
+        unreadable.push(where.join(' / '))
+      }
+    }
+    return {
+      name: node.name,
+      headers: level?.headers ?? [],
+      auth: level?.auth ?? { type: 'inherit' },
+      scripts: scripts.success && hasScripts(scripts.data) ? scripts.data : null,
+      children
+    }
   }
 
   /** Deep-copies a collection / folder, giving every item a new id. Returns the new root id. */

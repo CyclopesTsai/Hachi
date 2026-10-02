@@ -8,6 +8,7 @@ import type { Auth, KeyValue } from '@shared/schemas/collection'
 import type { HttpBody, HttpRequest } from '@shared/schemas/http-request'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import type { HttpErrorCode, InheritedHeader, InheritedSettings } from '@shared/http'
+import type { CodegenBody, CodegenRequest } from '@shared/codegen'
 
 /** A collection / folder in the chain above a request, outermost first. */
 export interface ContainerLevel {
@@ -236,5 +237,100 @@ export async function buildRequest(input: BuildInput): Promise<BuiltRequest> {
       maxRedirects: workspace.maxRedirects,
       useProxy: s.useProxy
     }
+  }
+}
+
+export interface CodegenBuild {
+  request: CodegenRequest
+  /** Set when the URL is not valid; the code then uses the URL field as typed. */
+  urlError: string | null
+}
+
+/**
+ * What code generation needs (decision 69): like buildRequest, but Basic auth stays
+ * separate, form-data files are referenced by path, and Hachi's own default headers
+ * (User-Agent, Accept) are left out.
+ */
+export function buildCodegenRequest(input: {
+  request: HttpRequest
+  inherited: InheritedSettings
+  workspace: WorkspaceSettings
+}): CodegenBuild {
+  const { request, inherited, workspace } = input
+  const auth = effectiveAuth(request.auth, inherited)
+  const { headers, authQuery } = buildHeaders(
+    request.headers,
+    inherited,
+    auth.type === 'basic' ? { type: 'none' } : auth
+  )
+  // An explicit Authorization header wins over Basic auth, as when sending.
+  const basicAuth =
+    auth.type === 'basic' && !hasHeader(headers, 'authorization')
+      ? { username: auth.username, password: auth.password }
+      : null
+
+  let url = request.url.trim()
+  let urlError: string | null = null
+  try {
+    url = buildUrl(request.url, request.params, authQuery)
+  } catch (error) {
+    urlError = error instanceof Error ? error.message : String(error)
+  }
+
+  const b = request.body
+  let body: CodegenBody = { kind: 'none' }
+  let contentType: string | null = null
+  if (request.method !== 'HEAD') {
+    switch (b.mode) {
+      case 'json':
+        body = { kind: 'text', text: b.json, json: true }
+        contentType = 'application/json'
+        break
+      case 'raw':
+        contentType = b.rawContentType || 'text/plain'
+        body = { kind: 'text', text: b.raw, json: /json/i.test(contentType) }
+        break
+      case 'urlencoded':
+        body = {
+          kind: 'urlencoded',
+          fields: b.urlencoded
+            .filter(isActive)
+            .map((r): [string, string] => [r.key.trim(), r.value])
+        }
+        contentType = 'application/x-www-form-urlencoded'
+        break
+      case 'formData':
+        body = {
+          kind: 'formData',
+          fields: b.formData
+            .filter((f) => f.enabled && f.key.trim() !== '' && (f.type === 'text' || f.filePath))
+            .map((f) =>
+              f.type === 'file'
+                ? { type: 'file' as const, key: f.key.trim(), path: f.filePath }
+                : { type: 'text' as const, key: f.key.trim(), value: f.value }
+            )
+        }
+        break
+    }
+  }
+  if (contentType && !hasHeader(headers, 'content-type'))
+    headers.push(['Content-Type', contentType])
+
+  const s = request.settings
+  return {
+    request: {
+      method: request.method,
+      url,
+      headers,
+      basicAuth,
+      body,
+      options: {
+        validateSSL: s.validateSSL ?? workspace.validateSSL,
+        followRedirects: s.followRedirects ?? workspace.followRedirects,
+        maxRedirects: workspace.maxRedirects,
+        timeoutMs: s.timeoutMs ?? workspace.timeoutMs
+      }
+    },
+    urlError
   }
 }

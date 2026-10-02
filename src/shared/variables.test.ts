@@ -111,6 +111,36 @@ describe('VariableResolver.resolve', () => {
     expect(r.unresolved.size).toBe(0)
   })
 
+  it('generates the Phase 5 dynamic variables (decision 78)', () => {
+    let n = 0
+    const values = [0, 0.99, 0.2, 0.7]
+    const r = new VariableResolver(buildVariableMap([]), {
+      ...fixed,
+      guid: () => 'uuid',
+      random: () => values[n++ % values.length] as number
+    })
+    expect(r.resolve('{{$randomUUID}}')).toBe('uuid')
+    expect(r.resolve('{{$randomString}}')).toMatch(/^[a-z0-9]{16}$/)
+    expect(r.resolve('{{$randomAlphaNumeric}}')).toMatch(/^[a-z0-9]$/)
+    expect(r.resolve('{{$randomEmail}}')).toMatch(/^user_[a-z0-9]{8}@example\.com$/)
+    expect(['true', 'false']).toContain(r.resolve('{{$randomBoolean}}'))
+    expect(r.unresolved.size).toBe(0)
+  })
+
+  it('can keep secret variables as {{name}} (code generation)', () => {
+    const map = buildVariableMap([
+      env(
+        v('token', 's3cret', { secret: true }),
+        v('auth', 'Bearer {{token}}'),
+        v('host', 'a.test')
+      )
+    ])
+    const r = new VariableResolver(map, fixed, { keepSecrets: true })
+    expect(r.resolve('{{host}} {{auth}} {{token}}')).toBe('a.test Bearer {{token}} {{token}}')
+    expect(r.unresolved.size).toBe(0)
+    expect(new VariableResolver(map, fixed).resolve('{{auth}}')).toBe('Bearer s3cret')
+  })
+
   it('lets user variables override dynamic names', () => {
     expect(resolver(env(v('$guid', 'mine'))).resolve('{{$guid}}')).toBe('mine')
   })

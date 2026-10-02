@@ -9,6 +9,7 @@ import {
   FolderOpen,
   FolderPlus,
   Layers,
+  Share,
   Pencil,
   Radio,
   RefreshCw,
@@ -27,6 +28,7 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { isTabDirty, itemTabKey } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { useTransferStore } from '@renderer/stores/transfer-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
 import type { DropPosition, FlatRow } from './tree-model'
@@ -271,6 +273,14 @@ export function TreeRow({
               <Copy />
               複製
             </ContextMenuItem>
+            {node.kind === 'collection' && (
+              <ContextMenuItem
+                onSelect={() => void useTransferStore.getState().exportPostman(node.id)}
+              >
+                <Share />
+                匯出為 Postman Collection…
+              </ContextMenuItem>
+            )}
             <ContextMenuSeparator />
           </>
         )}

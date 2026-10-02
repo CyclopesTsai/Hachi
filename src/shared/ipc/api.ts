@@ -18,6 +18,7 @@ import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
 import type { HttpRequest } from '../schemas/http-request'
 import type { WsEventPayload } from '../ws'
+import type { CodegenRequest } from '../codegen'
 import type { SessionData } from '../schemas/session'
 import type { WorkspaceSettings } from '../schemas/workspace'
 import type { ItemKind, WorkspaceTree } from '../tree'
@@ -236,6 +237,53 @@ export interface WsDisconnectInput {
   reason?: string
 }
 
+export interface HttpResolveInput {
+  parentId: string | null
+  environmentId: string | null
+  /** Current editor content, before variable substitution. */
+  request: HttpRequest
+  /** False: secret variables stay as `{{name}}` in the generated code (decision 69). */
+  revealSecrets: boolean
+}
+
+export interface HttpResolveResult {
+  request: CodegenRequest
+  /** Set when the URL is invalid; `request.url` is then the URL field as typed. */
+  urlError: string | null
+  unresolvedVariables: string[]
+}
+
+export interface ImportTextInput {
+  /** For the report only. */
+  fileName: string
+  /** File content (JSON), e.g. of a file dropped on the window. */
+  text: string
+}
+
+export interface ImportReport {
+  kind: 'collection' | 'environment'
+  /** Id of the created Collection / environment. */
+  id: string
+  /** Final name (" copy" added when the name was taken). */
+  name: string
+  fileName: string
+  folders: number
+  requests: number
+  variables: number
+  /** What could not be imported exactly (unsupported auth, body types, …). */
+  warnings: string[]
+}
+
+export interface ExportResult {
+  /** Where the file was written. */
+  path: string
+  /** WebSocket requests left out (Postman v2.1 has no WebSocket items). */
+  skipped: string[]
+  /** Items whose files could not be read. */
+  unreadable: string[]
+  warnings: string[]
+}
+
 export interface UnresolvedResult {
   /** `{{names}}` that had no value and were sent as-is. */
   unresolvedVariables: string[]
@@ -304,6 +352,10 @@ export interface InvokeMap {
   'http:cancel': { input: RunIdInput; output: boolean }
   'http:getBody': { input: RunIdInput; output: string }
   'http:saveResponse': { input: RunIdInput; output: string | null }
+  'http:resolve': { input: HttpResolveInput; output: HttpResolveResult }
+  'transfer:importFile': { input: void; output: ImportReport | null }
+  'transfer:importText': { input: ImportTextInput; output: ImportReport }
+  'transfer:exportPostman': { input: ItemIdInput; output: ExportResult | null }
   'env:list': { input: void; output: EnvironmentSummary[] }
   'env:get': { input: ItemIdInput; output: EnvironmentData }
   'env:create': { input: EnvironmentCreateInput; output: EnvironmentMutationResult }
@@ -402,6 +454,15 @@ export interface HachiApi {
     getBody: InvokeFn<'http:getBody'>
     /** Shows a save dialog and writes the response body. Returns the path, or null if cancelled. */
     saveResponse: InvokeFn<'http:saveResponse'>
+    /** The request as it would be sent, for code generation (nothing is sent). */
+    resolve: InvokeFn<'http:resolve'>
+  }
+  transfer: {
+    /** Open dialog, then imports a Postman Collection / Environment. Null if cancelled. */
+    importFile: InvokeFn<'transfer:importFile'>
+    importText: InvokeFn<'transfer:importText'>
+    /** Save dialog, then writes the Collection as Postman v2.1. Null if cancelled. */
+    exportPostman: InvokeFn<'transfer:exportPostman'>
   }
   env: {
     list: InvokeFn<'env:list'>

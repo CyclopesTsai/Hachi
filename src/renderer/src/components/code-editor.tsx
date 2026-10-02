@@ -8,6 +8,8 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { json } from '@codemirror/lang-json'
 import { html } from '@codemirror/lang-html'
 import { xml } from '@codemirror/lang-xml'
+import { javascript } from '@codemirror/lang-javascript'
+import { python } from '@codemirror/lang-python'
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -41,7 +43,7 @@ import { findVariableTokens, type VariableMap } from '@shared/variables'
 import { cn } from '@renderer/lib/utils'
 import { describeVariable } from '@renderer/lib/variables'
 
-export type CodeLanguage = 'json' | 'html' | 'xml' | 'text'
+export type CodeLanguage = 'json' | 'html' | 'xml' | 'javascript' | 'python' | 'text'
 
 function languageExtension(language: CodeLanguage): Extension {
   switch (language) {
@@ -51,6 +53,10 @@ function languageExtension(language: CodeLanguage): Extension {
       return html()
     case 'xml':
       return xml()
+    case 'javascript':
+      return javascript()
+    case 'python':
+      return python()
     default:
       return []
   }

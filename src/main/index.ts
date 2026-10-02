@@ -28,6 +28,7 @@ import { SessionService } from './services/session-service'
 import { WsService } from './services/ws/ws-service'
 import { resolveInherited } from './services/http/build-request'
 import { HttpService } from './services/http/http-service'
+import { TransferService } from './services/transfer-service'
 import { WorkspaceService } from './services/workspace-service'
 import { createMainWindow, getRendererUrl } from './window'
 
@@ -112,6 +113,7 @@ async function bootstrap(): Promise<void> {
     userAgent: `${APP_NAME}/${app.getVersion()}`
   }
   const http = new HttpService(requestDeps)
+  const transfer = new TransferService(collections, environments)
 
   const environmentName = (id: string | null): Promise<string | null> =>
     id
@@ -280,6 +282,8 @@ async function bootstrap(): Promise<void> {
     save: () => sendMenuCommand('request.save'),
     closeTab: () => sendMenuCommand('tab.close'),
     openSettings: () => sendMenuCommand('app.settings'),
+    importFile: () => sendMenuCommand('import.file'),
+    importCurl: () => sendMenuCommand('import.curl'),
     openWorkspace: () => sendMenuCommand('workspace.open'),
     openRecentWorkspace: (workspacePath) =>
       sendMenuCommand('workspace.openRecent', { path: workspacePath }),
@@ -308,6 +312,7 @@ async function bootstrap(): Promise<void> {
     environments,
     history,
     sessions,
+    transfer,
     sendHttp,
     ws,
     connectWs,

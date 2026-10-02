@@ -14,6 +14,10 @@ export interface MenuActions {
   /** Closes the active tab (CmdOrCtrl+W); the window when no tab is open. */
   closeTab(): void
   openSettings(): void
+  /** Import a Postman Collection / Environment file (no shortcut). */
+  importFile(): void
+  /** Paste a cURL command into a new request (no shortcut). */
+  importCurl(): void
 }
 
 export interface MenuOptions {
@@ -86,6 +90,9 @@ export function buildMenuTemplate(
         { label: 'Open Recent', submenu: recentItems },
         { type: 'separator' },
         { label: 'Switch Workspace…', click: () => actions.switchWorkspace() },
+        { type: 'separator' },
+        { label: 'Import…', click: () => actions.importFile() },
+        { label: 'Import cURL…', click: () => actions.importCurl() },
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => actions.save() },
         { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => actions.closeTab() },

@@ -24,9 +24,13 @@ export async function selectDirectory(
 /** Native file picker. Returns the chosen absolute path, or null if cancelled. */
 export async function selectFile(
   parent: BrowserWindow | null,
-  options: { title?: string } = {}
+  options: { title?: string; filters?: OpenDialogOptions['filters'] } = {}
 ): Promise<string | null> {
-  const dialogOptions: OpenDialogOptions = { title: options.title, properties: ['openFile'] }
+  const dialogOptions: OpenDialogOptions = {
+    title: options.title,
+    filters: options.filters,
+    properties: ['openFile']
+  }
   const result = parent
     ? await dialog.showOpenDialog(parent, dialogOptions)
     : await dialog.showOpenDialog(dialogOptions)

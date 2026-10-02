@@ -22,6 +22,7 @@ const shots = process.env.SMOKE_SCREENSHOT_DIR ?? path.join(root, 'out', 'smoke'
 const tmp = await mkdtemp(path.join(os.tmpdir(), 'hachi-smoke-'))
 const userData = path.join(tmp, 'userData')
 const docs = path.join(tmp, 'Documents', 'Hachi')
+const trashDir = path.join(tmp, 'Trash')
 await mkdir(shots, { recursive: true })
 
 // Local HTTP server for the Phase 2 checks.
@@ -105,6 +106,9 @@ const args = [root]
 // Chromium refuses to run as root without this flag (CI containers).
 if (process.platform === 'linux' && process.getuid?.() === 0) args.push('--no-sandbox')
 
+/** The window of the latest launch, for a screenshot when a check fails. */
+let lastPage = null
+
 async function launch() {
   const app = await electron.launch({
     executablePath: electronPath,
@@ -117,8 +121,19 @@ async function launch() {
       HACHI_PRODUCTION_MENU: '1'
     }
   })
+  // Deleted items go to a folder of the test instead of the real Trash of this computer.
+  await app.evaluate(({ shell }, dir) => {
+    const fs = process.getBuiltinModule('node:fs')
+    const nodePath = process.getBuiltinModule('node:path')
+    fs.mkdirSync(dir, { recursive: true })
+    let n = 0
+    shell.trashItem = async (p) => {
+      fs.renameSync(p, nodePath.join(dir, `${++n}-${nodePath.basename(p)}`))
+    }
+  }, trashDir)
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
+  lastPage = page
   return { app, page }
 }
 
@@ -144,6 +159,20 @@ async function waitUntil(predicate, what, timeoutMs = 5000) {
 }
 
 const readJson = async (p) => JSON.parse(await readFile(p, 'utf8'))
+
+/** Clicks a native menu item by label, in whichever menu it is (Settings… differs by OS). */
+const clickMenu = (app, label) =>
+  app.evaluate(({ Menu }, wanted) => {
+    const find = (items) => {
+      for (const item of items) {
+        if (item.label === wanted) return item
+        const inner = item.submenu && find(item.submenu.items)
+        if (inner) return inner
+      }
+      return null
+    }
+    find(Menu.getApplicationMenu().items).click()
+  }, label)
 
 /** Helpers bound to the current page (re-created after a relaunch). */
 function treeHelpers(page) {
@@ -218,6 +247,7 @@ try {
       'on',
       'request',
       'session',
+      'transfer',
       'tree',
       'workspace',
       'ws'
@@ -926,10 +956,163 @@ try {
     'closing a connected tab asks first; 中斷 sends 1000; the connection is recorded in history; "+" opens an unsaved WebSocket'
   )
 
-  await app.evaluate(({ Menu }) => {
-    const file = Menu.getApplicationMenu().items.find((i) => i.label === 'File')
-    file.submenu.items.find((i) => i.label === 'Settings…').click()
+  // ---- Phase 5a: cURL import, code generation, Postman import / export ----
+  const fileMenuLabels = await app.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()
+      .items.find((i) => i.label === 'File')
+      .submenu.items.map((i) => i.label)
+  )
+  assert.ok(fileMenuLabels.includes('Import…') && fileMenuLabels.includes('Import cURL…'))
+  await clickMenu(app, 'Import cURL…')
+  await page
+    .getByTestId('curl-input')
+    .fill(
+      `curl -X PUT '{{baseUrl}}/echo?from=curl' \\\n  -H 'X-Curl: yes' -H 'X-Token: {{token}}' \\\n  --data-raw '{"imported":true}'`
+    )
+  await page.getByRole('button', { name: '匯入', exact: true }).click()
+  const curlEditor = page.getByTestId('request-editor')
+  await curlEditor.getByText('尚未儲存的請求').waitFor()
+  assert.equal(await page.getByTestId('url-input').inputValue(), '{{baseUrl}}/echo?from=curl')
+  await curlEditor.getByRole('button', { name: '發送' }).click()
+  await waitUntil(
+    async () =>
+      (
+        await page
+          .getByTestId('response-body')
+          .innerText()
+          .catch(() => '')
+      ).includes('"x-curl": "yes"'),
+    'cURL request sent'
+  )
+  const curlEcho = await page.getByTestId('response-body').innerText()
+  assert.ok(curlEcho.includes('"method": "PUT"') && curlEcho.includes('imported'))
+  step('File → Import cURL… opens the command as an unsaved request that can be sent')
+
+  await curlEditor.getByTestId('codegen-button').click()
+  const codeOut = page.getByTestId('codegen-output')
+  await waitUntil(async () => (await codeOut.innerText()).includes('curl -X PUT'), 'curl code')
+  const curlCode = await codeOut.innerText()
+  assert.ok(curlCode.includes(`${testServer.url}/echo?from=curl`), 'variables resolved')
+  assert.ok(curlCode.includes('X-Token: {{token}}') && !curlCode.includes('s3cret-value'))
+  await page.getByTestId('codegen-reveal').check()
+  await waitUntil(async () => (await codeOut.innerText()).includes('s3cret-value'), 'reveal secret')
+  await page.getByTestId('codegen-language').selectOption('python')
+  await waitUntil(async () => (await codeOut.innerText()).includes('import requests'), 'python')
+  // Don't touch the real clipboard of the machine running the test.
+  await page.evaluate(() => {
+    navigator.clipboard.writeText = async (text) => {
+      window.__copied = text
+    }
   })
+  await page.getByRole('button', { name: '複製' }).click()
+  await waitUntil(
+    async () => (await page.evaluate(() => window.__copied ?? '')).includes('import requests'),
+    'code copied'
+  )
+  await page.screenshot({ path: path.join(shots, '10-codegen.png') })
+  await page.keyboard.press('Escape')
+  step('Code: cURL / Python generated (secrets kept as {{name}} until revealed), copy button')
+
+  const postmanCollection = {
+    info: {
+      name: 'Shop',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    variable: [{ key: 'shopBase', value: testServer.url }],
+    item: [
+      { name: 'Ping', request: { method: 'GET', url: '{{shopBase}}/json' } },
+      {
+        name: 'Folder A',
+        item: [
+          {
+            name: 'Echo',
+            request: {
+              method: 'POST',
+              url: '{{shopBase}}/echo',
+              auth: { type: 'oauth2' },
+              body: { mode: 'raw', raw: '{"a":1}', options: { raw: { language: 'json' } } }
+            }
+          }
+        ]
+      }
+    ]
+  }
+  const postmanEnv = {
+    name: 'Shop Prod',
+    values: [{ key: 'shopToken', value: 'tok-1', type: 'secret', enabled: true }]
+  }
+  await page.evaluate(
+    (files) => {
+      const dt = new DataTransfer()
+      for (const [name, text] of files) {
+        dt.items.add(new File([text], name, { type: 'application/json' }))
+      }
+      const target = document.querySelector('[data-testid="workspace-shell"]')
+      const init = { dataTransfer: dt, bubbles: true, cancelable: true }
+      target.dispatchEvent(new DragEvent('dragover', init))
+      target.dispatchEvent(new DragEvent('drop', init))
+    },
+    [
+      ['shop.postman_collection.json', JSON.stringify(postmanCollection)],
+      ['prod.postman_environment.json', JSON.stringify(postmanEnv)]
+    ]
+  )
+  const transferResult = page.getByTestId('transfer-result')
+  await transferResult.waitFor()
+  const importText = await transferResult.innerText()
+  assert.ok(importText.includes('已建立 Collection「Shop」'), importText)
+  assert.ok(importText.includes('已建立環境「Shop Prod」'), importText)
+  assert.ok(importText.includes('oauth2'), 'unsupported auth reported')
+  await page.screenshot({ path: path.join(shots, '11-import.png') })
+  await transferResult.getByRole('button', { name: '確定' }).click()
+  await t.row('Shop').waitFor()
+  const shopDir = path.join(colDir, 'shop')
+  assert.equal((await readJson(path.join(shopDir, 'collection.json'))).variables[0].key, 'shopBase')
+  assert.equal((await readJson(path.join(shopDir, 'folder-a', 'echo.json'))).body.json, '{"a":1}')
+  const prodEnv = await readJson(path.join(wsDir, 'environments', 'shop-prod.json'))
+  assert.equal(prodEnv.variables[0].value, '', 'secret value not in the environment file')
+  assert.ok((await readFile(path.join(wsDir, '.hachi-secrets.json'), 'utf8')).includes('tok-1'))
+  await t.row('Ping').click()
+  await page.getByTestId('request-editor').getByRole('button', { name: '發送' }).click()
+  await waitUntil(
+    async () =>
+      /^200/.test(
+        await page
+          .getByTestId('response-status')
+          .innerText()
+          .catch(() => '')
+      ),
+    'imported request sent with its collection variable'
+  )
+  step('drop Postman Collection + Environment files: written as Hachi files, secrets separate')
+
+  const shopExport = path.join(tmp, 'shop-export.json')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
+  }, shopExport)
+  await t.contextAction('Shop', '匯出為 Postman Collection…')
+  await transferResult.waitFor()
+  await transferResult.getByRole('button', { name: '確定' }).click()
+  const exportedShop = await readJson(shopExport)
+  assert.equal(
+    exportedShop.info.schema,
+    'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+  )
+  assert.deepEqual(
+    exportedShop.item.map((i) => i.name),
+    ['Ping', 'Folder A']
+  )
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, shopExport)
+  await clickMenu(app, 'Import…')
+  await transferResult.waitFor()
+  assert.ok((await transferResult.innerText()).includes('已建立 Collection「Shop copy」'))
+  await transferResult.getByRole('button', { name: '確定' }).click()
+  await t.row('Shop copy').waitFor()
+  step('export a Collection as Postman v2.1; File → Import… reads it back as "Shop copy"')
+
+  await clickMenu(app, 'Settings…')
   const appSettings = page.getByTestId('app-settings-dialog')
   await appSettings.waitFor()
   const notice = await appSettings.getByTestId('legal-notice').innerText()
@@ -1012,6 +1195,16 @@ try {
   await page.getByRole('button', { name: '移到垃圾桶' }).click()
   await page.getByTestId('welcome-screen').waitFor()
   assert.ok(!(await exists(wsDir)), 'workspace folder moved to trash')
+  assert.ok(
+    (await readdir(trashDir)).some((n) => n.endsWith('Smoke API')),
+    'trashed into the test folder, not the real Trash'
+  )
+  // The recent list is written right after the folder is trashed (slower on macOS).
+  await waitUntil(
+    async () =>
+      (await readJson(path.join(userData, 'app-config.json'))).recentWorkspaces.length === 0,
+    'recent list updated'
+  )
   const config2 = await readJson(path.join(userData, 'app-config.json'))
   assert.deepEqual(config2.recentWorkspaces, [])
   assert.equal(config2.lastWorkspacePath, null)
@@ -1019,6 +1212,10 @@ try {
   await app.close()
 
   console.log(`\nAll smoke checks passed. Screenshots: ${shots}`)
+} catch (error) {
+  await lastPage?.screenshot({ path: path.join(shots, 'failure.png') }).catch(() => undefined)
+  console.error(`Failure screenshot: ${path.join(shots, 'failure.png')}`)
+  throw error
 } finally {
   testServer.close()
   wsServer.close()

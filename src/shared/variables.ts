@@ -7,8 +7,8 @@
  * - A value may reference other variables; references are followed up to
  *   MAX_DEPTH levels and cycles are left unreplaced.
  * - Unknown names are left as `{{name}}` and reported in `unresolved`.
- * - `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, `{{$randomInt}}` are generated
- *   on every occurrence, unless a user variable with the same name exists.
+ * - Dynamic variables (DYNAMIC_VARIABLES, e.g. `{{$guid}}`) are generated on every
+ *   occurrence, unless a user variable with the same name exists.
  */
 import type { InheritedSettings } from './http'
 import type { Auth, KeyValue, Variable } from './schemas/collection'
@@ -21,7 +21,12 @@ export const DYNAMIC_VARIABLES = {
   $guid: 'UUID v4',
   $timestamp: '目前的 Unix 時間（秒）',
   $isoTimestamp: '目前的 ISO 8601 時間',
-  $randomInt: '0–1000 的隨機整數'
+  $randomInt: '0–1000 的隨機整數',
+  $randomUUID: 'UUID v4（同 $guid）',
+  $randomString: '16 個隨機英數字',
+  $randomAlphaNumeric: '1 個隨機英數字',
+  $randomEmail: '隨機的 Email 地址（example.com）',
+  $randomBoolean: 'true 或 false'
 } as const
 export type DynamicVariableName = keyof typeof DYNAMIC_VARIABLES
 
@@ -79,9 +84,20 @@ const systemDynamic: DynamicValues = {
   random: () => Math.random()
 }
 
+const ALPHANUMERIC = 'abcdefghijklmnopqrstuvwxyz0123456789'
+
+function randomChars(count: number, d: DynamicValues): string {
+  let text = ''
+  for (let i = 0; i < count; i++) {
+    text += ALPHANUMERIC[Math.floor(d.random() * ALPHANUMERIC.length)] ?? 'a'
+  }
+  return text
+}
+
 function dynamicValue(name: DynamicVariableName, d: DynamicValues): string {
   switch (name) {
     case '$guid':
+    case '$randomUUID':
       return d.guid()
     case '$timestamp':
       return String(Math.floor(d.now().getTime() / 1000))
@@ -89,6 +105,14 @@ function dynamicValue(name: DynamicVariableName, d: DynamicValues): string {
       return d.now().toISOString()
     case '$randomInt':
       return String(Math.floor(d.random() * 1001))
+    case '$randomString':
+      return randomChars(16, d)
+    case '$randomAlphaNumeric':
+      return randomChars(1, d)
+    case '$randomEmail':
+      return `user_${randomChars(8, d)}@example.com`
+    case '$randomBoolean':
+      return d.random() < 0.5 ? 'true' : 'false'
   }
 }
 
@@ -109,13 +133,19 @@ export function findVariableTokens(text: string): VariableToken[] {
   return tokens
 }
 
+export interface ResolverOptions {
+  /** Leave `{{name}}` of secret variables in place (e.g. generated code). Not "unresolved". */
+  keepSecrets?: boolean
+}
+
 /** Resolves strings against a variable map, collecting the names it could not resolve. */
 export class VariableResolver {
   readonly unresolved = new Set<string>()
 
   constructor(
     private readonly map: VariableMap,
-    private readonly dynamic: DynamicValues = systemDynamic
+    private readonly dynamic: DynamicValues = systemDynamic,
+    private readonly options: ResolverOptions = {}
   ) {}
 
   resolve(text: string): string {
@@ -129,6 +159,7 @@ export class VariableResolver {
       if (name === '') return whole
       const variable = this.map.get(name)
       if (variable) {
+        if (variable.secret && this.options.keepSecrets) return whole
         if (stack.includes(name) || stack.length >= MAX_DEPTH) {
           this.unresolved.add(name)
           return whole

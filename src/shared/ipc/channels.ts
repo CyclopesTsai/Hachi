@@ -43,6 +43,10 @@ export const INVOKE = {
   httpCancel: 'http:cancel',
   httpGetBody: 'http:getBody',
   httpSaveResponse: 'http:saveResponse',
+  httpResolve: 'http:resolve',
+  transferImportFile: 'transfer:importFile',
+  transferImportText: 'transfer:importText',
+  transferExportPostman: 'transfer:exportPostman',
   envList: 'env:list',
   envGet: 'env:get',
   envCreate: 'env:create',
@@ -86,6 +90,8 @@ export const MENU_COMMANDS = [
   'workspace.openRecent',
   'request.save',
   'tab.close',
-  'app.settings'
+  'app.settings',
+  'import.file',
+  'import.curl'
 ] as const
 export type MenuCommand = (typeof MENU_COMMANDS)[number]

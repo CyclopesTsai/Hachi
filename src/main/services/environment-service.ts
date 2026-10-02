@@ -4,7 +4,8 @@ import path from 'node:path'
 import { HachiError, isHachiError } from '@shared/errors'
 import type { EnvironmentData, EnvironmentSummary } from '@shared/ipc/api'
 import { copyName, slugify } from '@shared/file-names'
-import type { Variable } from '@shared/schemas/collection'
+import { ITEM_NAME_MAX, type Variable } from '@shared/schemas/collection'
+import type { PortableEnvironment } from '@shared/transfer/portable'
 import {
   ENVIRONMENT_VERSION,
   environmentFileSchema,
@@ -72,6 +73,28 @@ export class EnvironmentService {
       await writeJsonAtomic(
         file,
         environmentFileSchema.parse({ version: ENVIRONMENT_VERSION, id, name })
+      )
+      return { id, list: await this.scan() }
+    })
+  }
+
+  /** Creates an environment from an import. A name already in use gets " copy". */
+  importEnvironment(env: PortableEnvironment): Promise<{ id: string; list: EnvironmentSummary[] }> {
+    return this.run(async () => {
+      const dir = await this.requireDir()
+      const existing = (await this.scan()).map((e) => e.name)
+      const taken = new Set(existing.map((n) => n.toLowerCase()))
+      const name = (taken.has(env.name.toLowerCase()) ? copyName(env.name, existing) : env.name)
+        .slice(0, ITEM_NAME_MAX)
+        .trim()
+      const id = this.newId()
+      const { stored, secrets } = splitSecrets(env.variables)
+      // Secrets first: if this fails the committed file still has no secret values.
+      await setSecrets(this.requireRoot(), 'environments', id, secrets)
+      const file = path.join(dir, await uniqueFileName(dir, slugify(name), '.json'))
+      await writeJsonAtomic(
+        file,
+        environmentFileSchema.parse({ version: ENVIRONMENT_VERSION, id, name, variables: stored })
       )
       return { id, list: await this.scan() }
     })

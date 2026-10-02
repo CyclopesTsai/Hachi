@@ -178,3 +178,59 @@ describe('ResponseStore', () => {
     expect(store.get('3')).toBeUndefined()
   })
 })
+
+describe('HttpService.resolveForCode', () => {
+  const layers: VariableLayer[] = [
+    {
+      source: 'environment',
+      sourceName: 'Dev',
+      variables: [
+        { id: '1', key: 'host', value: 'api.test', enabled: true, secret: false },
+        { id: '2', key: 'pass', value: 'hunter2', enabled: true, secret: true }
+      ]
+    }
+  ]
+  const input = (revealSecrets: boolean) => ({
+    parentId: 'c',
+    environmentId: 'dev',
+    revealSecrets,
+    request: request('https://{{host}}/users', {
+      method: 'POST',
+      params: [{ id: 'p', key: 'q', value: '{{missing}}', enabled: true }],
+      headers: [{ id: 'h', key: 'X-Pass', value: '{{pass}}', enabled: true }],
+      auth: { type: 'basic', username: 'me', password: '{{pass}}' },
+      body: { mode: 'json', json: '{"a":1}' }
+    })
+  })
+
+  it('resolves like sending, keeps secrets as {{name}} and leaves out default headers', async () => {
+    const {
+      request: r,
+      unresolvedVariables,
+      urlError
+    } = await service(layers).resolveForCode(input(false))
+    expect(urlError).toBeNull()
+    expect(r.url).toBe('https://api.test/users?q=%7B%7Bmissing%7D%7D')
+    expect(r.headers).toEqual([
+      ['X-Pass', '{{pass}}'],
+      ['X-From', 'collection'],
+      ['Content-Type', 'application/json']
+    ])
+    expect(r.basicAuth).toEqual({ username: 'me', password: '{{pass}}' })
+    expect(r.body).toEqual({ kind: 'text', text: '{"a":1}', json: true })
+    expect(unresolvedVariables).toEqual(['missing'])
+  })
+
+  it('reveals secrets on request, and reports an invalid URL instead of failing', async () => {
+    const revealed = await service(layers).resolveForCode(input(true))
+    expect(revealed.request.basicAuth?.password).toBe('hunter2')
+    const bad = await service().resolveForCode({
+      ...input(false),
+      request: request('ftp://x')
+    })
+    expect(bad.urlError).toMatch(/Unsupported protocol/)
+    expect(bad.request.url).toBe('ftp://x')
+    // The collection's Bearer auth is inherited (no Basic here).
+    expect(bad.request.headers).toContainEqual(['Authorization', 'Bearer tok'])
+  })
+})

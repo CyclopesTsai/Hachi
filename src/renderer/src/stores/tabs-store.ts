@@ -71,6 +71,8 @@ interface TabsState {
   openEnvironments(): void
   /** New unsaved HTTP or WebSocket request ("+" button). */
   newRequest(type?: 'http' | 'websocket'): void
+  /** Opens a request (e.g. from a cURL import) as a new unsaved tab. */
+  openDraft(request: HttpRequest): void
   /** Opens a history entry as a new unsaved request. */
   openHistoryEntry(entry: HistoryEntry): Promise<void>
   pin(key: TabKey): void
@@ -327,6 +329,10 @@ export const useTabsStore = create<TabsState>()((set, get) => {
           ? createDraftTab(newWsRequest(), { parentId: null })
           : createDraftTab(newHttpRequest(), { parentId: null })
       )
+    },
+
+    openDraft(request) {
+      addTab(createDraftTab(request, { parentId: null }))
     },
 
     async openHistoryEntry(entry) {

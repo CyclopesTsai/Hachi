@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；**目前進行：5a 匯入匯出＋程式碼產生**。已改由本機（macOS）的 Claude Code 桌面版接手
+- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；**5a（匯入匯出＋程式碼產生）完成，等使用者確認**後再做 5b。已改由本機（macOS）的 Claude Code 桌面版接手
 - **最後更新**：2026-10-03
 
 ## Phase 進度
@@ -17,7 +17,7 @@
 | 2     | HTTP 編輯器與回應檢視器                                                                             | ✅ 完成                                                   |
 | 3     | 環境變數、多分頁、歷史紀錄                                                                          | ✅ 完成                                                   |
 | 4     | WebSocket 完整功能                                                                                  | ✅ 完成                                                   |
-| 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | 🚧 5a 進行中（5a / 5b / 5c 各自確認，見決策 64）          |
+| 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | 🚧 5a 完成待確認；5b / 5c 未開始（決策 64）               |
 | 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | —                                                         |
 
 ### Phase 0 完成內容
@@ -89,6 +89,23 @@
 - 分頁列「+」改為下拉選單（HTTP 請求 / WebSocket）
 
 **驗證方式**：`npm run verify`（292 個單元測試，WebSocket 以本機 ws / wss（自簽憑證）伺服器與 Proxy 實測：變數、繼承的 Headers / Auth、子協定、Text / Binary、Ping / Pong、Close Code、401 拒絕、連線逾時、取消、TLS 驗證、Proxy 帳密、兩種心跳）；`xvfb-run -a npm run test:e2e`（39 項冒煙檢查，新增：在 App 中連線本機 WebSocket 伺服器、變數與機密 Header、子協定、送出 JSON 並收到回音、伺服器推送 Binary、Ping / Pong、搜尋、匯出、範本存檔、關閉連線中分頁的提示、Close Code 1000、歷史紀錄）。macOS 尚未實機測試。
+
+### Phase 5a 完成內容（待使用者確認）
+
+- 匯入（File → Import… 或拖放檔案到視窗）：Postman Collection v2.0 / v2.1 → 新的 Collection（資料夾、請求、Params、Headers、五種 Body、GraphQL 轉 JSON、Bearer / Basic / API Key、Path 變數代入、SSL / 重新導向設定、腳本、Collection 變數）；Postman Environment / Globals → 新環境（`secret` 類型存 `.hachi-secrets.json`）。無法對應的設定列在匯入報告（同一訊息合併並附項目路徑）
+- 匯入 cURL（File → Import cURL… 或拖放內容是 curl 的文字檔）：POSIX shell 與 Windows cmd（瀏覽器 Copy as cURL）兩種引號規則、常用選項，開成未儲存的新分頁
+- 匯出：Collection 右鍵 → 匯出為 Postman Collection v2.1（共用 Headers 併入每個請求、機密值留空、WebSocket 略過並列出）
+- 程式碼產生：請求編輯器「Code」→ cURL / fetch / axios / Python requests；`http:resolve` 在 main 用與發送相同的流程組好請求；機密變數預設保留 `{{name}}`，可勾選顯示；複製按鈕
+- 請求檔新增 `scripts: { preRequest, postResponse }`（有預設值，不升版；5b 起執行）
+- 動態變數擴充（決策 78）：`$randomUUID`、`$randomString`、`$randomAlphaNumeric`、`$randomEmail`、`$randomBoolean`
+- 新 IPC：`http:resolve`、`transfer:importFile`、`transfer:importText`、`transfer:exportPostman`；選單指令 `import.file`、`import.curl`（皆無快捷鍵）
+- 新套件：`@codemirror/lang-javascript`、`@codemirror/lang-python`（MIT，程式碼與 5b 腳本的語法標示）
+- 自行決定的小細節（使用者可再調整）：程式碼產生上次選的語言記在 renderer 的 localStorage；匯入的檔案上限 50 MB、項目 20,000 個、資料夾 32 層、一次拖放最多 20 個檔案；cURL 的 `-L` 不轉成設定（沿用 Workspace 的跟隨重新導向）
+- 修正：`npm install` 不會下載 Electron 執行檔（加上 `postinstall: install-electron`）
+
+**驗證方式**：`npm run verify`（342 個單元測試，新增：Postman 匯入 / 匯出與往返、cURL 解析（含瀏覽器 Copy as cURL 的 POSIX / cmd 格式）、四種程式碼產生，且產生的 cURL 與 fetch 程式碼**實際對本機伺服器執行**、Python 以 `ast.parse` 檢查語法、`http:resolve` 的機密值保留、實際寫檔的匯入 / 匯出）；`npm run test:e2e`（**首次在 macOS 實機**跑完全部冒煙檢查，新增 4 項：Import cURL 並發送、Code 對話框（機密值、Python、複製）、拖放 Postman Collection + Environment 並發送匯入的請求、匯出後用 File → Import… 讀回）。
+
+**E2E 在 macOS 的調整**：選單的 Settings… 在 macOS 位於 Hachi 選單（改用依名稱尋找選單項目）；刪除的項目改移到測試自己的暫存資料夾，不會進到電腦的垃圾桶；刪除 Workspace 後等待 app-config 寫入；失敗時自動截圖（`failure.png`）。Phase 1 的拖曳排序檢查在 macOS 偶爾逾時（共 6 次中前 2 次逾時，之後 4 次都通過），尚未找到原因。冒煙檢查共 43 項。
 
 ## 決策紀錄（已與使用者確認）
 
@@ -177,12 +194,14 @@
 
 ## 下一步
 
-- Phase 5a（匯入匯出＋程式碼產生）實作中；完成後給使用者確認，再做 5b（腳本與斷言）、5c（Runner）
+- Phase 5a 已完成，等使用者確認後做 5b（腳本與斷言）、5c（Runner）
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 - Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽
 
 ## 開發環境注意事項
+
+- macOS 上跑 E2E 會跳出 Hachi 視窗（可能短暫搶走焦點）；測試不讀寫系統剪貼簿、不使用系統垃圾桶
 
 - Electron 44 的套件不再自動下載執行檔，`package.json` 的 `postinstall` 會執行 `install-electron`（2026-10-03 在 macOS 實機發現 `npm install` 後 `npm run dev` 無法啟動而補上）。macOS 實機已確認 `npm run dev` 可正常啟動到歡迎畫面
 - undici 8 需要 Node.js 22.19+；系統 Node 版本較舊時 `npm install` 會出現 EBADENGINE 警告（App 本身用 Electron 內建的 Node，不受影響，但單元測試在系統 Node 上執行）

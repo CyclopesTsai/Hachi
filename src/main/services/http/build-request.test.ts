@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { KeyValue } from '@shared/schemas/collection'
 import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
 import { workspaceSettingsSchema } from '@shared/schemas/workspace'
+import type { InheritedSettings } from '@shared/http'
 import {
+  buildCodegenRequest,
   buildRequest,
   buildUrl,
   effectiveAuth,
@@ -236,5 +238,95 @@ describe('buildRequest', () => {
       followRedirects: false,
       useProxy: false
     })
+  })
+})
+
+describe('buildCodegenRequest', () => {
+  const workspace = workspaceSettingsSchema.parse({ timeoutMs: 5000, maxRedirects: 4 })
+  const none: InheritedSettings = { headers: [], auth: null }
+  const req = (extra: object) =>
+    httpRequestSchema.parse({
+      version: 1,
+      id: 'r',
+      type: 'http',
+      name: 'R',
+      url: 'a.test',
+      ...extra
+    })
+
+  it('keeps Basic auth separate unless Authorization is set explicitly', () => {
+    const basic = { type: 'basic', username: 'u', password: 'p' }
+    expect(
+      buildCodegenRequest({ request: req({ auth: basic }), inherited: none, workspace }).request
+    ).toMatchObject({
+      url: 'http://a.test/',
+      basicAuth: { username: 'u', password: 'p' },
+      headers: []
+    })
+    const explicit = buildCodegenRequest({
+      request: req({
+        auth: basic,
+        headers: [{ id: 'h', key: 'authorization', value: 'X', enabled: true }]
+      }),
+      inherited: none,
+      workspace
+    }).request
+    expect(explicit.basicAuth).toBeNull()
+    expect(explicit.headers).toEqual([['authorization', 'X']])
+  })
+
+  it('maps bodies, content types and options', () => {
+    const urlencoded = buildCodegenRequest({
+      request: req({
+        method: 'POST',
+        body: {
+          mode: 'urlencoded',
+          urlencoded: [
+            { id: '1', key: 'a', value: '1', enabled: true },
+            { id: '2', key: 'b', value: '2', enabled: false }
+          ]
+        },
+        settings: { validateSSL: false }
+      }),
+      inherited: none,
+      workspace
+    }).request
+    expect(urlencoded.body).toEqual({ kind: 'urlencoded', fields: [['a', '1']] })
+    expect(urlencoded.headers).toEqual([['Content-Type', 'application/x-www-form-urlencoded']])
+    expect(urlencoded.options).toEqual({
+      validateSSL: false,
+      followRedirects: true,
+      maxRedirects: 4,
+      timeoutMs: 5000
+    })
+    const form = buildCodegenRequest({
+      request: req({
+        method: 'POST',
+        body: {
+          mode: 'formData',
+          formData: [
+            { id: '1', key: 'f', type: 'file', filePath: '/x.png', enabled: true },
+            { id: '2', key: 'empty', type: 'file', filePath: '', enabled: true },
+            { id: '3', key: 't', type: 'text', value: 'v', enabled: true }
+          ]
+        }
+      }),
+      inherited: none,
+      workspace
+    }).request
+    expect(form.body).toEqual({
+      kind: 'formData',
+      fields: [
+        { type: 'file', key: 'f', path: '/x.png' },
+        { type: 'text', key: 't', value: 'v' }
+      ]
+    })
+    expect(form.headers).toEqual([])
+    const raw = buildCodegenRequest({
+      request: req({ method: 'HEAD', body: { mode: 'raw', raw: 'x' } }),
+      inherited: none,
+      workspace
+    }).request
+    expect(raw.body).toEqual({ kind: 'none' })
   })
 })

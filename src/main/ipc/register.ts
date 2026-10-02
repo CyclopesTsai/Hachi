@@ -15,6 +15,7 @@ import type { SessionService } from '../services/session-service'
 import type { WsService } from '../services/ws/ws-service'
 import type { HttpService } from '../services/http/http-service'
 import type { WorkspaceService } from '../services/workspace-service'
+import type { TransferService } from '../services/transfer-service'
 import { createHandler, forbidden, type Handler } from './handler'
 
 export interface IpcContext {
@@ -25,6 +26,7 @@ export interface IpcContext {
   environments: EnvironmentService
   history: HistoryService
   sessions: SessionService
+  transfer: TransferService
   /** Sends a request and records it in the history. */
   sendHttp(input: HttpSendInput): Promise<HttpResult>
   ws: WsService
@@ -135,6 +137,32 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       if (!target) return null
       await writeFile(target, stored.body)
       return target
+    },
+    [INVOKE.httpResolve]: (input) => ctx.http.resolveForCode(input),
+    [INVOKE.transferImportFile]: async () => {
+      workspacePath()
+      const file = await selectFile(ctx.getWindow(), {
+        title: 'Import',
+        filters: [
+          { name: 'Postman Collection / Environment', extensions: ['json'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+      return file ? ctx.transfer.importFile(file) : null
+    },
+    [INVOKE.transferImportText]: (input) => {
+      workspacePath()
+      return ctx.transfer.importText(input.fileName, input.text)
+    },
+    [INVOKE.transferExportPostman]: async (input) => {
+      const exported = await ctx.transfer.exportPostman(input.id)
+      const target = await selectSavePath(ctx.getWindow(), {
+        title: 'Export Postman Collection',
+        defaultPath: path.join(app.getPath('downloads'), exported.fileName)
+      })
+      if (!target) return null
+      await writeFile(target, exported.content, 'utf8')
+      return { path: target, ...exported.result }
     },
     [INVOKE.envList]: () => ctx.environments.list(),
     [INVOKE.envGet]: (input) => ctx.environments.get(input.id),

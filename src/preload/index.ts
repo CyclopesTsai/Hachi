@@ -57,7 +57,13 @@ const api: HachiApi = {
     send: (input) => invoke(INVOKE.httpSend, input),
     cancel: (input) => invoke(INVOKE.httpCancel, input),
     getBody: (input) => invoke(INVOKE.httpGetBody, input),
-    saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input)
+    saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input),
+    resolve: (input) => invoke(INVOKE.httpResolve, input)
+  },
+  transfer: {
+    importFile: () => invoke(INVOKE.transferImportFile),
+    importText: (input) => invoke(INVOKE.transferImportText, input),
+    exportPostman: (input) => invoke(INVOKE.transferExportPostman, input)
   },
   env: {
     list: () => invoke(INVOKE.envList),

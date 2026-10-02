@@ -61,6 +61,20 @@ export const httpRequestSettingsSchema = z.looseObject({
 })
 export type HttpRequestSettings = z.infer<typeof httpRequestSettingsSchema>
 
+/** Upper bound for one script (bytes of UTF-16 text, roughly). */
+export const MAX_SCRIPT_TEXT = 1024 * 1024
+
+/**
+ * Pre-request / Post-response scripts (JavaScript). Stored since Phase 5a (e.g. from a
+ * Postman import); they run from Phase 5b on. Collections / folders may carry the same
+ * shape (kept as-is, not run yet — decision 70).
+ */
+export const requestScriptsSchema = z.looseObject({
+  preRequest: z.string().max(MAX_SCRIPT_TEXT).default(''),
+  postResponse: z.string().max(MAX_SCRIPT_TEXT).default('')
+})
+export type RequestScripts = z.infer<typeof requestScriptsSchema>
+
 export const httpMethodSchema = z.preprocess(
   (v) => (typeof v === 'string' ? v.toUpperCase() : v),
   z.enum(HTTP_METHODS)
@@ -80,6 +94,7 @@ export const httpRequestSchema = z.looseObject({
   headers: z.array(keyValueSchema).default([]),
   body: httpBodySchema.prefault({}),
   auth: authSchema.default({ type: 'inherit' }),
-  settings: httpRequestSettingsSchema.prefault({})
+  settings: httpRequestSettingsSchema.prefault({}),
+  scripts: requestScriptsSchema.prefault({})
 })
 export type HttpRequest = z.infer<typeof httpRequestSchema>

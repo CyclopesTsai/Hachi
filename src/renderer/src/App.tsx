@@ -13,6 +13,7 @@ import { UnsavedChangesDialog } from '@renderer/features/http/UnsavedChangesDial
 import { WelcomeScreen } from '@renderer/features/onboarding/WelcomeScreen'
 import { AppSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
 import { SaveAsDialog } from '@renderer/features/tabs/SaveAsDialog'
+import { CurlImportDialog, TransferResultDialog } from '@renderer/features/transfer/TransferDialogs'
 import { isTabDirty, toSession } from '@renderer/features/tabs/tab-model'
 import { WorkspaceShell } from '@renderer/features/workspace/WorkspaceShell'
 import { useSystemTheme } from '@renderer/hooks/use-system-theme'
@@ -21,6 +22,7 @@ import { useAppStore } from '@renderer/stores/app-store'
 import { useEnvStore } from '@renderer/stores/env-store'
 import { useHistoryStore } from '@renderer/stores/history-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { useTransferStore } from '@renderer/stores/transfer-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isLive, useWsStore } from '@renderer/stores/ws-store'
 
@@ -67,6 +69,15 @@ function useMainProcessEvents(): void {
             break
           case 'app.settings':
             store().setAppSettingsOpen(true)
+            break
+          // Importing needs an open Workspace (the welcome screen has nowhere to put it).
+          case 'import.file':
+            if (store().currentWorkspace) void useTransferStore.getState().importFile()
+            else store().setNotice('請先建立或開啟 Workspace 再匯入')
+            break
+          case 'import.curl':
+            if (store().currentWorkspace) useTransferStore.getState().setCurlOpen(true)
+            else store().setNotice('請先建立或開啟 Workspace 再匯入')
             break
         }
       })
@@ -217,6 +228,8 @@ export function App() {
       <AppSettingsDialog />
       <UnsavedChangesDialog />
       <SaveAsDialog />
+      <CurlImportDialog />
+      <TransferResultDialog />
       <NoticeDialog />
     </>
   )

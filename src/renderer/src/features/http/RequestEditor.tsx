@@ -1,4 +1,5 @@
-import { Save, Send, X } from 'lucide-react'
+import { Code2, Save, Send, X } from 'lucide-react'
+import { useState } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import { HTTP_METHODS } from '@shared/schemas/collection'
 import type { HttpRequest } from '@shared/schemas/http-request'
@@ -18,6 +19,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { AuthEditor } from './AuthEditor'
 import { BodyEditor } from './BodyEditor'
+import { CodeDialog } from './CodeDialog'
 import { HeadersEditor } from './HeadersEditor'
 import { RequestSettingsTab } from './RequestSettingsTab'
 import { ResponseViewer } from './ResponseViewer'
@@ -41,6 +43,7 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
   const collectionId = useTreeStore((s) => collectionIdOf(s.tree, contextParentId(tab, s.tree)))
   const variables = useVariableMap(collectionId)
   const isDraft = tab.itemId === null
+  const [codeOpen, setCodeOpen] = useState(false)
 
   return (
     <VariablesContext value={variables}>
@@ -63,6 +66,16 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
               {tab.saveError}
             </span>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="codegen-button"
+            onClick={() => setCodeOpen(true)}
+            title="產生 cURL / fetch / axios / Python 程式碼"
+          >
+            <Code2 />
+            Code
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -173,6 +186,7 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
             <ResponseViewer tab={tab} />
           </Panel>
         </Group>
+        <CodeDialog tab={tab} open={codeOpen} onOpenChange={setCodeOpen} />
       </div>
     </VariablesContext>
   )

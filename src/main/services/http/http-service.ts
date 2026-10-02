@@ -6,7 +6,13 @@ import type { ProxySettings } from '@shared/schemas/app-config'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import { VariableResolver, buildVariableMap, type VariableLayer } from '@shared/variables'
-import { buildRequest, HttpBuildError, type ContainerLevel } from './build-request'
+import {
+  buildCodegenRequest,
+  buildRequest,
+  HttpBuildError,
+  type CodegenBuild,
+  type ContainerLevel
+} from './build-request'
 import { sendHttp } from './http-client'
 import { resolveProxyUrl } from './proxy'
 import { decodeText, suggestFileName } from './response-utils'
@@ -150,6 +156,31 @@ export class HttpService {
     } finally {
       this.running.delete(input.runId)
     }
+  }
+
+  /**
+   * Resolves a request for code generation, without sending it. Secret variables stay
+   * as `{{name}}` unless `revealSecrets` (decision 69).
+   */
+  async resolveForCode(input: {
+    parentId: string | null
+    environmentId: string | null
+    request: HttpRequest
+    revealSecrets: boolean
+  }): Promise<CodegenBuild & { unresolvedVariables: string[] }> {
+    const chain = await this.deps.getContainerChain(input.parentId)
+    const layers = await this.deps.getVariableLayers(input.parentId, input.environmentId)
+    const resolver = new VariableResolver(buildVariableMap(layers), undefined, {
+      keepSecrets: !input.revealSecrets
+    })
+    const request = resolver.request(input.request)
+    const inherited = resolver.inherited(this.deps.resolveInherited(chain))
+    const built = buildCodegenRequest({
+      request,
+      inherited,
+      workspace: await this.deps.getWorkspaceSettings()
+    })
+    return { ...built, unresolvedVariables: [...resolver.unresolved].sort() }
   }
 
   /** Cancels a running request. Returns false if it already finished. */

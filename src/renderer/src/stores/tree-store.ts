@@ -33,6 +33,8 @@ interface TreeState {
   /** Selects an item and expands its collection / folders so it is visible. */
   reveal(id: string): void
   toggle(id: string): void
+  /** Expands a collection / folder (no-op if already expanded). */
+  expand(id: string): void
   setEditing(id: string | null): void
   dismissError(): void
 
@@ -108,6 +110,10 @@ export const useTreeStore = create<TreeState>()((set, get) => {
     reveal(id) {
       expandAll(ancestorIds(get().tree, id))
       get().select(id)
+    },
+
+    expand(id) {
+      expandAll([id])
     },
 
     toggle(id) {
