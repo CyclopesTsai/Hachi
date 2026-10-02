@@ -1,17 +1,41 @@
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap
+} from '@codemirror/autocomplete'
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { json } from '@codemirror/lang-json'
 import { html } from '@codemirror/lang-html'
 import { xml } from '@codemirror/lang-xml'
+import {
+  bracketMatching,
+  defaultHighlightStyle,
+  foldGutter,
+  indentOnInput,
+  syntaxHighlighting
+} from '@codemirror/language'
+import { lintKeymap } from '@codemirror/lint'
+import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import {
   Decoration,
   EditorView,
   MatchDecorator,
   ViewPlugin,
+  crosshairCursor,
+  drawSelection,
+  dropCursor,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
   hoverTooltip,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
   type DecorationSet,
   type ViewUpdate
 } from '@codemirror/view'
-import { basicSetup } from 'codemirror'
 import { useEffect, useRef } from 'react'
 import { findVariableTokens, type VariableMap } from '@shared/variables'
 import { cn } from '@renderer/lib/utils'
@@ -31,6 +55,38 @@ function languageExtension(language: CodeLanguage): Extension {
       return []
   }
 }
+
+/**
+ * CodeMirror's `basicSetup` without the fold / unfold keyboard shortcuts (removed
+ * by decision 49; folding stays available from the gutter).
+ */
+const editorSetup: Extension = [
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  history(),
+  foldGutter(),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  bracketMatching(),
+  closeBrackets(),
+  autocompletion(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightActiveLine(),
+  highlightSelectionMatches(),
+  keymap.of([
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...searchKeymap,
+    ...historyKeymap,
+    ...completionKeymap,
+    ...lintKeymap
+  ])
+]
 
 /** Colours `{{variables}}` by status and shows their value on hover. */
 function variableExtension(map: VariableMap | undefined): Extension {
@@ -167,7 +223,7 @@ export function CodeEditor({
       state: EditorState.create({
         doc: value,
         extensions: [
-          basicSetup,
+          editorSetup,
           theme,
           c.language.of(languageExtension(language)),
           c.wrap.of(wrap ? EditorView.lineWrapping : []),

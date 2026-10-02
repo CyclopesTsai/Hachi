@@ -22,7 +22,6 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuShortcut,
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
 import { cn } from '@renderer/lib/utils'
@@ -140,20 +139,13 @@ export function TreeRow({
     if (!broken) setEditing(node.id)
   }
 
+  // Only Delete and Enter: no rename / expand / collapse shortcuts (decision 49).
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (editing) return
-    if (e.key === 'F2') {
-      e.preventDefault()
-      startRename()
-    } else if (e.key === 'Delete' || (e.key === 'Backspace' && (e.metaKey || e.ctrlKey))) {
+    if (e.key === 'Delete' || (e.key === 'Backspace' && (e.metaKey || e.ctrlKey))) {
       e.preventDefault()
       onRequestDelete(node)
-    } else if (container && e.key === 'ArrowRight' && !expanded) {
-      toggle(node.id)
-    } else if (container && e.key === 'ArrowLeft' && expanded) {
-      toggle(node.id)
     } else if (e.key === 'Enter') {
-      if (container) toggle(node.id)
       open(false)
     }
   }
@@ -178,7 +170,7 @@ export function TreeRow({
           data-kind={node.kind}
           tabIndex={0}
           title={node.error ?? node.relPath}
-          // Single click: preview tab. Double click: keep the tab open (rename is F2).
+          // Single click: preview tab. Double click: keep the tab open (rename: context menu).
           onClick={() => {
             open(true)
             if (container) toggle(node.id)
@@ -272,7 +264,6 @@ export function TreeRow({
             <ContextMenuItem onSelect={startRename}>
               <Pencil />
               重新命名
-              <ContextMenuShortcut>F2</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem
               onSelect={() => void duplicate(node.id).then((id) => id && tabs.openItem(id))}

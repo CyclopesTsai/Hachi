@@ -297,20 +297,42 @@ interface HttpErrorData {
 
 ## 原生選單
 
-| 選單                       | 項目                                    | 快捷鍵                                 | 行為                                                                      |
-| -------------------------- | --------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------- |
-| Hachi（僅 macOS）          | About Hachi / Services / Hide / Quit    | 系統預設                               | role                                                                      |
-|                            | Settings…                               | `CmdOrCtrl+,`                          | `menu:command` → `app.settings`（App 設定：Proxy）                        |
-| File                       | New Workspace…                          | `CmdOrCtrl+Shift+N`                    | `menu:command` → `workspace.new`                                          |
-|                            | Open Workspace…                         | `CmdOrCtrl+O`                          | `menu:command` → `workspace.open`（先詢問未儲存的分頁，再開資料夾對話框） |
-|                            | Open Recent ▸                           | —                                      | `menu:command` → `workspace.openRecent`（含 `path`）                      |
-|                            | Switch Workspace…                       | —                                      | `menu:command` → `workspace.switch`                                       |
-|                            | Save                                    | `CmdOrCtrl+S`                          | `menu:command` → `request.save`（儲存目前分頁；未儲存的新請求會詢問位置） |
-|                            | Close Tab                               | `CmdOrCtrl+W`                          | `menu:command` → `tab.close`（關閉目前分頁；沒有分頁時關閉視窗）          |
-|                            | Settings…（僅 Windows / Linux）         | `CmdOrCtrl+,`                          | `menu:command` → `app.settings`                                           |
-|                            | Close Window（macOS）/ Exit（其他平台） | `CmdOrCtrl+Shift+W`（macOS）/ 系統預設 | role                                                                      |
-| Edit / View / Window       | 標準 role 選單                          | 系統預設                               | —                                                                         |
-| Help（僅 Windows / Linux） | About Hachi                             | —                                      | 訊息對話框                                                                |
+快捷鍵刻意只保留少數幾個（決策 21、43、49、50）。View / Window 的項目改用一般的 click 項目，不用 Electron 的 role，因為 role 會自帶快捷鍵。
+
+| 選單                       | 項目                                          | 快捷鍵                        | 行為                                                                      |
+| -------------------------- | --------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------- |
+| Hachi（僅 macOS）          | About Hachi / Services / Show All             | —                             | role                                                                      |
+|                            | Settings…                                     | —                             | `menu:command` → `app.settings`（App 設定：Proxy、歷史紀錄上限）          |
+|                            | Hide Hachi / Hide Others                      | —                             | `app.hide()` / `hideOtherApplications:`                                   |
+|                            | Quit Hachi                                    | `⌘Q`                          | role                                                                      |
+| File                       | New Workspace…                                | `CmdOrCtrl+Shift+N`           | `menu:command` → `workspace.new`                                          |
+|                            | Open Workspace…                               | `CmdOrCtrl+O`                 | `menu:command` → `workspace.open`（先詢問未儲存的分頁，再開資料夾對話框） |
+|                            | Open Recent ▸                                 | —                             | `menu:command` → `workspace.openRecent`（含 `path`）                      |
+|                            | Switch Workspace…                             | —                             | `menu:command` → `workspace.switch`                                       |
+|                            | Save                                          | `CmdOrCtrl+S`                 | `menu:command` → `request.save`（儲存目前分頁；未儲存的新請求會詢問位置） |
+|                            | Close Tab                                     | `CmdOrCtrl+W`                 | `menu:command` → `tab.close`（關閉目前分頁；沒有分頁時關閉視窗）          |
+|                            | Settings…（僅 Windows / Linux）               | —                             | `menu:command` → `app.settings`                                           |
+|                            | Close Window（macOS）/ Exit（Windows、Linux） | — / 系統預設（Linux：Ctrl+Q） | 關閉目前視窗 / role `quit`                                                |
+| Edit                       | Undo / Redo / Cut / Copy / Paste / Select All | 系統預設（`CmdOrCtrl+Z` 等）  | role `editMenu`                                                           |
+| View                       | Reload（僅開發模式）                          | `CmdOrCtrl+R`                 | 重新載入畫面（未儲存的分頁會遺失，因此正式版沒有這個項目）                |
+|                            | Force Reload / Toggle Developer Tools（同上） | —                             | 僅開發模式                                                                |
+|                            | Actual Size / Zoom In / Zoom Out              | —                             | 調整畫面縮放                                                              |
+|                            | Toggle Full Screen                            | —                             | 全螢幕                                                                    |
+| Window                     | Minimize                                      | —                             | 最小化                                                                    |
+|                            | Zoom / Bring All to Front（僅 macOS）         | —                             | role                                                                      |
+| Help（僅 Windows / Linux） | About Hachi                                   | —                             | 訊息對話框                                                                |
+
+「開發模式」＝未打包（`npm run dev` / `npm start`）。設定環境變數 `HACHI_PRODUCTION_MENU=1` 可在開發時顯示正式版的選單（E2E 測試使用）。
+
+### 畫面內的按鍵
+
+| 位置              | 按鍵                                         | 功能                                |
+| ----------------- | -------------------------------------------- | ----------------------------------- |
+| 左側樹            | Delete，或 `CmdOrCtrl+Backspace`             | 刪除（會先確認）                    |
+| 左側樹            | Enter                                        | 開啟成固定分頁                      |
+| 改名欄位          | Enter / Esc                                  | 確定 / 取消（改名只從右鍵選單開始） |
+| Body / 回應編輯器 | CodeMirror 標準按鍵（搜尋、復原、多重選取…） | 不含摺疊 / 展開（用左側的摺疊箭頭） |
+| 對話框            | Enter / Esc                                  | 送出 / 關閉                         |
 
 平台差異集中在 `src/main/platform/`（`darwin.ts`、`default.ts`）。
 
@@ -323,4 +345,4 @@ interface HttpErrorData {
 5. `preload/index.ts` 暴露方法。
 6. 更新本文件。
 
-> 發送 / 取消請求**刻意不設鍵盤快捷鍵**（Phase 2 決定，避免誤觸）；也**不提供 CmdOrCtrl+T**（決策 43），新分頁用分頁列的「+」。
+> 發送 / 取消請求**刻意不設鍵盤快捷鍵**（Phase 2 決定，避免誤觸）；也**不提供 CmdOrCtrl+T**（決策 43），新分頁用分頁列的「+」。其他刻意不提供的快捷鍵見決策 49。

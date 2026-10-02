@@ -13,8 +13,10 @@ export interface PlatformAdapter {
   leadingMenus(openSettings: () => void): MenuItemConstructorOptions[]
   /** "Settings…" in the File menu (non-macOS; macOS has it in the app menu). */
   fileMenuSettings(openSettings: () => void): MenuItemConstructorOptions[]
-  /** Items appended to the end of the File menu (macOS: Close Window, CmdOrCtrl+Shift+W; others: Quit). */
+  /** Items appended to the end of the File menu (macOS: Close Window; others: Exit). */
   fileMenuTail(): MenuItemConstructorOptions[]
+  /** The Window menu, without keyboard shortcuts (Electron's role menu brings ⌘M / Ctrl+W). */
+  windowMenu(minimize: () => void): MenuItemConstructorOptions
   /** Menus appended to the menu bar (non-macOS: Help → About, since there is no app menu). */
   trailingMenus(): MenuItemConstructorOptions[]
   /** macOS convention: apps stay alive with no windows open. */

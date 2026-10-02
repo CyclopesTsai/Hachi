@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { Menu, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import type { RecentWorkspace } from '@shared/schemas/app-config'
 import { platform } from './platform'
 
@@ -16,14 +16,46 @@ export interface MenuActions {
   openSettings(): void
 }
 
+export interface MenuOptions {
+  /** Reload / Force Reload / Developer Tools (development builds only, decision 50). */
+  developerItems: boolean
+}
+
+const focusedWindow = () => BrowserWindow.getFocusedWindow()
+
+function zoom(delta: number | 'reset'): void {
+  const contents = focusedWindow()?.webContents
+  if (contents) contents.setZoomLevel(delta === 'reset' ? 0 : contents.getZoomLevel() + delta)
+}
+
 /**
  * Builds the native menu bar: Hachi (macOS only) / File / Edit / View / Window.
- * Accelerators use `CmdOrCtrl` so the same template works on every platform.
+ *
+ * Keyboard shortcuts are deliberately few (decisions 21, 43, 49): only the items
+ * below with an `accelerator`, plus Edit and Quit. View / Window items use plain
+ * click handlers instead of Electron roles, because roles bring their own shortcuts.
  */
 export function buildMenuTemplate(
   recent: RecentWorkspace[],
-  actions: MenuActions
+  actions: MenuActions,
+  options: MenuOptions
 ): MenuItemConstructorOptions[] {
+  const developerItems: MenuItemConstructorOptions[] = options.developerItems
+    ? [
+        {
+          label: 'Reload',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => focusedWindow()?.webContents.reload()
+        },
+        { label: 'Force Reload', click: () => focusedWindow()?.webContents.reloadIgnoringCache() },
+        {
+          label: 'Toggle Developer Tools',
+          click: () => focusedWindow()?.webContents.toggleDevTools()
+        },
+        { type: 'separator' }
+      ]
+    : []
+
   const recentItems: MenuItemConstructorOptions[] =
     recent.length === 0
       ? [{ label: 'No Recent Workspaces', enabled: false }]
@@ -66,22 +98,29 @@ export function buildMenuTemplate(
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        ...developerItems,
+        { label: 'Actual Size', click: () => zoom('reset') },
+        { label: 'Zoom In', click: () => zoom(0.5) },
+        { label: 'Zoom Out', click: () => zoom(-0.5) },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' }
+        {
+          label: 'Toggle Full Screen',
+          click: () => {
+            const window = focusedWindow()
+            window?.setFullScreen(!window.isFullScreen())
+          }
+        }
       ]
     },
-    { role: 'windowMenu' },
+    platform.windowMenu(() => focusedWindow()?.minimize()),
     ...platform.trailingMenus()
   ]
 }
 
-export function installMenu(recent: RecentWorkspace[], actions: MenuActions): void {
-  Menu.setApplicationMenu(Menu.buildFromTemplate(buildMenuTemplate(recent, actions)))
+export function installMenu(
+  recent: RecentWorkspace[],
+  actions: MenuActions,
+  options: MenuOptions
+): void {
+  Menu.setApplicationMenu(Menu.buildFromTemplate(buildMenuTemplate(recent, actions, options)))
 }

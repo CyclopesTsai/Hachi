@@ -32,7 +32,12 @@ export function createDefaultAdapter(id: 'win32' | 'linux'): PlatformAdapter {
     },
 
     fileMenuSettings(openSettings): MenuItemConstructorOptions[] {
-      return [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings }]
+      return [{ label: 'Settings…', click: openSettings }]
+    },
+
+    windowMenu(minimize): MenuItemConstructorOptions {
+      // Electron's Window role menu adds Close (Ctrl+W), which would clash with Close Tab.
+      return { label: 'Window', submenu: [{ label: 'Minimize', click: minimize }] }
     },
 
     fileMenuTail(): MenuItemConstructorOptions[] {

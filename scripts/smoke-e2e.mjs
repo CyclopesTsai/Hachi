@@ -80,7 +80,13 @@ async function launch() {
   const app = await electron.launch({
     executablePath: electronPath,
     args,
-    env: { ...process.env, HACHI_USER_DATA_DIR: userData, ELECTRON_RENDERER_URL: '' }
+    env: {
+      ...process.env,
+      HACHI_USER_DATA_DIR: userData,
+      ELECTRON_RENDERER_URL: '',
+      // The menu of packaged builds (no Reload / Developer Tools).
+      HACHI_PRODUCTION_MENU: '1'
+    }
   })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
@@ -244,6 +250,65 @@ try {
   }
   step(`native menu: ${menu.map((m) => m.label).join(' / ')}`)
 
+  // Keyboard shortcuts are deliberately few (decisions 21, 43, 49, 50).
+  const menuItems = await app.evaluate(({ Menu }) => {
+    const out = []
+    const walk = (items, trail) => {
+      for (const item of items) {
+        const label = [...trail, item.label].join(' › ')
+        out.push({ label, role: item.role?.toLowerCase() ?? null, accelerator: item.accelerator })
+        if (item.submenu) walk(item.submenu.items, [...trail, item.label])
+      }
+    }
+    walk(Menu.getApplicationMenu().items, [])
+    return out
+  })
+  // Edit (undo / copy / paste…) and Quit keep their standard shortcuts.
+  const keptRoles = [
+    'undo',
+    'redo',
+    'cut',
+    'copy',
+    'paste',
+    'pasteandmatchstyle',
+    'delete',
+    'selectall',
+    'quit'
+  ]
+  assert.deepEqual(
+    menuItems
+      .filter((i) => i.accelerator && !keptRoles.includes(i.role))
+      .map((i) => `${i.label}=${i.accelerator}`),
+    [
+      'File › New Workspace…=CmdOrCtrl+Shift+N',
+      'File › Open Workspace…=CmdOrCtrl+O',
+      'File › Save=CmdOrCtrl+S',
+      'File › Close Tab=CmdOrCtrl+W'
+    ]
+  )
+  const shortcutRoles = [
+    'reload',
+    'forcereload',
+    'toggledevtools',
+    'resetzoom',
+    'zoomin',
+    'zoomout',
+    'togglefullscreen',
+    'minimize',
+    'close',
+    'hide',
+    'hideothers',
+    'windowmenu',
+    'viewmenu'
+  ]
+  assert.deepEqual(
+    menuItems.filter((i) => shortcutRoles.includes(i.role)).map((i) => i.label),
+    [],
+    'no Electron roles that bring their own shortcuts'
+  )
+  assert.ok(!menuItems.some((i) => /Reload|Developer Tools/.test(i.label)), 'no Reload / DevTools')
+  step('menu shortcuts: only New Workspace / Open Workspace / Save / Close Tab (+ Edit, Quit)')
+
   await page.getByLabel('名稱').fill('Smoke API')
   await page.getByLabel('存放位置').fill(docs)
   const preview = await page.getByTestId('workspace-path-preview').innerText()
@@ -311,13 +376,12 @@ try {
   await t.contextAction('Get Users', '複製')
   await t.row('Get Users copy').waitFor()
   assert.ok(await exists(path.join(usersDir, 'get-users-copy.json')))
-  await t.row('Get Users copy').click()
-  await page.keyboard.press('F2')
+  await t.contextAction('Get Users copy', '重新命名')
   await t.typeName('List Users')
   assert.ok(await exists(path.join(usersDir, 'list-users.json')))
   assert.ok(!(await exists(path.join(usersDir, 'get-users-copy.json'))))
   assert.equal(await page.getByTestId('request-editor').locator('h2').innerText(), 'List Users')
-  step('duplicate ("… copy") and rename with F2 (file renamed on disk)')
+  step('duplicate ("… copy") and rename from the context menu (file renamed on disk)')
 
   await t.drag('Get Users', 'Admin', 'inside')
   await waitUntil(() => exists(path.join(usersDir, 'admin', 'get-users.json')), 'drag into folder')

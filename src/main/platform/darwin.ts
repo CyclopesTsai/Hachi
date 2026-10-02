@@ -1,7 +1,7 @@
 /**
  * macOS-specific behavior.
  */
-import { app, type MenuItemConstructorOptions } from 'electron'
+import { BrowserWindow, Menu, app, type MenuItemConstructorOptions } from 'electron'
 import { APP_COPYRIGHT, APP_NAME, LEGAL_NOTICE } from '@shared/app-info'
 import type { PlatformAdapter } from './types'
 
@@ -27,12 +27,16 @@ export const darwinAdapter: PlatformAdapter = {
         submenu: [
           { role: 'about', label: `About ${APP_NAME}` },
           { type: 'separator' },
-          { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings },
+          // No ⌘, / ⌘H / ⌥⌘H shortcuts (decision 49), so plain items instead of roles.
+          { label: 'Settings…', click: openSettings },
           { type: 'separator' },
           { role: 'services' },
           { type: 'separator' },
-          { role: 'hide', label: `Hide ${APP_NAME}` },
-          { role: 'hideOthers' },
+          { label: `Hide ${APP_NAME}`, click: () => app.hide() },
+          {
+            label: 'Hide Others',
+            click: () => Menu.sendActionToFirstResponder('hideOtherApplications:')
+          },
           { role: 'unhide' },
           { type: 'separator' },
           { role: 'quit', label: `Quit ${APP_NAME}` }
@@ -46,8 +50,23 @@ export const darwinAdapter: PlatformAdapter = {
   },
 
   fileMenuTail(): MenuItemConstructorOptions[] {
-    // CmdOrCtrl+W closes the active tab (File → Close Tab).
-    return [{ role: 'close', label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W' }]
+    // ⌘W closes the active tab (File → Close Tab); Close Window has no shortcut.
+    return [{ label: 'Close Window', click: () => BrowserWindow.getFocusedWindow()?.close() }]
+  },
+
+  windowMenu(minimize): MenuItemConstructorOptions {
+    // role "window" makes macOS list the open windows here; Zoom / Bring All to Front
+    // have no shortcuts.
+    return {
+      label: 'Window',
+      role: 'window',
+      submenu: [
+        { label: 'Minimize', click: minimize },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' }
+      ]
+    }
   },
 
   trailingMenus(): MenuItemConstructorOptions[] {

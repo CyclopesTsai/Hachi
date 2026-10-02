@@ -228,9 +228,14 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  installMenu(config.get().recentWorkspaces, menuActions)
+  // Reload / Developer Tools only in development (HACHI_PRODUCTION_MENU=1 lets tests check
+  // the menu of packaged builds). Reloading would silently drop unsaved tabs.
+  const menuOptions = {
+    developerItems: !app.isPackaged && process.env.HACHI_PRODUCTION_MENU !== '1'
+  }
+  installMenu(config.get().recentWorkspaces, menuActions, menuOptions)
   config.onChange((next) => {
-    installMenu(next.recentWorkspaces, menuActions)
+    installMenu(next.recentWorkspaces, menuActions, menuOptions)
     send(EVENTS.configChanged, next)
   })
   workspaces.onChange((current) => send(EVENTS.workspaceChanged, current))
