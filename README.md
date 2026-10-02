@@ -21,7 +21,9 @@ Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP �
 
 ## 開發
 
-需求：Node.js 22+、npm 10+。
+需求：Node.js 22.19+（undici 需要）、npm 10+。
+
+`npm install` 完成後會自動執行 `install-electron` 下載 Electron 執行檔（Electron 44 起套件本身不再自動下載）。若 `npm run dev` 出現找不到 Electron 的錯誤，可手動執行 `npx install-electron`。npm 11 對相依套件的 install script 顯示的 `install-scripts` 警告可以忽略。
 
 ```bash
 npm install

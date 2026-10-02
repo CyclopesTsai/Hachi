@@ -66,6 +66,7 @@
     "vitest": "^5.0.3"
   },
   "scripts": {
+    "postinstall": "install-electron",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",

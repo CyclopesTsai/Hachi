@@ -161,11 +161,13 @@
 ## 下一步
 
 - Phase 5（匯入匯出、程式碼產生、腳本與斷言、Collection Runner）：開始前先說明規劃並詢問不確定的設計；全域搜尋只預留空間、不實作、不設快捷鍵（決策 51）
-- 本機接手時建議先在 macOS 實機執行 `npm run dev` 確認（目前只在雲端 Linux 測過）
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 - Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽
 
 ## 開發環境注意事項
 
-- 雲端容器透過 proxy 連網時，Electron 的 postinstall 可能下載失敗。這時可以用 curl 下載 `electron-v<版本>-linux-x64.zip`，解壓到 `node_modules/electron/dist`，並寫入 `node_modules/electron/path.txt`（內容為 `electron`）
+- Electron 44 的套件不再自動下載執行檔，`package.json` 的 `postinstall` 會執行 `install-electron`（2026-10-03 在 macOS 實機發現 `npm install` 後 `npm run dev` 無法啟動而補上）。macOS 實機已確認 `npm run dev` 可正常啟動到歡迎畫面
+- undici 8 需要 Node.js 22.19+；系統 Node 版本較舊時 `npm install` 會出現 EBADENGINE 警告（App 本身用 Electron 內建的 Node，不受影響，但單元測試在系統 Node 上執行）
+
+- 雲端容器透過 proxy 連網時，`install-electron` 可能下載失敗。這時可以用 curl 下載 `electron-v<版本>-linux-x64.zip`，解壓到 `node_modules/electron/dist`，並寫入 `node_modules/electron/path.txt`（內容為 `electron`）
 - 在 Linux 上以 root 執行 E2E 測試時需加 `--no-sandbox`（`scripts/smoke-e2e.mjs` 已自動處理）
