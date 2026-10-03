@@ -105,6 +105,7 @@ export const MENU_COMMANDS = [
   'tab.close',
   'app.settings',
   'import.file',
-  'import.curl'
+  'import.curl',
+  'help.shortcuts'
 ] as const
 export type MenuCommand = (typeof MENU_COMMANDS)[number]

@@ -5,6 +5,8 @@
  *
  *   node scripts/smoke-e2e.mjs            # on Linux CI wrap with `xvfb-run -a`
  *   SMOKE_SCREENSHOT_DIR=/tmp/shots node scripts/smoke-e2e.mjs
+ *   SMOKE_APP_PATH=release/0.1.0/mac-arm64/Hachi.app/Contents/MacOS/Hachi node scripts/smoke-e2e.mjs
+ *     (runs the checks against a packaged app instead of the dev build)
  */
 import assert from 'node:assert/strict'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
@@ -102,16 +104,21 @@ const wsServer = await new Promise((resolve) => {
   )
 })
 
-const args = [root]
-// Chromium refuses to run as root without this flag (CI containers).
-if (process.platform === 'linux' && process.getuid?.() === 0) args.push('--no-sandbox')
+// A packaged app (SMOKE_APP_PATH) carries its own code; otherwise run this checkout.
+const packagedApp = process.env.SMOKE_APP_PATH ? path.resolve(process.env.SMOKE_APP_PATH) : null
+const args = packagedApp ? [] : [root]
+// Chromium's sandbox needs root-owned helpers / user namespaces that CI machines and
+// containers lack (GitHub's Ubuntu runners restrict unprivileged user namespaces).
+if (process.platform === 'linux' && (process.getuid?.() === 0 || process.env.CI)) {
+  args.push('--no-sandbox')
+}
 
 /** The window of the latest launch, for a screenshot when a check fails. */
 let lastPage = null
 
 async function launch() {
   const app = await electron.launch({
-    executablePath: electronPath,
+    executablePath: packagedApp ?? electronPath,
     args,
     env: {
       ...process.env,
@@ -133,6 +140,10 @@ async function launch() {
   }, trashDir)
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
+  // SMOKE_COLOR_SCHEME=dark takes every screenshot in dark mode (for reviewing it).
+  if (process.env.SMOKE_COLOR_SCHEME) {
+    await page.emulateMedia({ colorScheme: process.env.SMOKE_COLOR_SCHEME })
+  }
   lastPage = page
   return { app, page }
 }
@@ -454,6 +465,14 @@ try {
   await t.drag('Get Users', 'Admin', 'inside')
   await waitUntil(() => exists(path.join(usersDir, 'admin', 'get-users.json')), 'drag into folder')
   await t.row('Get Users').waitFor() // folder auto-expands after the move
+  // Let the tree settle (re-read + expand) before measuring rows for the next drag.
+  await waitUntil(
+    async () =>
+      JSON.stringify(await t.names()) ===
+      JSON.stringify(['Users API', 'List Users', 'Admin', 'Get Users', 'Live Feed']),
+    'tree settled after the move'
+  )
+  await new Promise((r) => setTimeout(r, 300))
   const liveId = (await readJson(path.join(usersDir, 'live-feed.json'))).id
   await t.drag('Live Feed', 'Admin', 'before')
   await waitUntil(
@@ -1302,6 +1321,70 @@ try {
   await tabByTitle('Cookies').click()
   await page.getByTestId('request-editor').locator('h2').getByText('Cookies').waitFor()
 
+  // ---- Phase 6: keyboard shortcuts list, tree ↑ / ↓, appearance ----
+  const helpMenu = await app.evaluate(({ Menu }) =>
+    Menu.getApplicationMenu()
+      .items.find((i) => i.role === 'help' || i.label === 'Help')
+      ?.submenu.items.map((i) => i.label)
+  )
+  assert.ok(helpMenu?.includes('Keyboard Shortcuts'), `Help menu: ${helpMenu}`)
+  await clickMenu(app, 'Keyboard Shortcuts')
+  const shortcuts = page.getByTestId('shortcuts-dialog')
+  await shortcuts.waitFor()
+  const shortcutsText = await shortcuts.innerText()
+  assert.ok(shortcutsText.includes('移動選取') && shortcutsText.includes('儲存目前分頁'))
+  await page.keyboard.press('Escape')
+  await shortcuts.waitFor({ state: 'hidden' })
+
+  const selectedName = () =>
+    page.locator('[data-testid="tree-row"][aria-selected="true"]').getAttribute('data-name')
+  await t.row('Shop copy').click()
+  const visible = await t.names()
+  const at = visible.indexOf('Shop copy')
+  const previewTitle = () =>
+    page.locator('[data-testid="tab"][data-preview]').getAttribute('data-title')
+  const previewBefore = await previewTitle()
+  await t.row('Shop copy').press('ArrowUp')
+  await waitUntil(async () => (await selectedName()) === visible[at - 1], '↑ selects the row above')
+  await page.keyboard.press('ArrowUp')
+  await waitUntil(async () => (await selectedName()) === visible[at - 2], '↑ again')
+  await page.keyboard.press('ArrowDown')
+  await waitUntil(async () => (await selectedName()) === visible[at - 1], '↓ goes back')
+  assert.equal(await previewTitle(), previewBefore, '↑ / ↓ only move the selection (no tab opened)')
+  step('Help → Keyboard Shortcuts lists the keys; ↑ / ↓ move the selection in the tree')
+
+  await clickMenu(app, 'Settings…')
+  const themeSettings = page.getByTestId('app-settings-dialog')
+  await themeSettings.getByRole('radio', { name: '深色' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(userData, 'app-config.json'))).theme === 'dark',
+    'theme saved'
+  )
+  assert.equal(await app.evaluate(({ nativeTheme }) => nativeTheme.themeSource), 'dark')
+  // Without color-scheme emulation the page follows nativeTheme (decision 93).
+  await page.emulateMedia({ colorScheme: null })
+  await waitUntil(
+    () => page.evaluate(() => document.documentElement.classList.contains('dark')),
+    'dark class'
+  )
+  await themeSettings.getByRole('radio', { name: '淺色' }).click()
+  await waitUntil(
+    () => page.evaluate(() => !document.documentElement.classList.contains('dark')),
+    'light again'
+  )
+  await themeSettings.getByRole('radio', { name: '跟隨系統' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(userData, 'app-config.json'))).theme === 'system',
+    'theme back to system'
+  )
+  if (process.env.SMOKE_COLOR_SCHEME) {
+    await page.emulateMedia({ colorScheme: process.env.SMOKE_COLOR_SCHEME })
+  }
+  await page.keyboard.press('Escape')
+  step('appearance: 跟隨系統 / 淺色 / 深色 applies right away and is saved in app-config.json')
+  await tabByTitle('Cookies').click()
+  await page.getByTestId('request-editor').locator('h2').getByText('Cookies').waitFor()
+
   await clickMenu(app, 'Settings…')
   const appSettings = page.getByTestId('app-settings-dialog')
   await appSettings.waitFor()
@@ -1336,6 +1419,16 @@ try {
   )
   step('app proxy setting (userData) is used; a request can opt out of the proxy')
 
+  // Window position / size are remembered (decision 94).
+  const savedBounds = { x: 120, y: 90, width: 1100, height: 760 }
+  await app.evaluate(
+    ({ BrowserWindow }, b) => BrowserWindow.getAllWindows()[0].setBounds(b),
+    savedBounds
+  )
+  await waitUntil(async () => {
+    const w = (await readJson(path.join(userData, 'app-config.json'))).window
+    return w?.width === savedBounds.width && w?.x === savedBounds.x
+  }, 'window state saved')
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
   const closeDialog = page.getByTestId('unsaved-dialog')
   await closeDialog.waitFor()
@@ -1371,7 +1464,13 @@ try {
     `tabs restored: ${openTabs.join(', ')}`
   )
   assert.equal(await page.getByTestId('active-environment').innerText(), 'dev')
-  step('relaunch restores the last Workspace, its tree, open tabs and active environment')
+  const bounds = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].getBounds()
+  )
+  assert.deepEqual(bounds, savedBounds, 'window position / size restored')
+  step(
+    'relaunch restores the last Workspace, its tree, open tabs and active environment, window position and size'
+  )
 
   await page.getByTestId('workspace-menu').click()
   await page.getByRole('menuitem', { name: '重新命名 Workspace…' }).click()

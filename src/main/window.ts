@@ -1,10 +1,12 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { BrowserWindow, app, nativeTheme } from 'electron'
+import { BrowserWindow, app, nativeTheme, screen } from 'electron'
 import { APP_NAME } from '@shared/app-info'
+import type { WindowState } from '@shared/schemas/app-config'
+import { MIN_HEIGHT, MIN_WIDTH, initialBounds, windowStateOf } from './window-state'
 
-const DEFAULT_WIDTH = 1280
-const DEFAULT_HEIGHT = 820
+/** Saving waits until moving / resizing has settled. */
+const SAVE_DELAY_MS = 500
 
 /** URL of the renderer page: Vite dev server in development, bundled file in production. */
 export function getRendererUrl(): string {
@@ -13,13 +15,23 @@ export function getRendererUrl(): string {
   return pathToFileURL(path.join(import.meta.dirname, '../renderer/index.html')).href
 }
 
-export function createMainWindow(): BrowserWindow {
+/**
+ * Creates the main window at its remembered position / size (decision 94) and reports
+ * changes through `saveState` (debounced, and right away when the window closes).
+ */
+export function createMainWindow(
+  saved: WindowState | null = null,
+  saveState: (state: WindowState) => void = () => undefined
+): BrowserWindow {
+  const bounds = initialBounds(
+    saved,
+    screen.getAllDisplays().map((d) => d.workArea)
+  )
   const window = new BrowserWindow({
     title: APP_NAME,
-    width: DEFAULT_WIDTH,
-    height: DEFAULT_HEIGHT,
-    minWidth: 900,
-    minHeight: 600,
+    ...bounds,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#18181b' : '#ffffff',
     webPreferences: {
@@ -37,7 +49,33 @@ export function createMainWindow(): BrowserWindow {
 
   // Keep the window title fixed to the app name (HTML <title> changes are ignored).
   window.on('page-title-updated', (event) => event.preventDefault())
-  window.once('ready-to-show', () => window.show())
+  window.once('ready-to-show', () => {
+    if (saved?.isMaximized) window.maximize()
+    if (saved?.isFullScreen) window.setFullScreen(true)
+    window.show()
+  })
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const current = () =>
+    windowStateOf(window.getNormalBounds(), {
+      isMaximized: window.isMaximized(),
+      isFullScreen: window.isFullScreen()
+    })
+  const schedule = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      if (!window.isDestroyed()) saveState(current())
+    }, SAVE_DELAY_MS)
+  }
+  for (const event of ['resize', 'move', 'maximize', 'unmaximize'] as const) {
+    window.on(event as 'resize', schedule)
+  }
+  window.on('enter-full-screen', schedule)
+  window.on('leave-full-screen', schedule)
+  window.on('close', () => {
+    clearTimeout(timer)
+    saveState(current())
+  })
 
   void window.loadURL(getRendererUrl())
   return window

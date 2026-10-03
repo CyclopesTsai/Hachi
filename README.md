@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前進度：**Phase 5c**（Collection Runner：並行、資料檔、統計與即時圖表；5b：腳本、斷言與擷取變數；5a：Postman / cURL 匯入匯出、程式碼產生）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
+> 目前進度：**Phase 6**（視窗狀態記憶、外觀設定、快捷鍵一覽、macOS dmg 打包、GitHub Actions CI 與自動發佈）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
@@ -43,7 +43,7 @@ npm run dev          # 啟動開發模式（renderer 支援 HMR）
 | `npm run lint` / `npm run format` | ESLint / Prettier                                                                                                 |
 | `npm run check:licenses`          | 檢查所有隨 App 發佈的套件授權（只允許寬鬆授權，見 CONTRIBUTING.md）                                               |
 | `npm run verify`                  | 以上檢查一次跑完                                                                                                  |
-| `npm run dist:mac`                | 打包 macOS `.dmg`（Phase 6 完善）                                                                                 |
+| `npm run dist:mac`                | 打包 macOS `.dmg`（arm64 與 x64）                                                                                 |
 
 開發用環境變數：
 
@@ -78,10 +78,33 @@ App 名稱、Bundle ID（`tw.com.cyclopes.hachi`）、版權字串集中在 **`s
 ## 打包（macOS）
 
 ```bash
-npm run dist:mac     # 產生 release/<version>/Hachi-<version>-arm64.dmg 與 -x64.dmg
+npm run dist:mac     # 產生 release/<version>/Hachi-<version>-arm64.dmg（Apple Silicon）與 -x64.dmg（Intel）
 ```
 
-目前**未簽章、未公證**。使用者首次開啟時需在 Finder 中按右鍵 →「打開」，或到「系統設定 → 隱私權與安全性」允許。
+- 圖示：`build/icon.png`（1024×1024）是 `node scripts/make-icon.mjs` 產生的佔位圖示，換成正式圖示時直接覆蓋這個檔案即可（electron-builder 會轉成 `.icns`）。
+- `app.asar` 只放 main process 執行時需要的套件（renderer 用的套件已由 Vite 打包進 JS），清單在打包時由 `electron-builder.config.mjs` 從 `out/main` 自動算出。
+- 打包後的 App 也能跑冒煙測試：`SMOKE_APP_PATH=release/<version>/mac-arm64/Hachi.app/Contents/MacOS/Hachi node scripts/smoke-e2e.mjs`。
+
+目前**未簽章、未公證**。從網路下載的 dmg 第一次開啟時會被 macOS 擋下：請到「系統設定 → 隱私權與安全性」，在下方按「強制打開」（較舊的 macOS 也可在 Finder 中對 App 按右鍵 →「打開」）。
+
+## GitHub Actions（CI 與自動發佈）
+
+| Workflow                        | 觸發                         | 內容                                                                                                                             |
+| ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | push 到 `main`、Pull Request | `npm run verify` ＋ Linux（Xvfb）上的 E2E 冒煙測試；截圖存成 Actions artifact                                                    |
+| `.github/workflows/release.yml` | 推送 `v*` tag                | 在 macOS 機器上 `verify` → 打包兩個 dmg → 對打包後的 App 跑冒煙測試 → **直接發佈 GitHub Release**（附 dmg 與自動產生的變更說明） |
+| 同上                            | Actions 頁面「Run workflow」 | 只打包，dmg 存成 Actions artifact（不建立 Release）                                                                              |
+
+發佈新版本：
+
+```bash
+npm version 0.2.0 --no-git-tag-version   # 修改 package.json 的版本
+git commit -am "Release 0.2.0"
+git tag v0.2.0                            # tag 必須等於 v + package.json 的版本
+git push origin main --tags
+```
+
+公開 repo 使用 GitHub Actions 的標準機器（含 macOS）免費。之後要支援 Windows 時，在 `release.yml` 加一個 `windows-latest` 的 job 執行 `electron-builder --win` 即可。
 
 ### 之後加入 Apple Developer 簽章與公證（Notarization）
 
@@ -89,13 +112,13 @@ npm run dist:mac     # 產生 release/<version>/Hachi-<version>-arm64.dmg 與 -x
 2. 在 `electron-builder.config.mjs` 的 `mac` 區塊：
    - 移除 `identity: null`（讓 electron-builder 自動尋找憑證，或填入憑證名稱）
    - 加上 `hardenedRuntime: true`、`gatekeeperAssess: false`
-   - 加上 `entitlements` / `entitlementsInherit`（例如 `resources/entitlements.mac.plist`，Electron 需要 `com.apple.security.cs.allow-jit` 等項目）
+   - 加上 `entitlements` / `entitlementsInherit`（例如 `build/entitlements.mac.plist`，Electron 需要 `com.apple.security.cs.allow-jit` 等項目）
    - 加上 `notarize: true`
 3. 提供公證用的憑證（擇一），以環境變數傳入：
    - App 專用密碼：`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`
    - App Store Connect API Key：`APPLE_API_KEY`（.p8 路徑）、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER`
-4. CI 上另外設定 `CSC_LINK`（.p12 的路徑或 base64）與 `CSC_KEY_PASSWORD`。
-5. 執行 `npm run dist:mac`，完成後可用 `spctl -a -vv /Applications/Hachi.app` 與 `xcrun stapler validate Hachi-x.y.z.dmg` 驗證。
+4. 憑證：本機放在 Keychain；GitHub Actions 則把 `.p12` 轉成 base64 存成 repository secret `CSC_LINK`，密碼存成 `CSC_KEY_PASSWORD`，再把第 3 步的值也存成 secrets，並取消 `release.yml`「Build dmgs」步驟中 `env:` 的註解。
+5. 執行 `npm run dist:mac`（或推 tag），完成後可用 `spctl -a -vv /Applications/Hachi.app` 與 `xcrun stapler validate Hachi-x.y.z-arm64.dmg` 驗證。
 
 ### Windows（規劃中）
 

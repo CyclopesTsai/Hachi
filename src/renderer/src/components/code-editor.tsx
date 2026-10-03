@@ -11,12 +11,13 @@ import { xml } from '@codemirror/lang-xml'
 import { javascript } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
 import {
+  HighlightStyle,
   bracketMatching,
-  defaultHighlightStyle,
   foldGutter,
   indentOnInput,
   syntaxHighlighting
 } from '@codemirror/language'
+import { tags as t } from '@lezer/highlight'
 import { lintKeymap } from '@codemirror/lint'
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
@@ -42,6 +43,39 @@ import { useEffect, useRef } from 'react'
 import { findVariableTokens, type VariableMap } from '@shared/variables'
 import { cn } from '@renderer/lib/utils'
 import { describeVariable } from '@renderer/lib/variables'
+
+/**
+ * Syntax colors as CSS variables (--code-*, styles.css), so light and dark mode each get
+ * readable colors (CodeMirror's default style is made for light backgrounds only).
+ */
+const highlightStyle = HighlightStyle.define([
+  { tag: t.meta, color: 'var(--code-meta)' },
+  { tag: t.link, textDecoration: 'underline' },
+  { tag: t.heading, textDecoration: 'underline', fontWeight: 'bold' },
+  { tag: t.emphasis, fontStyle: 'italic' },
+  { tag: t.strong, fontWeight: 'bold' },
+  { tag: t.strikethrough, textDecoration: 'line-through' },
+  {
+    tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword],
+    color: 'var(--code-keyword)'
+  },
+  {
+    tag: [t.atom, t.bool, t.null, t.url, t.contentSeparator, t.labelName],
+    color: 'var(--code-atom)'
+  },
+  { tag: [t.literal, t.number, t.inserted], color: 'var(--code-number)' },
+  { tag: [t.string, t.deleted], color: 'var(--code-string)' },
+  { tag: [t.regexp, t.escape, t.special(t.string)], color: 'var(--code-regexp)' },
+  { tag: t.propertyName, color: 'var(--code-property)' },
+  {
+    tag: [t.definition(t.variableName), t.function(t.variableName)],
+    color: 'var(--code-definition)'
+  },
+  { tag: [t.typeName, t.namespace, t.className, t.tagName], color: 'var(--code-type)' },
+  { tag: [t.attributeName, t.special(t.variableName), t.macroName], color: 'var(--code-property)' },
+  { tag: t.comment, color: 'var(--code-comment)', fontStyle: 'italic' },
+  { tag: t.invalid, color: 'var(--code-invalid)' }
+])
 
 export type CodeLanguage = 'json' | 'html' | 'xml' | 'javascript' | 'python' | 'text'
 
@@ -76,7 +110,7 @@ const editorSetup: Extension = [
   dropCursor(),
   EditorState.allowMultipleSelections.of(true),
   indentOnInput(),
-  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  syntaxHighlighting(highlightStyle, { fallback: true }),
   bracketMatching(),
   closeBrackets(),
   autocompletion(),

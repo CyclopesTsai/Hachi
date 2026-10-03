@@ -69,7 +69,8 @@ export const darwinAdapter: PlatformAdapter = {
     }
   },
 
-  trailingMenus(): MenuItemConstructorOptions[] {
-    return []
+  helpMenu(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions {
+    // role "help": macOS adds its menu search field to this menu.
+    return { role: 'help', submenu: items }
   }
 }

@@ -281,7 +281,9 @@ async function bootstrap(): Promise<void> {
 
   const ensureWindow = async (): Promise<BrowserWindow> => {
     if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
-    mainWindow = createMainWindow()
+    mainWindow = createMainWindow(config.get().window, (state) => {
+      void config.setWindowState(state).catch(() => undefined)
+    })
     const created = mainWindow
     created.on('close', (event) => {
       const reason = quitRequested ? 'quit' : 'close'
@@ -347,6 +349,7 @@ async function bootstrap(): Promise<void> {
     openSettings: () => sendMenuCommand('app.settings'),
     importFile: () => sendMenuCommand('import.file'),
     importCurl: () => sendMenuCommand('import.curl'),
+    showShortcuts: () => sendMenuCommand('help.shortcuts'),
     openWorkspace: () => sendMenuCommand('workspace.open'),
     openRecentWorkspace: (workspacePath) =>
       sendMenuCommand('workspace.openRecent', { path: workspacePath }),

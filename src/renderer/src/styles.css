@@ -7,6 +7,7 @@
  * Design tokens (shadcn/ui convention). Colors are app-defined, neutral zinc scale.
  */
 :root {
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.21 0.006 285.9);
   --card: oklch(1 0 0);
@@ -28,9 +29,23 @@
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
   --chart-grid: oklch(0.92 0.004 286.3);
+  /* Syntax colors (CodeMirror), GitHub-like; dark values below. */
+  --code-keyword: #cf222e;
+  --code-atom: #0550ae;
+  --code-number: #0550ae;
+  --code-string: #0a3069;
+  --code-regexp: #116329;
+  --code-property: #0550ae;
+  --code-definition: #8250df;
+  --code-type: #953800;
+  --code-comment: #6e7781;
+  --code-meta: #6e7781;
+  --code-invalid: #82071e;
 }
 
 .dark {
+  /* Native controls and scrollbars follow the theme too. */
+  color-scheme: dark;
   --background: oklch(0.18 0.005 285.8);
   --foreground: oklch(0.96 0 0);
   --card: oklch(0.22 0.006 285.9);
@@ -50,6 +65,17 @@
   --chart-1: #3987e5;
   --chart-2: #d95926;
   --chart-grid: oklch(1 0 0 / 10%);
+  --code-keyword: #ff7b72;
+  --code-atom: #79c0ff;
+  --code-number: #79c0ff;
+  --code-string: #a5d6ff;
+  --code-regexp: #7ee787;
+  --code-property: #7ee787;
+  --code-definition: #d2a8ff;
+  --code-type: #ffa657;
+  --code-comment: #8b949e;
+  --code-meta: #8b949e;
+  --code-invalid: #ffa198;
 }
 
 @theme inline {

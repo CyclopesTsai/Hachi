@@ -32,7 +32,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTransferStore } from '@renderer/stores/transfer-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
-import type { DropPosition, FlatRow } from './tree-model'
+import { neighborRow, type DropPosition, type FlatRow } from './tree-model'
 
 export interface DropIndicator {
   targetId: string
@@ -142,7 +142,7 @@ export function TreeRow({
     if (!broken) setEditing(node.id)
   }
 
-  // Only Delete and Enter: no rename / expand / collapse shortcuts (decision 49).
+  // Delete, Enter and ↑ / ↓ only: no rename / expand / collapse shortcuts (decisions 49, 96).
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (editing) return
     if (e.key === 'Delete' || (e.key === 'Backspace' && (e.metaKey || e.ctrlKey))) {
@@ -150,6 +150,17 @@ export function TreeRow({
       onRequestDelete(node)
     } else if (e.key === 'Enter') {
       open(false)
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const { tree, expanded } = useTreeStore.getState()
+      const next = neighborRow(tree, expanded, node.id, e.key === 'ArrowDown' ? 1 : -1)
+      if (!next) return
+      select(next.id)
+      const row = document.querySelector<HTMLElement>(
+        `[data-testid="tree-row"][data-id="${CSS.escape(next.id)}"]`
+      )
+      row?.focus()
+      row?.scrollIntoView({ block: 'nearest' })
     }
   }
 
@@ -169,6 +180,7 @@ export function TreeRow({
           aria-selected={selected}
           aria-expanded={container ? expanded : undefined}
           data-testid="tree-row"
+          data-id={node.id}
           data-name={node.name}
           data-kind={node.kind}
           tabIndex={0}

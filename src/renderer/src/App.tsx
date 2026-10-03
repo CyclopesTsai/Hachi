@@ -13,6 +13,8 @@ import { UnsavedChangesDialog } from '@renderer/features/http/UnsavedChangesDial
 import { ScriptTrustDialog } from '@renderer/features/http/ScriptTrustDialog'
 import { WelcomeScreen } from '@renderer/features/onboarding/WelcomeScreen'
 import { AppSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
+import { ShortcutsDialog } from '@renderer/features/settings/ShortcutsDialog'
+import { useShortcutsDialog } from '@renderer/stores/shortcuts-store'
 import { SaveAsDialog } from '@renderer/features/tabs/SaveAsDialog'
 import { CurlImportDialog, TransferResultDialog } from '@renderer/features/transfer/TransferDialogs'
 import { isTabDirty, toSession } from '@renderer/features/tabs/tab-model'
@@ -81,6 +83,9 @@ function useMainProcessEvents(): void {
           case 'import.file':
             if (store().currentWorkspace) void useTransferStore.getState().importFile()
             else store().setNotice('請先建立或開啟 Workspace 再匯入')
+            break
+          case 'help.shortcuts':
+            useShortcutsDialog.getState().setOpen(true)
             break
           case 'import.curl':
             if (store().currentWorkspace) useTransferStore.getState().setCurlOpen(true)
@@ -238,6 +243,7 @@ export function App() {
       <UnsavedChangesDialog />
       <SaveAsDialog />
       <ScriptTrustDialog />
+      <ShortcutsDialog />
       <CurlImportDialog />
       <TransferResultDialog />
       <NoticeDialog />

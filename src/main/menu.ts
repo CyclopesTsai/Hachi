@@ -18,6 +18,8 @@ export interface MenuActions {
   importFile(): void
   /** Paste a cURL command into a new request (no shortcut). */
   importCurl(): void
+  /** Help → Keyboard Shortcuts (decision 96, no shortcut). */
+  showShortcuts(): void
 }
 
 export interface MenuOptions {
@@ -120,7 +122,7 @@ export function buildMenuTemplate(
       ]
     },
     platform.windowMenu(() => focusedWindow()?.minimize()),
-    ...platform.trailingMenus()
+    platform.helpMenu([{ label: 'Keyboard Shortcuts', click: () => actions.showShortcuts() }])
   ]
 }
 

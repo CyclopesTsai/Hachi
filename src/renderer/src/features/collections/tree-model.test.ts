@@ -6,6 +6,7 @@ import {
   dropPositionFor,
   flattenTree,
   isNoopMove,
+  neighborRow,
   resolveDrop
 } from './tree-model'
 
@@ -45,6 +46,18 @@ const tree: WorkspaceTree = {
     collection('C2', [req('r4')])
   ]
 }
+
+describe('neighborRow (↑ / ↓)', () => {
+  it('moves through visible rows only and stops at the ends', () => {
+    const expanded = new Set(['C1', 'F1'])
+    expect(neighborRow(tree, expanded, 'r1', 1)?.id).toBe('F2')
+    expect(neighborRow(tree, expanded, 'F2', 1)?.id).toBe('r3')
+    expect(neighborRow(tree, expanded, 'F1', -1)?.id).toBe('C1')
+    expect(neighborRow(tree, expanded, 'C1', -1)).toBeNull()
+    expect(neighborRow(tree, expanded, 'C2', 1)).toBeNull()
+    expect(neighborRow(tree, expanded, 'missing', 1)).toBeNull()
+  })
+})
 
 describe('flattenTree', () => {
   it('only descends into expanded containers', () => {

@@ -30,6 +30,19 @@ export function flattenTree(tree: WorkspaceTree, expanded: ReadonlySet<string>):
   return rows
 }
 
+/** The visible row before / after `id` (↑ / ↓ in the tree, decision 96); null at the ends. */
+export function neighborRow(
+  tree: WorkspaceTree,
+  expanded: ReadonlySet<string>,
+  id: string,
+  delta: 1 | -1
+): TreeNode | null {
+  const rows = flattenTree(tree, expanded)
+  const index = rows.findIndex((r) => r.node.id === id)
+  if (index < 0) return null
+  return rows[index + delta]?.node ?? null
+}
+
 /** Number of items below a container (for delete confirmations). */
 export function countDescendants(node: TreeNode): number {
   return isContainer(node)

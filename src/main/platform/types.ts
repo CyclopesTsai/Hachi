@@ -17,8 +17,11 @@ export interface PlatformAdapter {
   fileMenuTail(): MenuItemConstructorOptions[]
   /** The Window menu, without keyboard shortcuts (Electron's role menu brings ⌘M / Ctrl+W). */
   windowMenu(minimize: () => void): MenuItemConstructorOptions
-  /** Menus appended to the menu bar (non-macOS: Help → About, since there is no app menu). */
-  trailingMenus(): MenuItemConstructorOptions[]
+  /**
+   * The Help menu: `items` (e.g. Keyboard Shortcuts) plus, on non-macOS, About (there is
+   * no app menu there).
+   */
+  helpMenu(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions
   /** macOS convention: apps stay alive with no windows open. */
   readonly quitWhenAllWindowsClosed: boolean
   /** Called once at startup (About panel, app user model id, …). */

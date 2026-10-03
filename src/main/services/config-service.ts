@@ -75,13 +75,14 @@ export class ConfigService {
   }
 
   /** Applies `mutate` to a copy, validates the result, persists and notifies listeners. */
-  async update(mutate: (draft: AppConfig) => void): Promise<AppConfig> {
+  /** `notify: false` for changes nobody listens to (window position, saved often). */
+  async update(mutate: (draft: AppConfig) => void, notify = true): Promise<AppConfig> {
     const draft = this.get()
     mutate(draft)
     this.config = appConfigSchema.parse(draft)
     await this.persist()
     const snapshot = this.get()
-    for (const listener of this.listeners) listener(snapshot)
+    if (notify) for (const listener of this.listeners) listener(snapshot)
     return snapshot
   }
 
@@ -130,7 +131,7 @@ export class ConfigService {
   setWindowState(window: WindowState): Promise<AppConfig> {
     return this.update((c) => {
       c.window = window
-    })
+    }, false)
   }
 
   /** Moves (or adds) a Workspace to the top of the recent list and marks it as last opened. */

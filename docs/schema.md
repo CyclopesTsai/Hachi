@@ -55,7 +55,7 @@
 ```jsonc
 {
   "version": 1,
-  "theme": "system", // "system" | "light" | "dark"
+  "theme": "system", // "system" | "light" | "dark"（App 設定「外觀」，Phase 6）
   "recentWorkspaces": [
     // 最多 10 筆，最新在前
     {
@@ -65,7 +65,7 @@
     }
   ],
   "lastWorkspacePath": "/Users/me/Documents/Hachi/My API", // 啟動時自動開啟；null = 無
-  "window": null, // Phase 6：{ x?, y?, width, height, isMaximized }
+  "window": null, // 視窗位置與大小（Phase 6，決策 94）：{ x, y, width, height, isMaximized, isFullScreen }；原本的螢幕不在時改為置中
   "proxy": {
     // App 層級（每台電腦），不寫進 Workspace
     "mode": "none", // "none" | "system" | "custom"

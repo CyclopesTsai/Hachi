@@ -1,0 +1,66 @@
+# Builds the macOS dmgs (decisions 95, 97).
+#   - Push a tag like v0.2.0 (must match package.json "version"): builds, runs the smoke test
+#     against the packaged app, and publishes a GitHub Release with both dmgs.
+#   - "Run workflow" on the Actions page: builds and keeps the dmgs as a downloadable artifact.
+# Unsigned for now. Signing / notarization: see README (only repository secrets are needed).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    # Apple Silicon runner; the Intel (x64) dmg is built on it too (no native modules).
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+      - name: Install (also downloads the Electron binary)
+        run: npm ci
+      - name: Type check, lint, format, unit tests, licenses
+        run: npm run verify
+      - name: Build dmgs (arm64 + x64)
+        run: npm run dist:mac
+        # Add these secrets to sign and notarize (see README), nothing else changes:
+        # env:
+        #   CSC_LINK: ${{ secrets.CSC_LINK }}
+        #   CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        #   APPLE_ID: ${{ secrets.APPLE_ID }}
+        #   APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Smoke test the packaged app
+        run: |
+          app="$(ls -d release/*/mac-arm64/Hachi.app)"
+          SMOKE_APP_PATH="$app/Contents/MacOS/Hachi" node scripts/smoke-e2e.mjs
+      - name: Keep the dmgs (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hachi-macOS
+          path: release/*/Hachi-*.dmg
+          if-no-files-found: error
+      - name: Publish the GitHub Release (tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*/Hachi-*.dmg \
+            --title "Hachi ${GITHUB_REF_NAME#v}" \
+            --generate-notes

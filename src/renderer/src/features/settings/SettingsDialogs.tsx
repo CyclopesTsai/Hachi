@@ -10,7 +10,8 @@ import {
   PROXY_MODES,
   WS_MESSAGE_LIMIT_MAX,
   WS_MESSAGE_LIMIT_MIN,
-  type ProxySettings
+  type ProxySettings,
+  type Theme
 } from '@shared/schemas/app-config'
 import { HISTORY_LIMIT_MAX, HISTORY_LIMIT_MIN } from '@shared/schemas/history'
 import { MAX_REDIRECTS_LIMIT, type WorkspaceSettings } from '@shared/schemas/workspace'
@@ -198,6 +199,43 @@ export function WorkspaceSettingsDialog({
   )
 }
 
+const THEME_LABELS: Record<Theme, string> = {
+  system: '跟隨系統',
+  light: '淺色',
+  dark: '深色'
+}
+
+/** Appearance (decision 93): applied right away, not with the form's 儲存. */
+function ThemeRow() {
+  const theme = useAppStore((s) => s.config?.theme ?? 'system')
+  const updateConfig = useAppStore((s) => s.updateConfig)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <Row label="外觀">
+      <div className="flex gap-4 text-sm" role="radiogroup" aria-label="外觀">
+        {(Object.keys(THEME_LABELS) as Theme[]).map((t) => (
+          <label key={t} className="inline-flex items-center gap-1.5">
+            <input
+              type="radio"
+              name="theme"
+              className="accent-primary"
+              checked={theme === t}
+              onChange={() =>
+                void updateConfig({ theme: t }).then(
+                  () => setError(null),
+                  (err: unknown) => setError(errorMessage(err))
+                )
+              }
+            />
+            {THEME_LABELS[t]}
+          </label>
+        ))}
+      </div>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </Row>
+  )
+}
+
 const MODE_LABELS: Record<ProxySettings['mode'], string> = {
   none: '不使用 Proxy',
   system: '使用系統 Proxy 設定',
@@ -265,6 +303,8 @@ function AppSettingsForm({
           存在這台電腦（不會寫進 Workspace），適用所有 Workspace。
         </DialogDescription>
       </DialogHeader>
+      <ThemeRow />
+      <span className="text-sm font-medium">Proxy</span>
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="Proxy 模式">
         {PROXY_MODES.map((mode) => (
           <label key={mode} className="inline-flex items-center gap-2 text-sm">

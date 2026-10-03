@@ -14,7 +14,8 @@ export const windowStateSchema = z.object({
   y: z.number().int().optional(),
   width: z.number().int().min(200),
   height: z.number().int().min(200),
-  isMaximized: z.boolean().default(false)
+  isMaximized: z.boolean().default(false),
+  isFullScreen: z.boolean().default(false)
 })
 export type WindowState = z.infer<typeof windowStateSchema>
 

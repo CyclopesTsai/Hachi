@@ -1,0 +1,39 @@
+# Checks every push to main and every pull request (decision 98):
+# type check, lint, format, unit tests, licenses, then the E2E smoke test on Linux.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (also downloads the Electron binary)
+        run: npm ci
+      - name: Type check, lint, format, unit tests, licenses
+        run: npm run verify
+      - name: E2E smoke test (Electron under Xvfb)
+        run: xvfb-run -a npm run test:e2e
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshots
+          path: out/smoke/
+          if-no-files-found: ignore

@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；Phase 5 全部已確認；**目前進行：Phase 6**（決策 93–99），完成後給使用者確認。已改由本機（macOS）的 Claude Code 桌面版接手
+- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；Phase 5 已確認；**Phase 6 完成，等使用者確認**（決策 93–99）。已改由本機（macOS）的 Claude Code 桌面版接手
 - **最後更新**：2026-10-03
 
 ## Phase 進度
@@ -18,7 +18,7 @@
 | 3     | 環境變數、多分頁、歷史紀錄                                                                          | ✅ 完成                                                   |
 | 4     | WebSocket 完整功能                                                                                  | ✅ 完成                                                   |
 | 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | 🚧 5a ✅；5b 進行中；5c 未開始（決策 64）                 |
-| 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | 🚧 進行中                                                 |
+| 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | 🚧 完成待確認                                             |
 
 ### Phase 0 完成內容
 
@@ -134,6 +134,19 @@
 
 **驗證方式**：`npm run verify`（387 個單元測試，新增：百分位數 / 標準差、統計彙總與每秒時間軸、CSV（引號、跳脫、多行、BOM）/ JSON 資料檔、Runner 對本機伺服器實測：樹的順序與略過 WebSocket、並行數 1 共用變數並寫檔、3 個 worker × 2 輪且資料列依輪次循環、worker 變數不外洩、失敗即停止、執行中取消、保留 Body 與匯出、資料檔第 n 輪的資料、丟棄結果）；`npm run test:e2e`（macOS，冒煙檢查新增 2 項：3 輪 × 2 個 worker＋CSV 資料檔、統計 12/12、兩張圖表、明細的資料列與 Body、匯出 JSON、搜尋框停用；長時間執行可停止），共 47 項，連續 3 次通過。
 
+### Phase 6 完成內容（待使用者確認）
+
+- 視窗狀態：記住位置、大小、最大化、全螢幕（移動 / 調整後 0.5 秒寫入 `app-config.json` 的 `window`，關閉時也寫入；這種寫入不觸發設定變更事件）；原本的螢幕不在或標題列不可見時改為置中，大小不超過螢幕
+- 外觀：App 設定新增「外觀：跟隨系統 / 淺色 / 深色」，選了立即套用
+- 深色模式檢查：以深色跑完整個 E2E 並逐一檢查截圖，修正：CodeMirror 語法顏色改成淺 / 深色各一組的 CSS 變數（原本的配色在深色背景幾乎看不到）、`color-scheme` 讓原生捲軸與表單跟著主題、程式碼對話框的勾選框改用主題色
+- 快捷鍵：左側樹 ↑ / ↓ 移動選取；Help → Keyboard Shortcuts 對話框（⌘ / Ctrl 依平台顯示）；macOS 多了 Help 選單，Windows / Linux 的 Help 選單另有 About
+- 打包：`build/icon.png` 佔位圖示（`scripts/make-icon.mjs` 產生）；`npm run dist:mac` 產生 `Hachi-0.1.0-arm64.dmg`（約 131 MB）與 `Hachi-0.1.0-x64.dmg`（約 135 MB）；`app.asar` 只放 main 需要的套件（57 MB → 15.5 MB，清單從 `out/main` 自動算出）；`--publish never` 避免 electron-builder 自己發佈
+- E2E 可對打包後的 App 執行（`SMOKE_APP_PATH`）、可用深色執行（`SMOKE_COLOR_SCHEME=dark`）；CI 的 Linux 上自動加 `--no-sandbox`
+- GitHub Actions：`ci.yml`（push main / PR：verify ＋ Xvfb E2E）、`release.yml`（`v*` tag：macOS 上 verify → 兩個 dmg → 對打包 App 跑冒煙測試 → 發佈 GitHub Release；手動執行只產生 artifact；簽章用的 secrets 已預留註解）
+- README：打包、圖示替換、未簽章 App 的開啟方式、CI / 發佈流程、簽章與公證（含 GitHub Secrets）
+
+**驗證方式**：`npm run verify`（393 個單元測試，新增：視窗位置還原 / 螢幕不在時置中 / 大小限制、↑ / ↓ 的鄰近列）；`npm run test:e2e`（冒煙檢查新增 2 項並擴充 1 項，共 49 項：快捷鍵一覽、↑ / ↓ 只移動選取、外觀三種設定立即套用並存檔、重新啟動後視窗位置與大小還原）；深色模式完整執行一次並檢查截圖；`npm run dist:mac` 後**對打包好的 arm64 與 x64（Rosetta）App 各跑完整 49 項冒煙檢查**；掛載 dmg 確認內容（App、Applications 捷徑、Bundle ID、版本、圖示）。GitHub Actions 的結果見下一步。
+
 ## 決策紀錄（已與使用者確認）
 
 | #   | 決策                | 內容                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -240,7 +253,8 @@
 
 ## 下一步
 
-- Phase 6 實作中：視窗狀態、外觀設定、↑ / ↓ 與快捷鍵一覽、佔位圖示與 dmg、GitHub Actions（CI 與 tag 發佈）
+- Phase 6 已完成，等使用者確認。確認 CI 在 GitHub 上通過；要發佈第一版時推 `v0.1.0` tag（會直接發佈 Release）
+- 之後：正式 Logo / 圖示、Apple 簽章與公證、Windows 版、Mac App Store 版（決策 36、37）
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 

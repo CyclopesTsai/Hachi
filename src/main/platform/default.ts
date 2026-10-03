@@ -44,8 +44,15 @@ export function createDefaultAdapter(id: 'win32' | 'linux'): PlatformAdapter {
       return [{ role: 'quit', label: 'Exit' }]
     },
 
-    trailingMenus(): MenuItemConstructorOptions[] {
-      return [{ role: 'help', submenu: [{ label: `About ${APP_NAME}`, click: showAboutDialog }] }]
+    helpMenu(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions {
+      return {
+        role: 'help',
+        submenu: [
+          ...items,
+          { type: 'separator' },
+          { label: `About ${APP_NAME}`, click: showAboutDialog }
+        ]
+      }
     }
   }
 }

@@ -85,6 +85,7 @@ function CodeView({ tab }: { tab: RequestTab }) {
         <label className="flex items-center gap-1.5 text-xs">
           <input
             type="checkbox"
+            className="size-3.5 accent-primary"
             data-testid="codegen-reveal"
             checked={revealSecrets}
             onChange={(e) => setRevealSecrets(e.target.checked)}
