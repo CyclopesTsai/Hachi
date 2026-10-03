@@ -256,7 +256,8 @@
 
 ## 下一步
 
-- Phase 6 已完成，等使用者確認。確認 CI 在 GitHub 上通過；要發佈第一版時推 `v0.1.0` tag（會直接發佈 Release）
+- **v0.1.0 已發佈**（2026-10-03）：https://github.com/CyclopesTsai/Hachi/releases/tag/v0.1.0（`Hachi-0.1.0-arm64.dmg` 130.9 MB、`Hachi-0.1.0-x64.dmg` 134.8 MB，未簽章）。第一次 Release 失敗原因：GitHub macOS 機器螢幕只有 1024×768，E2E 寫死的視窗大小超出螢幕被 App 自動縮小 → 測試改用螢幕可用範圍內的大小；`v0.1.0` tag 經使用者同意移到修正後的 commit 重新發佈
+- Phase 6 等使用者確認
 - 之後：正式 Logo / 圖示、Apple 簽章與公證、Windows 版、Mac App Store 版（決策 36、37）
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
