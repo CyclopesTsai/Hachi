@@ -33,7 +33,8 @@ export function createMainWindow(
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     show: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#18181b' : '#ffffff',
+    // Same as --background (Nord) so the window does not flash before the page paints.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#2e3440' : '#ffffff',
     webPreferences: {
       preload: path.join(import.meta.dirname, '../preload/index.cjs'),
       // Security baseline — see docs/ipc.md "Security".

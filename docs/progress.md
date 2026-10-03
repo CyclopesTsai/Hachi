@@ -112,7 +112,7 @@
 - 腳本：請求編輯器新增 Scripts 分頁（Pre-request / Post-response，JavaScript 語法標示，附 API 說明與範例）；在 Electron `utilityProcess` 的 QuickJS 沙箱執行（5 秒 / 64 MB，卡住時結束程序重啟）；`hachi.*` API、Postman `pm.*` 與舊版 `tests[...]` 常用子集、CryptoJS、`btoa` / `atob`、`console`
 - 執行順序：Pre-request 腳本（可改 URL / 方法 / Headers / Body，可設定變數，之後才替換變數）→ 發送 → 擷取 → Post-response 腳本 → 斷言；Pre-request 出錯不發送
 - Tests 分頁：斷言表格（12 種條件、預期值可用 `{{變數}}`）＋「從回應擷取變數」表格（JSON 欄位 / Header / 狀態碼 / Body Regex，預設存成暫存變數）
-- 回應區新增 Tests（通過數 / 總數，紅綠標示；列出斷言、腳本測試、擷取、變數變更，寫入檔案的變更以橘色標出）與 Console 分頁；Pre-request 失敗時錯誤頁也顯示 Console / Tests
+- 回應區新增 Tests（通過數 / 總數，紅綠標示；列出斷言、腳本測試、擷取、變數變更，寫入檔案的變更以琥珀色標出）與 Console 分頁；Pre-request 失敗時錯誤頁也顯示 Console / Tests
 - 暫存變數：main 記憶體中依 Workspace 保存，優先於環境與 Collection（HTTP 與 WebSocket 都適用），編輯器的變數標示也包含；「管理環境…」分頁最上方可查看、單筆刪除、全部清除
 - 腳本信任：第一次發送有腳本的請求時詢問（信任並執行 / 這次不執行腳本 / 取消），記在 `app-config.json` 的 `scripts.trustedWorkspaces`；Workspace 設定可取消
 - 腳本改了環境 / Collection 變數時，推送 `variables:changed`，畫面重新讀取（沒有未儲存修改的環境 / Collection 分頁也會更新）
@@ -144,6 +144,8 @@
 - E2E 可對打包後的 App 執行（`SMOKE_APP_PATH`）、可用深色執行（`SMOKE_COLOR_SCHEME=dark`）；CI 的 Linux 上自動加 `--no-sandbox`
 - GitHub Actions：`ci.yml`（push main / PR：verify ＋ Xvfb E2E）、`release.yml`（`v*` tag：macOS 上 verify → 兩個 dmg → 對打包 App 跑冒煙測試 → 發佈 GitHub Release；手動執行只產生 artifact；簽章用的 secrets 已預留註解）
 - README：打包、圖示替換、未簽章 App 的開啟方式、CI / 發佈流程、簽章與公證（含 GitHub Secrets）
+- 配色改為 Nord（決策 100），深淺色都重新跑 E2E 並檢查截圖；刪除按鈕改用 `--destructive-foreground`（深色時用深色字）
+- CI 修正：GitHub 機器較慢，沙箱「中止與恢復」測試超過 5 秒預設上限 → 該測試給 30 秒、CI 上全部測試上限 15 秒；`upload-artifact` 升到 v5（Node 20 棄用警告）
 
 **驗證方式**：`npm run verify`（393 個單元測試，新增：視窗位置還原 / 螢幕不在時置中 / 大小限制、↑ / ↓ 的鄰近列）；`npm run test:e2e`（冒煙檢查新增 2 項並擴充 1 項，共 49 項：快捷鍵一覽、↑ / ↓ 只移動選取、外觀三種設定立即套用並存檔、重新啟動後視窗位置與大小還原）；深色模式完整執行一次並檢查截圖；`npm run dist:mac` 後**對打包好的 arm64 與 x64（Rosetta）App 各跑完整 49 項冒煙檢查**；掛載 dmg 確認內容（App、Applications 捷徑、Bundle ID、版本、圖示）。GitHub Actions 的結果見下一步。
 
@@ -245,11 +247,12 @@
 | 92  | Runner 其他         | 可設定請求間隔（ms）、失敗時停止（網路錯誤、腳本錯誤或任一測試 / 斷言失敗即停止全部 worker）；執行已儲存的檔案（有未儲存的分頁時提示）；腳本信任同決策 84；Runner 分頁不記在 session；結果可匯出 JSON                                                                                                                                                                                                                                                           |
 | 93  | 外觀                | App 設定新增「外觀：跟隨系統 / 淺色 / 深色」，預設跟隨系統（`app-config.json` 既有的 `theme`）                                                                                                                                                                                                                                                                                                                                                                  |
 | 94  | 視窗狀態            | 記住位置、大小、最大化、全螢幕（移動 / 調整後延遲寫入，關閉時也寫入）；原本的螢幕不在時改在主螢幕置中                                                                                                                                                                                                                                                                                                                                                           |
-| 95  | 打包                | 兩個 dmg：`Hachi-x.y.z-arm64.dmg`（Apple Silicon）與 `Hachi-x.y.z-x64.dmg`（Intel），未簽章；先用程式產生的佔位圖示 `build/icon.png`（橘色圓角方塊白色 H），之後直接替換                                                                                                                                                                                                                                                                                        |
+| 95  | 打包                | 兩個 dmg：`Hachi-x.y.z-arm64.dmg`（Apple Silicon）與 `Hachi-x.y.z-x64.dmg`（Intel），未簽章；先用程式產生的佔位圖示 `build/icon.png`（Nord 藍圓角方塊白色 H，決策 100），之後直接替換                                                                                                                                                                                                                                                                           |
 | 96  | 快捷鍵補充          | 左側樹可用 ↑ / ↓ 移動選取（不開啟、不展開）；新增 Help → Keyboard Shortcuts 對話框列出所有按鍵（本身沒有快捷鍵；macOS 也多一個 Help 選單）                                                                                                                                                                                                                                                                                                                      |
 | 97  | GitHub 自動打包     | GitHub Actions（公開 repo 免費）：推送 `v*` tag 時在 macOS 機器打包兩個 dmg 並**直接發佈 GitHub Release**（tag 須與 package.json 版本一致）；也可手動執行（只產生 Actions 下載檔）。之後加簽章 / 公證只需設定 Secrets                                                                                                                                                                                                                                           |
 | 98  | CI                  | 每次 push 到 main 與 PR：`npm run verify` ＋ Linux（xvfb）E2E 冒煙測試                                                                                                                                                                                                                                                                                                                                                                                          |
 | 99  | Phase 5c 細節       | 使用者確認：Runner 明細只保留前 2000 筆與之後失敗的 2000 筆、記憶體保留最近 5 次結果、資料檔上限 10 MB / 10,000 列                                                                                                                                                                                                                                                                                                                                              |
+| 100 | 配色                | 改用 **Nord**（使用者選擇；原本近黑底＋亮橘的組合容易讓人聯想到特定網站）：深色 Polar Night 底＋Frost 主色 `#88c0d0`，淺色白底＋主色 `#4c6e98`（Nord 10 加深以達 WCAG AA），Logo 與佔位圖示同步改為 Nord 藍；深色的紅色與次要文字調亮到 4.5:1 以上；語法顏色深色改 Nord；Runner 圖表維持驗證過的藍 / 橘（在 Nord 底色重新驗證通過）                                                                                                                             |
 
 ## 下一步
 

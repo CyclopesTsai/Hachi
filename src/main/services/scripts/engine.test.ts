@@ -233,7 +233,7 @@ describe('runScript: sandbox', () => {
     )
     expect(ok.error).toBeNull()
     expect(ok.logs[0]?.text).toBe('500')
-  })
+  }, 30_000) // several interrupted runs plus a QuickJS reload: slow on CI machines
 
   it('reports syntax errors with the line', async () => {
     expect((await runScript(input('const a = 1\nconst = 2'))).error).toMatch(/SyntaxError.*第 2 行/)

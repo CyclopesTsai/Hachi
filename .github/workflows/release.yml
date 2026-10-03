@@ -51,7 +51,7 @@ jobs:
           SMOKE_APP_PATH="$app/Contents/MacOS/Hachi" node scripts/smoke-e2e.mjs
       - name: Keep the dmgs (manual runs)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Hachi-macOS
           path: release/*/Hachi-*.dmg

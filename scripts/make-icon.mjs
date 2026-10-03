@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Writes the placeholder app icon build/icon.png (1024×1024): an orange rounded square
+ * Writes the placeholder app icon build/icon.png (1024×1024): a Nord-blue rounded square
  * with a white "H", like the logo in the app. No dependencies — plain PNG encoding.
  * electron-builder turns it into icon.icns. Replace build/icon.png with the real icon later.
  *
@@ -15,7 +15,8 @@ const SIZE = 1024
 const BODY = 824
 const OFFSET = (SIZE - BODY) / 2
 const RADIUS = 185
-const ORANGE = [207, 86, 4]
+// Nord 10 (#5e81ac), the brand color of the Nord theme the app uses.
+const BRAND = [94, 129, 172]
 const WHITE = [255, 255, 255]
 
 /** Coverage (0–1) of the rounded square at pixel (x, y), 4×4 supersampled. */
@@ -54,7 +55,7 @@ for (let y = 0; y < SIZE; y++) {
   raw[row] = 0 // filter: none
   for (let x = 0; x < SIZE; x++) {
     const coverage = bodyCoverage(x, y)
-    const color = inH(x, y) ? WHITE : ORANGE
+    const color = inH(x, y) ? WHITE : BRAND
     const i = row + 1 + x * 4
     raw[i] = color[0]
     raw[i + 1] = color[1]

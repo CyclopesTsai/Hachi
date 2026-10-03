@@ -10,6 +10,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts']
+    include: ['src/**/*.test.ts'],
+    // CI machines are slower (local servers, the script sandbox); 5 s is too tight there.
+    testTimeout: process.env.CI ? 15_000 : 5_000
   }
 })

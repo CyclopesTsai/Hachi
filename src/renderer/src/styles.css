@@ -4,31 +4,33 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Design tokens (shadcn/ui convention). Colors are app-defined, neutral zinc scale.
+ * Design tokens (shadcn/ui convention). Palette: Nord (nordtheme.com, MIT) — Polar Night
+ * surfaces, Frost accents. Light primary is Nord 10 darkened to pass WCAG AA on white.
  */
 :root {
   color-scheme: light;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.21 0.006 285.9);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.006 285.9);
-  --muted: oklch(0.967 0.001 286.4);
-  --muted-foreground: oklch(0.552 0.016 285.9);
-  --primary: oklch(0.6 0.17 45);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.967 0.001 286.4);
-  --secondary-foreground: oklch(0.21 0.006 285.9);
-  --accent: oklch(0.967 0.001 286.4);
-  --accent-foreground: oklch(0.21 0.006 285.9);
-  --destructive: oklch(0.577 0.245 27.3);
-  --border: oklch(0.92 0.004 286.3);
-  --input: oklch(0.92 0.004 286.3);
-  --ring: oklch(0.6 0.17 45);
+  --background: #ffffff;
+  --foreground: #2e3440;
+  --card: #ffffff;
+  --card-foreground: #2e3440;
+  --muted: #eceff4;
+  --muted-foreground: #4c566a;
+  --primary: #4c6e98;
+  --primary-foreground: #ffffff;
+  --secondary: #eceff4;
+  --secondary-foreground: #2e3440;
+  --accent: #e5e9f0;
+  --accent-foreground: #2e3440;
+  --destructive: #bf616a;
+  --destructive-foreground: #ffffff;
+  --border: #d8dee9;
+  --input: #d8dee9;
+  --ring: #5e81ac;
   --radius: 0.5rem;
   /* Chart series (validated categorical slots 1–2, light and dark steps; Runner charts). */
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
-  --chart-grid: oklch(0.92 0.004 286.3);
+  --chart-grid: #e5e9f0;
   /* Syntax colors (CodeMirror), GitHub-like; dark values below. */
   --code-keyword: #cf222e;
   --code-atom: #0550ae;
@@ -46,36 +48,39 @@
 .dark {
   /* Native controls and scrollbars follow the theme too. */
   color-scheme: dark;
-  --background: oklch(0.18 0.005 285.8);
-  --foreground: oklch(0.96 0 0);
-  --card: oklch(0.22 0.006 285.9);
-  --card-foreground: oklch(0.96 0 0);
-  --muted: oklch(0.27 0.006 286);
-  --muted-foreground: oklch(0.71 0.013 286);
-  --primary: oklch(0.7 0.16 50);
-  --primary-foreground: oklch(0.18 0.005 285.8);
-  --secondary: oklch(0.27 0.006 286);
-  --secondary-foreground: oklch(0.96 0 0);
-  --accent: oklch(0.3 0.006 286);
-  --accent-foreground: oklch(0.96 0 0);
-  --destructive: oklch(0.65 0.2 25);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.7 0.16 50);
+  --background: #2e3440;
+  --foreground: #eceff4;
+  --card: #3b4252;
+  --card-foreground: #eceff4;
+  --muted: #3b4252;
+  --muted-foreground: #b0b9c9;
+  --primary: #88c0d0;
+  --primary-foreground: #2e3440;
+  --secondary: #3b4252;
+  --secondary-foreground: #eceff4;
+  --accent: #434c5e;
+  --accent-foreground: #eceff4;
+  /* Nord 11 is too dark for text here (3:1); a lighter step reaches 4.6:1 on cards. */
+  --destructive: #e59ca3;
+  --destructive-foreground: #2e3440;
+  --border: rgb(216 222 233 / 14%);
+  --input: rgb(216 222 233 / 18%);
+  --ring: #88c0d0;
   --chart-1: #3987e5;
   --chart-2: #d95926;
-  --chart-grid: oklch(1 0 0 / 10%);
-  --code-keyword: #ff7b72;
-  --code-atom: #79c0ff;
-  --code-number: #79c0ff;
-  --code-string: #a5d6ff;
-  --code-regexp: #7ee787;
-  --code-property: #7ee787;
-  --code-definition: #d2a8ff;
-  --code-type: #ffa657;
-  --code-comment: #8b949e;
-  --code-meta: #8b949e;
-  --code-invalid: #ffa198;
+  --chart-grid: rgb(216 222 233 / 12%);
+  /* Nord syntax colors (comment lightened for contrast). */
+  --code-keyword: #81a1c1;
+  --code-atom: #81a1c1;
+  --code-number: #b48ead;
+  --code-string: #a3be8c;
+  --code-regexp: #ebcb8b;
+  --code-property: #88c0d0;
+  --code-definition: #88c0d0;
+  --code-type: #8fbcbb;
+  --code-comment: #8a96ad;
+  --code-meta: #8a96ad;
+  --code-invalid: #e59ca3;
 }
 
 @theme inline {
@@ -92,6 +97,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
