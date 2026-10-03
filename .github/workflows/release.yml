@@ -49,6 +49,13 @@ jobs:
         run: |
           app="$(ls -d release/*/mac-arm64/Hachi.app)"
           SMOKE_APP_PATH="$app/Contents/MacOS/Hachi" node scripts/smoke-e2e.mjs
+      - name: Upload smoke test screenshots (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: smoke-screenshots
+          path: out/smoke/
+          if-no-files-found: ignore
       - name: Keep the dmgs (manual runs)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v5

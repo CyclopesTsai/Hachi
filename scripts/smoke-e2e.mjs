@@ -1420,7 +1420,17 @@ try {
   step('app proxy setting (userData) is used; a request can opt out of the proxy')
 
   // Window position / size are remembered (decision 94).
-  const savedBounds = { x: 120, y: 90, width: 1100, height: 760 }
+  // Inside the primary screen's work area: CI machines have small screens (1024×768), where
+  // larger bounds are fitted to the screen on restore (decision 94).
+  const savedBounds = await app.evaluate(({ screen }) => {
+    const area = screen.getPrimaryDisplay().workArea
+    return {
+      x: area.x + 20,
+      y: area.y + 10,
+      width: Math.max(900, Math.min(1000, area.width - 40)),
+      height: Math.max(600, Math.min(700, area.height - 20))
+    }
+  })
   await app.evaluate(
     ({ BrowserWindow }, b) => BrowserWindow.getAllWindows()[0].setBounds(b),
     savedBounds
