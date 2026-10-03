@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a、5b 已確認；**5c（Collection Runner）完成，等使用者確認**後進 Phase 6。已改由本機（macOS）的 Claude Code 桌面版接手
+- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；Phase 5 全部已確認；**目前進行：Phase 6**（決策 93–99），完成後給使用者確認。已改由本機（macOS）的 Claude Code 桌面版接手
 - **最後更新**：2026-10-03
 
 ## Phase 進度
@@ -18,7 +18,7 @@
 | 3     | 環境變數、多分頁、歷史紀錄                                                                          | ✅ 完成                                                   |
 | 4     | WebSocket 完整功能                                                                                  | ✅ 完成                                                   |
 | 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | 🚧 5a ✅；5b 進行中；5c 未開始（決策 64）                 |
-| 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | —                                                         |
+| 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | 🚧 進行中                                                 |
 
 ### Phase 0 完成內容
 
@@ -122,7 +122,7 @@
 
 **驗證方式**：`npm run verify`（374 個單元測試，新增：沙箱引擎（變數優先順序、修改請求、Jest / Chai / pm 斷言、無 Node / 網路、無窮迴圈 / 記憶體 / 遞迴的中止與恢復、偽造結果、CryptoJS 與 Node 結果一致、console 上限）、斷言與擷取、整條執行流程對本機伺服器實測（HMAC 簽章 Header、腳本設定的變數用在同一個請求、擷取先於 Post-response、變更寫入環境 / Collection、未信任 / 略過腳本、Pre-request 失敗不發送）、信任設定、變數變更套用）；`npm run test:e2e`（macOS，冒煙檢查新增 2 項：信任 Workspace 後執行腳本、擷取、斷言 3/4、Console 與 CryptoJS、`pm.environment.set` 寫入 dev.json、環境管理分頁的暫存變數查看 / 清除、取消信任後「這次不執行腳本」只跑斷言）。冒煙檢查共 45 項。另修正 E2E 的拖曳輔助函式（放開前先停一下），之後的 7 次執行都沒有再逾時。
 
-### Phase 5c 完成內容（待使用者確認）
+### Phase 5c 完成內容
 
 - Collection Runner：Collection / 資料夾右鍵「執行…」開 Runner 分頁（分頁列 ▷ 圖示，不記在 session）
 - 設定：勾選請求（WebSocket 不能勾、未儲存修改時提示）、環境、執行次數（每個 worker）、並行數（顯示總輪數）、請求間隔、失敗時停止、回應內容「不保留 / 全部保留」、資料檔（CSV / JSON，原生對話框）
@@ -230,13 +230,19 @@
 | 90  | 回應 Body           | 執行前選「全部保留 / 不保留」（預設不保留）；每筆上限 1 MB、總量上限 200 MB，超過只留統計                                                                                                                                                                                                                                                                                                                                                                       |
 | 91  | Runner 變數         | 並行數 1：與手動發送相同（共用暫存變數、環境 / Collection 寫檔）；並行數 > 1：每個 worker 從目前的暫存變數 / 環境 / Collection 各拿一份複本，修改只在該 worker 內有效（決策 75、76）                                                                                                                                                                                                                                                                            |
 | 92  | Runner 其他         | 可設定請求間隔（ms）、失敗時停止（網路錯誤、腳本錯誤或任一測試 / 斷言失敗即停止全部 worker）；執行已儲存的檔案（有未儲存的分頁時提示）；腳本信任同決策 84；Runner 分頁不記在 session；結果可匯出 JSON                                                                                                                                                                                                                                                           |
+| 93  | 外觀                | App 設定新增「外觀：跟隨系統 / 淺色 / 深色」，預設跟隨系統（`app-config.json` 既有的 `theme`）                                                                                                                                                                                                                                                                                                                                                                  |
+| 94  | 視窗狀態            | 記住位置、大小、最大化、全螢幕（移動 / 調整後延遲寫入，關閉時也寫入）；原本的螢幕不在時改在主螢幕置中                                                                                                                                                                                                                                                                                                                                                           |
+| 95  | 打包                | 兩個 dmg：`Hachi-x.y.z-arm64.dmg`（Apple Silicon）與 `Hachi-x.y.z-x64.dmg`（Intel），未簽章；先用程式產生的佔位圖示 `build/icon.png`（橘色圓角方塊白色 H），之後直接替換                                                                                                                                                                                                                                                                                        |
+| 96  | 快捷鍵補充          | 左側樹可用 ↑ / ↓ 移動選取（不開啟、不展開）；新增 Help → Keyboard Shortcuts 對話框列出所有按鍵（本身沒有快捷鍵；macOS 也多一個 Help 選單）                                                                                                                                                                                                                                                                                                                      |
+| 97  | GitHub 自動打包     | GitHub Actions（公開 repo 免費）：推送 `v*` tag 時在 macOS 機器打包兩個 dmg 並**直接發佈 GitHub Release**（tag 須與 package.json 版本一致）；也可手動執行（只產生 Actions 下載檔）。之後加簽章 / 公證只需設定 Secrets                                                                                                                                                                                                                                           |
+| 98  | CI                  | 每次 push 到 main 與 PR：`npm run verify` ＋ Linux（xvfb）E2E 冒煙測試                                                                                                                                                                                                                                                                                                                                                                                          |
+| 99  | Phase 5c 細節       | 使用者確認：Runner 明細只保留前 2000 筆與之後失敗的 2000 筆、記憶體保留最近 5 次結果、資料檔上限 10 MB / 10,000 列                                                                                                                                                                                                                                                                                                                                              |
 
 ## 下一步
 
-- Phase 5c 已完成，等使用者確認後進 Phase 6（視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg）
+- Phase 6 實作中：視窗狀態、外觀設定、↑ / ↓ 與快捷鍵一覽、佔位圖示與 dmg、GitHub Actions（CI 與 tag 發佈）
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
-- Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽
 
 ## 開發環境注意事項
 
