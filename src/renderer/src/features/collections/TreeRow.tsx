@@ -9,6 +9,7 @@ import {
   FolderOpen,
   FolderPlus,
   Layers,
+  Play,
   Share,
   Pencil,
   Radio,
@@ -257,6 +258,11 @@ export function TreeRow({
             <ContextMenuItem onSelect={() => createAndOpen(node.id, 'folder')}>
               <FolderPlus />
               新增資料夾
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => tabs.openRunner(node.id)}>
+              <Play />
+              執行…
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>

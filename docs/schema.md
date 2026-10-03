@@ -467,3 +467,37 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 - Body：有 `-F` → Form-data；Content-Type 含 json 或內容是 JSON → JSON；`a=1&b=2` 形式（且沒有其他 Content-Type）→ x-www-form-urlencoded（值會解碼）；其餘 → Raw（Content-Type 預設 `application/x-www-form-urlencoded`，同 curl）。與 Body 模式重複的 Content-Type Header 會移除。
 - URL 照原樣放進 URL 欄位（含 query）；請求名稱為「方法 + 網址（不含 scheme 與 query）」。沒有指定 Auth 時為「沿用上層」。
 - 不匯入、只提示：讀檔（`@file`、`<file`、`-T`）、Proxy（使用 App 設定）、`--digest` / `--ntlm` 等驗證、不認得的選項。`-L` 與輸出相關的選項（`-s`、`-o`、`-v`…）忽略。
+
+## ✅ Runner 結果匯出（Phase 5c）
+
+`runner:export` 寫出的 JSON（不在 Workspace 中，由使用者選擇位置）：
+
+```jsonc
+{
+  "hachi": "runner-result",
+  "version": 1,
+  "target": "Shop", // Collection / 資料夾名稱
+  "environment": "dev",
+  "startedAt": "2026-10-03T12:00:00.000Z",
+  "durationMs": 1234,
+  "status": "done", // done | cancelled | stopped | error
+  "message": null,
+  "settings": {
+    "iterations": 3,
+    "concurrency": 2,
+    "delayMs": 0,
+    "stopOnFailure": false,
+    "keepBodies": true,
+    "dataFile": "users.csv",
+    "skipScripts": false
+  },
+  "requests": [{ "id": "…", "name": "Ping", "method": "GET", "path": "Shop / Ping" }],
+  "skipped": [], // 略過的 WebSocket / 無法讀取的項目
+  "stats": { "items": [], "total": {}, "statusCodes": {}, "errorCodes": {}, "timeline": [] }, // RunnerStats
+  "rows": [
+    // RunnerRow；保留細節的列另有 requestHeaders / responseHeaders / body / bodyNote / scriptReport / data
+  ]
+}
+```
+
+資料檔：CSV（RFC 4180，第一列為欄名，支援引號、`""`、CRLF 與 BOM）或 JSON（物件陣列，非字串的值存成 JSON 文字），上限 10 MB、10,000 列。

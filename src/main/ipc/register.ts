@@ -17,6 +17,9 @@ import type { HttpService } from '../services/http/http-service'
 import type { WorkspaceService } from '../services/workspace-service'
 import type { TransferService } from '../services/transfer-service'
 import type { RuntimeVariables } from '../services/runtime-variables'
+import type { RunnerService } from '../services/runner-service'
+import { DataFileError, parseDataFile } from '@shared/runner'
+import { readFile, stat } from 'node:fs/promises'
 import { createHandler, forbidden, type Handler } from './handler'
 
 export interface IpcContext {
@@ -29,6 +32,7 @@ export interface IpcContext {
   sessions: SessionService
   transfer: TransferService
   runtime: RuntimeVariables
+  runner: RunnerService
   /** Sends a request and records it in the history. */
   sendHttp(input: HttpSendInput): Promise<HttpResult>
   ws: WsService
@@ -95,6 +99,46 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.workspaceSaveSettings]: (input) => ctx.workspaces.saveSettings(input),
     [INVOKE.workspaceSetScriptTrust]: (input) =>
       ctx.config.setScriptTrust(workspacePath(), input.trusted),
+    [INVOKE.runnerStart]: async (input) => {
+      workspacePath()
+      const started = await ctx.runner.start(input.runId, input.config)
+      return { ...started, progress: ctx.runner.progress(input.runId) }
+    },
+    [INVOKE.runnerCancel]: (input) => ctx.runner.cancel(input.runId),
+    [INVOKE.runnerRows]: (input) => ctx.runner.rows(input.runId, input),
+    [INVOKE.runnerRow]: (input) => ctx.runner.row(input.runId, input.index),
+    [INVOKE.runnerExport]: async (input) => {
+      const exported = ctx.runner.exportJson(input.runId)
+      const target = await selectSavePath(ctx.getWindow(), {
+        title: 'Export Runner Results',
+        defaultPath: path.join(app.getPath('downloads'), exported.fileName)
+      })
+      if (!target) return null
+      await writeFile(target, exported.content, 'utf8')
+      return target
+    },
+    [INVOKE.runnerDiscard]: (input) => ctx.runner.discard(input.runId),
+    [INVOKE.runnerPickDataFile]: async () => {
+      const file = await selectFile(ctx.getWindow(), {
+        title: 'Runner Data File',
+        filters: [
+          { name: 'CSV / JSON', extensions: ['csv', 'json'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+      if (!file) return null
+      if ((await stat(file)).size > 10 * 1024 * 1024) {
+        throw new HachiError('INVALID_FILE', '資料檔太大（上限 10 MB）')
+      }
+      try {
+        const rows = parseDataFile(file, await readFile(file, 'utf8'))
+        const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))]
+        return { fileName: path.basename(file), columns, rows }
+      } catch (error) {
+        if (error instanceof DataFileError) throw new HachiError('INVALID_FILE', error.message)
+        throw error
+      }
+    },
     [INVOKE.runtimeList]: () => ctx.runtime.list(workspacePath()),
     [INVOKE.runtimeDelete]: (input) => {
       ctx.runtime.delete(workspacePath(), input.name)

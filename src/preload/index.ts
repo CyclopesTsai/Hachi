@@ -40,6 +40,15 @@ const api: HachiApi = {
     saveSettings: (input) => invoke(INVOKE.workspaceSaveSettings, input),
     setScriptTrust: (input) => invoke(INVOKE.workspaceSetScriptTrust, input)
   },
+  runner: {
+    start: (input) => invoke(INVOKE.runnerStart, input),
+    cancel: (input) => invoke(INVOKE.runnerCancel, input),
+    rows: (input) => invoke(INVOKE.runnerRows, input),
+    row: (input) => invoke(INVOKE.runnerRow, input),
+    export: (input) => invoke(INVOKE.runnerExport, input),
+    discard: (input) => invoke(INVOKE.runnerDiscard, input),
+    pickDataFile: () => invoke(INVOKE.runnerPickDataFile)
+  },
   runtime: {
     list: () => invoke(INVOKE.runtimeList),
     delete: (input) => invoke(INVOKE.runtimeDelete, input),

@@ -24,6 +24,12 @@ import {
 } from '../schemas/ws-request'
 import { websocketSettingsSchema } from '../schemas/app-config'
 import { workspaceNameSchema, workspaceSettingsSchema } from '../schemas/workspace'
+import {
+  RUNNER_MAX_CONCURRENCY,
+  RUNNER_MAX_DATA_ROWS,
+  RUNNER_MAX_DELAY_MS,
+  RUNNER_MAX_ITERATIONS
+} from '../runner'
 import type { InvokeMap } from './api'
 import { INVOKE, type InvokeChannel } from './channels'
 
@@ -97,6 +103,40 @@ export const inputSchemas = {
   [INVOKE.workspaceGetSettings]: noInput,
   [INVOKE.workspaceSaveSettings]: workspaceSettingsSchema,
   [INVOKE.workspaceSetScriptTrust]: z.strictObject({ trusted: z.boolean() }),
+  [INVOKE.runnerStart]: z.strictObject({
+    runId: runIdSchema,
+    config: z.strictObject({
+      targetId: itemIdSchema,
+      itemIds: z.array(itemIdSchema).min(1).max(10_000),
+      environmentId: itemIdSchema.nullable(),
+      iterations: z.number().int().min(1).max(RUNNER_MAX_ITERATIONS),
+      concurrency: z.number().int().min(1).max(RUNNER_MAX_CONCURRENCY),
+      delayMs: z.number().int().min(0).max(RUNNER_MAX_DELAY_MS),
+      stopOnFailure: z.boolean(),
+      keepBodies: z.boolean(),
+      data: z
+        .strictObject({
+          fileName: z.string().max(1000),
+          rows: z
+            .array(z.record(z.string().max(1000), z.string().max(1024 * 1024)))
+            .min(1)
+            .max(RUNNER_MAX_DATA_ROWS)
+        })
+        .nullable(),
+      skipScripts: z.boolean()
+    })
+  }),
+  [INVOKE.runnerCancel]: z.strictObject({ runId: runIdSchema }),
+  [INVOKE.runnerRows]: z.strictObject({
+    runId: runIdSchema,
+    offset: z.number().int().min(0),
+    limit: z.number().int().min(1).max(1000),
+    failedOnly: z.boolean()
+  }),
+  [INVOKE.runnerRow]: z.strictObject({ runId: runIdSchema, index: z.number().int().min(0) }),
+  [INVOKE.runnerExport]: z.strictObject({ runId: runIdSchema }),
+  [INVOKE.runnerDiscard]: z.strictObject({ runId: runIdSchema }),
+  [INVOKE.runnerPickDataFile]: noInput,
   [INVOKE.runtimeList]: noInput,
   [INVOKE.runtimeDelete]: z.strictObject({ name: z.string().min(1).max(200) }),
   [INVOKE.runtimeClear]: noInput,

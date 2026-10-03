@@ -56,7 +56,7 @@ function executor() {
     runScript,
     workspacePath: () => WS,
     isTrusted: () => trusted,
-    getEnvironment: async () => ({ name: 'dev', variables: env }),
+    getEnvironment: async (id) => (id ? { name: 'dev', variables: env } : null),
     getCollection: async () => ({ id: 'col', name: 'API', variables: col }),
     getVariableLayers: layers,
     applyEnvironmentChanges: async (_id, changes) => {
@@ -170,7 +170,8 @@ describe('RequestExecutor', () => {
     expect(env.find((x) => x.key === 'lastUrl')?.value).toBe('/echo?run=7')
     expect(env.find((x) => x.key === 'sig')?.value).toBe(body.headers['x-sig'])
     expect(col.find((x) => x.key === 'seen')?.value).toBe('yes')
-    expect(notified).toContainEqual({ environmentId: 'env', collectionId: 'col' })
+    expect(notified).toContainEqual({ environmentId: 'env', collectionId: null })
+    expect(notified).toContainEqual({ environmentId: null, collectionId: 'col' })
   })
 
   it('does not send when the Pre-request script fails, but keeps its logs and changes', async () => {

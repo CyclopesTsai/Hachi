@@ -124,6 +124,18 @@ export function CollectionSidebar() {
         <div className="flex-1" />
         {mode === 'collections' && <CollectionActions />}
       </div>
+      {/* Global search: space reserved only, not implemented and no shortcut (decisions 51, 80). */}
+      <div className="shrink-0 px-2 pb-2">
+        <input
+          type="search"
+          disabled
+          aria-label="搜尋（尚未提供）"
+          data-testid="global-search"
+          placeholder="搜尋（尚未提供）"
+          title="全域搜尋尚未提供"
+          className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs placeholder:text-muted-foreground/70 disabled:cursor-not-allowed disabled:opacity-60"
+        />
+      </div>
       {mode === 'collections' ? <CollectionTree /> : <HistoryPanel />}
     </aside>
   )

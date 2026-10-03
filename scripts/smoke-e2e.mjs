@@ -251,6 +251,7 @@ try {
       'item',
       'on',
       'request',
+      'runner',
       'runtime',
       'session',
       'transfer',
@@ -1222,6 +1223,85 @@ try {
     'runtime variables listed / cleared in the environment manager; untrusting asks again and "這次不執行腳本" runs only assertions'
   )
 
+  // ---- Phase 5c: Collection Runner, global search placeholder ----
+  assert.ok(await page.getByTestId('global-search').isDisabled(), 'search reserved but disabled')
+  await t.contextAction('Shop', '執行…')
+  const runnerView = page.getByTestId('runner-view')
+  await runnerView.waitFor()
+  // Ping has unsaved edits from the Phase 5b checks: the saved version runs.
+  await runnerView.getByText('Runner 使用的是已儲存的版本').waitFor()
+  await runnerView.getByLabel('執行次數').fill('3')
+  await runnerView.getByLabel('並行數').fill('2')
+  await runnerView.getByText('總輪數 = 3 × 2 = 6').waitFor()
+  await runnerView.getByLabel('全部保留').check()
+  const dataFile = path.join(tmp, 'users.csv')
+  await writeFile(dataFile, 'user,role\nalice,admin\nbob,"read, write"\n')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, dataFile)
+  await runnerView.getByRole('button', { name: '選擇檔案…' }).click()
+  await page.getByTestId('runner-data').getByText('2 列 · 欄位：user、role').waitFor()
+  await runnerView.getByRole('button', { name: '開始執行' }).click()
+  await waitUntil(
+    async () =>
+      (await page
+        .getByTestId('runner-status')
+        .getAttribute('data-status')
+        .catch(() => null)) === 'done',
+    'runner done',
+    20000
+  )
+  assert.match(await page.getByTestId('runner-counts').innerText(), /^12 \/ 12 個請求 · 6 \/ 6 輪/)
+  const totalRow = await page.getByTestId('runner-stats-total').innerText()
+  assert.match(totalRow, /總計\s+12\s+12\s+0\s+0\.0%/)
+  assert.equal(await page.getByTestId('runner-stats-row').count(), 2)
+  await page.getByTestId('runner-latency-chart').waitFor()
+  await page.getByTestId('runner-rps-chart').waitFor()
+  assert.equal(await page.getByTestId('runner-row').count(), 12)
+  await page.screenshot({ path: path.join(shots, '13-runner.png') })
+  await page.getByTestId('runner-row').first().click()
+  const rowDetail = page.getByTestId('runner-row-detail')
+  await rowDetail.waitFor()
+  await rowDetail.getByRole('tab', { name: '資料列' }).click()
+  assert.ok((await rowDetail.innerText()).includes('alice'), 'first round uses the first data row')
+  await rowDetail.getByRole('tab', { name: '回應' }).click()
+  await rowDetail.getByText('"ok": true').waitFor()
+  await page.keyboard.press('Escape')
+  const runnerExport = path.join(tmp, 'runner.json')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
+  }, runnerExport)
+  await runnerView.getByRole('button', { name: '匯出結果' }).click()
+  await waitUntil(() => exists(runnerExport), 'runner export written')
+  const runnerJson = await readJson(runnerExport)
+  assert.equal(runnerJson.rows.length, 12)
+  assert.deepEqual(
+    [runnerJson.settings.iterations, runnerJson.settings.concurrency, runnerJson.settings.dataFile],
+    [3, 2, 'users.csv']
+  )
+  assert.ok(runnerJson.rows[0].body.includes('"ok":true'), 'bodies kept')
+  step(
+    'Collection Runner: 3 rounds × 2 workers with a CSV data file, statistics, charts, row details with kept bodies, JSON export; search box reserved'
+  )
+
+  await runnerView.getByLabel('執行次數').fill('10000')
+  await runnerView.getByLabel('並行數').fill('1')
+  await runnerView.getByLabel('請求間隔').fill('50')
+  await runnerView.getByRole('button', { name: '開始執行' }).click()
+  await waitUntil(
+    async () => (await page.getByTestId('runner-status').getAttribute('data-status')) === 'running',
+    'runner running'
+  )
+  await runnerView.getByRole('button', { name: '停止' }).click()
+  await waitUntil(
+    async () =>
+      (await page.getByTestId('runner-status').getAttribute('data-status')) === 'cancelled',
+    'runner cancelled'
+  )
+  step('a long run can be stopped')
+  await tabByTitle('Cookies').click()
+  await page.getByTestId('request-editor').locator('h2').getByText('Cookies').waitFor()
+
   await clickMenu(app, 'Settings…')
   const appSettings = page.getByTestId('app-settings-dialog')
   await appSettings.waitFor()
@@ -1265,7 +1345,8 @@ try {
   // Unsaved request tabs are not remembered between launches.
   const savedTabTitles = (p) =>
     p
-      .locator('[data-testid="tab"]:not([data-draft])')
+      // Unsaved requests and Runner tabs are not remembered (decision 92).
+      .locator('[data-testid="tab"]:not([data-draft]):not([data-kind="runner"])')
       .evaluateAll((els) => els.map((e) => e.dataset.title))
   const openTabs = await savedTabTitles(page)
   const closed = app.waitForEvent('close')

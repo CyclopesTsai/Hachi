@@ -61,6 +61,13 @@ export const INVOKE = {
   runtimeList: 'runtime:list',
   runtimeDelete: 'runtime:delete',
   runtimeClear: 'runtime:clear',
+  runnerStart: 'runner:start',
+  runnerCancel: 'runner:cancel',
+  runnerRows: 'runner:rows',
+  runnerRow: 'runner:row',
+  runnerExport: 'runner:export',
+  runnerDiscard: 'runner:discard',
+  runnerPickDataFile: 'runner:pickDataFile',
   sessionGet: 'session:get',
   sessionSave: 'session:save',
   wsConnect: 'ws:connect',
@@ -79,6 +86,7 @@ export const EVENTS = {
   treeChanged: 'tree:changed',
   historyChanged: 'history:changed',
   variablesChanged: 'variables:changed',
+  runnerEvent: 'runner:event',
   wsEvent: 'ws:event',
   appCloseRequested: 'app:closeRequested'
 } as const

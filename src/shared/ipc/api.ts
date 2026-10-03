@@ -19,6 +19,14 @@ import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
 import type { HttpRequest } from '../schemas/http-request'
 import type { WsEventPayload } from '../ws'
 import type { CodegenRequest } from '../codegen'
+import type {
+  RunnerConfig,
+  RunnerEvent,
+  RunnerItem,
+  RunnerProgress,
+  RunnerRow,
+  RunnerRowDetail
+} from '../runner'
 import type { SessionData } from '../schemas/session'
 import type { WorkspaceSettings } from '../schemas/workspace'
 import type { ItemKind, WorkspaceTree } from '../tree'
@@ -180,6 +188,35 @@ export interface VariablesChangedEvent {
   /** Environment / Collection whose stored variables a script or extraction changed. */
   environmentId: string | null
   collectionId: string | null
+}
+
+export interface RunnerStartInput {
+  /** Chosen by the renderer (UUID). */
+  runId: string
+  config: RunnerConfig
+}
+
+export interface RunnerStartResult {
+  totalRounds: number
+  /** Requests that will run, in order. */
+  items: RunnerItem[]
+  /** Paths of checked items that cannot run (WebSocket, unreadable). */
+  skipped: string[]
+  /** First progress (so the tab can show the run right away). */
+  progress: RunnerProgress
+}
+
+export interface RunnerRowsInput {
+  runId: string
+  offset: number
+  limit: number
+  failedOnly: boolean
+}
+
+export interface RunnerDataFile {
+  fileName: string
+  columns: string[]
+  rows: Record<string, string>[]
 }
 
 export interface ScriptTrustInput {
@@ -358,6 +395,13 @@ export interface InvokeMap {
   'runtime:list': { input: void; output: RuntimeVariable[] }
   'runtime:delete': { input: { name: string }; output: RuntimeVariable[] }
   'runtime:clear': { input: void; output: RuntimeVariable[] }
+  'runner:start': { input: RunnerStartInput; output: RunnerStartResult }
+  'runner:cancel': { input: { runId: string }; output: boolean }
+  'runner:rows': { input: RunnerRowsInput; output: { total: number; rows: RunnerRow[] } }
+  'runner:row': { input: { runId: string; index: number }; output: RunnerRowDetail | null }
+  'runner:export': { input: { runId: string }; output: string | null }
+  'runner:discard': { input: { runId: string }; output: void }
+  'runner:pickDataFile': { input: void; output: RunnerDataFile | null }
   'dialog:selectDirectory': { input: SelectDirectoryInput; output: string | null }
   'dialog:selectFile': { input: SelectFileInput; output: string | null }
   'tree:get': { input: void; output: WorkspaceTree }
@@ -423,6 +467,7 @@ export interface EventPayloads {
   'tree:changed': WorkspaceTree
   'history:changed': HistoryUsage
   'variables:changed': VariablesChangedEvent
+  'runner:event': RunnerEvent
   'ws:event': WsEventPayload
   'app:closeRequested': CloseRequest
 }
@@ -456,6 +501,21 @@ export interface HachiApi {
     saveSettings: InvokeFn<'workspace:saveSettings'>
     /** Trust the current Workspace's scripts on this computer (stored in app-config.json). */
     setScriptTrust: InvokeFn<'workspace:setScriptTrust'>
+  }
+  runner: {
+    /** Starts a Collection Runner run; progress arrives as `runner:event`. */
+    start: InvokeFn<'runner:start'>
+    cancel: InvokeFn<'runner:cancel'>
+    /** A page of result rows (all, or failed only). */
+    rows: InvokeFn<'runner:rows'>
+    /** One row with headers / body / script report, or null if its details were not kept. */
+    row: InvokeFn<'runner:row'>
+    /** Save dialog, then writes the results as JSON. Null if cancelled. */
+    export: InvokeFn<'runner:export'>
+    /** Forgets a run's results (tab closed / run again). */
+    discard: InvokeFn<'runner:discard'>
+    /** Open dialog for a CSV / JSON data file (decision 89). Null if cancelled. */
+    pickDataFile: InvokeFn<'runner:pickDataFile'>
   }
   runtime: {
     /** Runtime variables of the current Workspace. */

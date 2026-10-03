@@ -45,7 +45,16 @@ export interface ScriptRunInput {
     environment: Record<string, string> | null
     collection: Record<string, string> | null
   }
-  info: { requestName: string; environmentName: string | null; collectionName: string | null }
+  /** Data-file row of this round (Collection Runner, decision 89); null otherwise. */
+  iterationData: Record<string, string> | null
+  info: {
+    requestName: string
+    environmentName: string | null
+    collectionName: string | null
+    /** Round number (0-based) and number of rounds; 0 / 1 outside the Runner. */
+    iteration: number
+    iterationCount: number
+  }
   request: ScriptRequest
   response: ScriptResponse | null
   timeoutMs: number

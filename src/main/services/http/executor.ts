@@ -116,17 +116,102 @@ export function applyScriptRequest(request: HttpRequest, changed: ScriptRequest)
   }
 }
 
+/**
+ * Where a send reads and writes variables. The default scope is the app itself (runtime
+ * variables of the Workspace, environment / Collection files). The Collection Runner uses
+ * in-memory copies per worker (decision 91) and adds data-file rows (decision 89).
+ */
+export interface ExecutionScope {
+  runtimeValues(): Record<string, string>
+  applyRuntime(changes: VariableChange[]): void
+  environment(): Promise<{ name: string; variables: Variable[] } | null>
+  collection(): Promise<{ id: string; name: string; variables: Variable[] } | null>
+  /** Throws when it cannot store them; only called when environment() is not null. */
+  applyEnvironment(changes: VariableChange[]): Promise<void>
+  applyCollection(changes: VariableChange[]): Promise<void>
+  /** Layers for substitution and assertions, highest precedence first. */
+  layers(): Promise<VariableLayer[]>
+  iterationData: Record<string, string> | null
+  iteration: { index: number; count: number }
+}
+
+/** Data-file row as a variable layer (between runtime and environment, decision 89). */
+export function dataLayer(row: Record<string, string> | null): VariableLayer | null {
+  if (!row) return null
+  return {
+    source: 'data',
+    sourceName: '資料檔',
+    variables: Object.entries(row).map(([key, value]) => ({
+      id: `data:${key}`,
+      key,
+      value,
+      enabled: true,
+      secret: false
+    }))
+  }
+}
+
 export class RequestExecutor {
   constructor(private readonly deps: ExecutorDeps) {}
 
-  async execute(input: ExecuteInput): Promise<HttpResult> {
+  /** The app's own variables, as for a send from the editor (decision 91: concurrency 1 too). */
+  appScope(
+    input: { parentId: string | null; environmentId: string | null },
+    data: Record<string, string> | null = null,
+    iteration = { index: 0, count: 1 }
+  ): ExecutionScope {
+    const deps = this.deps
+    let collectionId: string | null = null
+    return {
+      runtimeValues: () => {
+        const ws = deps.workspacePath()
+        return ws ? deps.runtime.values(ws) : {}
+      },
+      applyRuntime: (changes) => {
+        const ws = deps.workspacePath()
+        if (ws) deps.runtime.apply(ws, changes)
+      },
+      environment: () => deps.getEnvironment(input.environmentId),
+      collection: async () => {
+        const c = await deps.getCollection(input.parentId)
+        collectionId = c?.id ?? null
+        return c
+      },
+      applyEnvironment: async (changes) => {
+        if (!input.environmentId) throw new Error('目前沒有選擇環境')
+        await deps.applyEnvironmentChanges(input.environmentId, changes)
+        deps.variablesChanged({ environmentId: input.environmentId, collectionId: null })
+      },
+      applyCollection: async (changes) => {
+        const id = collectionId ?? (await deps.getCollection(input.parentId))?.id
+        if (!id) throw new Error('這個請求不在 Collection 中')
+        await deps.applyCollectionChanges(id, changes)
+        deps.variablesChanged({ environmentId: null, collectionId: id })
+      },
+      layers: async () => {
+        const layers = await deps.getVariableLayers(input.parentId, input.environmentId)
+        const row = dataLayer(data)
+        if (!row) return layers
+        // Runtime first, then the data row, then environment / collection.
+        const runtime = layers.filter((l) => l.source === 'runtime')
+        return [...runtime, row, ...layers.filter((l) => l.source !== 'runtime')]
+      },
+      iterationData: data,
+      iteration
+    }
+  }
+
+  async execute(
+    input: ExecuteInput,
+    scope: ExecutionScope = this.appScope(input)
+  ): Promise<HttpResult> {
     const request = input.request
     const scriptsPresent = hasScripts(request.scripts)
     const runScripts = scriptsPresent && !input.skipScripts
     const extractions = request.extractions.filter((e) => e.enabled && e.variable.trim() !== '')
     const assertions = request.assertions.filter((a) => a.enabled)
     if (!scriptsPresent && extractions.length === 0 && assertions.length === 0) {
-      return this.deps.http.send(input)
+      return this.deps.http.send({ ...input, layers: await scope.layers() })
     }
 
     const workspace = this.deps.workspacePath()
@@ -142,6 +227,7 @@ export class RequestExecutor {
         'preRequest',
         pre,
         input,
+        scope,
         scriptRequestOf(request),
         null,
         report
@@ -150,7 +236,11 @@ export class RequestExecutor {
       if (out.error) return this.fail(input, `Pre-request 腳本錯誤：${out.error}`, report)
     }
 
-    const result = await this.deps.http.send({ ...input, request: sending })
+    const result = await this.deps.http.send({
+      ...input,
+      request: sending,
+      layers: await scope.layers()
+    })
     if (result.kind !== 'response') return { ...result, scriptReport: report }
 
     const facts = this.facts(result)
@@ -159,7 +249,7 @@ export class RequestExecutor {
       const changes = report.extractions.flatMap((e): VariableChange[] =>
         e.value === null ? [] : [{ scope: e.scope, name: e.variable, value: e.value }]
       )
-      await this.applyChanges(changes, 'extraction', input, report)
+      await this.applyChanges(changes, 'extraction', scope, report)
     }
 
     const post = request.scripts.postResponse
@@ -174,6 +264,7 @@ export class RequestExecutor {
         'postResponse',
         post,
         input,
+        scope,
         sent,
         this.scriptResponse(result, facts),
         report
@@ -182,8 +273,7 @@ export class RequestExecutor {
 
     if (assertions.length > 0) {
       // Expected values see variables set by the extractions and the script above.
-      const layers = await this.deps.getVariableLayers(input.parentId, input.environmentId)
-      const resolver = new VariableResolver(buildVariableMap(layers))
+      const resolver = new VariableResolver(buildVariableMap(await scope.layers()))
       report.assertions = evaluateAssertions(assertions, facts, (t) => resolver.resolve(t))
     }
     return { ...result, scriptReport: report }
@@ -231,29 +321,29 @@ export class RequestExecutor {
     phase: ScriptPhase,
     code: string,
     input: ExecuteInput,
+    scope: ExecutionScope,
     request: ScriptRequest,
     response: ScriptResponse | null,
     report: ScriptReport
   ): Promise<ScriptRunOutput> {
-    const workspace = this.deps.workspacePath()
-    const [environment, collection] = await Promise.all([
-      this.deps.getEnvironment(input.environmentId),
-      this.deps.getCollection(input.parentId)
-    ])
+    const [environment, collection] = await Promise.all([scope.environment(), scope.collection()])
     let out: ScriptRunOutput
     try {
       out = await this.deps.runScript({
         phase,
         code,
         variables: {
-          runtime: workspace ? this.deps.runtime.values(workspace) : {},
+          runtime: scope.runtimeValues(),
           environment: environment ? enabledRecord(environment.variables) : null,
           collection: collection ? enabledRecord(collection.variables) : null
         },
+        iterationData: scope.iterationData,
         info: {
           requestName: input.request.name,
           environmentName: environment?.name ?? null,
-          collectionName: collection?.name ?? null
+          collectionName: collection?.name ?? null,
+          iteration: scope.iteration.index,
+          iterationCount: scope.iteration.count
         },
         request,
         response,
@@ -275,49 +365,40 @@ export class RequestExecutor {
       tests: out.tests,
       durationMs: out.durationMs
     }
-    await this.applyChanges(out.changes, phase, input, report, collection?.id ?? null)
+    await this.applyChanges(out.changes, phase, scope, report)
     return out
   }
 
   private async applyChanges(
     changes: VariableChange[],
     by: ScriptPhase | 'extraction',
-    input: ExecuteInput,
-    report: ScriptReport,
-    collectionId: string | null = null
+    scope: ExecutionScope,
+    report: ScriptReport
   ): Promise<void> {
     if (changes.length === 0) return
     report.changes.push(...changes.map((c) => ({ ...c, by })))
-    const workspace = this.deps.workspacePath()
-    const of = (scope: VariableChange['scope']) => changes.filter((c) => c.scope === scope)
+    const of = (s: VariableChange['scope']) => changes.filter((c) => c.scope === s)
 
-    if (workspace) this.deps.runtime.apply(workspace, of('runtime'))
-    let environmentId: string | null = null
+    scope.applyRuntime(of('runtime'))
     const env = of('environment')
     if (env.length > 0) {
-      if (input.environmentId === null) {
+      if (!(await scope.environment())) {
         report.changeErrors.push('目前沒有選擇環境，擷取的值沒有存到環境')
       } else {
         try {
-          await this.deps.applyEnvironmentChanges(input.environmentId, env)
-          environmentId = input.environmentId
+          await scope.applyEnvironment(env)
         } catch (error) {
           report.changeErrors.push(`無法寫入環境變數：${String(error)}`)
         }
       }
     }
-    let changedCollection: string | null = null
     const col = of('collection')
-    if (col.length > 0 && collectionId) {
+    if (col.length > 0) {
       try {
-        await this.deps.applyCollectionChanges(collectionId, col)
-        changedCollection = collectionId
+        await scope.applyCollection(col)
       } catch (error) {
         report.changeErrors.push(`無法寫入 Collection 變數：${String(error)}`)
       }
-    }
-    if (environmentId || changedCollection) {
-      this.deps.variablesChanged({ environmentId, collectionId: changedCollection })
     }
   }
 }

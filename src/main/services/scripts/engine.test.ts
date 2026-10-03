@@ -12,7 +12,14 @@ function input(code: string, over: Partial<ScriptRunInput> = {}): ScriptRunInput
       environment: { host: 'api.test', shared: 'from-env', token: 's3cret' },
       collection: { shared: 'from-collection', base: 'https://{{host}}' }
     },
-    info: { requestName: 'Get users', environmentName: 'dev', collectionName: 'API' },
+    iterationData: null,
+    info: {
+      requestName: 'Get users',
+      environmentName: 'dev',
+      collectionName: 'API',
+      iteration: 0,
+      iterationCount: 1
+    },
     request: {
       method: 'GET',
       url: '{{base}}/users',
@@ -75,6 +82,27 @@ describe('runScript: variables', () => {
     )
     expect(out.error).toBe('目前沒有選擇環境，無法設定環境變數（第 2 行）')
     expect(out.changes).toEqual([{ scope: 'runtime', name: 'a', value: '1' }])
+  })
+})
+
+describe('runScript: iteration data (Collection Runner)', () => {
+  it('reads the data row between runtime and environment', async () => {
+    const out = await runScript(
+      input(
+        `console.log(pm.iterationData.get('user'), hachi.variables.get('host'), hachi.variables.get('r'), hachi.iterationData.has('nope'), pm.info.iteration, pm.info.iterationCount)`,
+        {
+          iterationData: { user: 'alice', host: 'data.test', r: 'data-r' },
+          info: {
+            requestName: 'x',
+            environmentName: null,
+            collectionName: null,
+            iteration: 3,
+            iterationCount: 10
+          }
+        }
+      )
+    )
+    expect(out.logs[0]?.text).toBe('alice data.test run false 3 10')
   })
 })
 

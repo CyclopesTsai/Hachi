@@ -78,6 +78,10 @@ export interface SendInput {
   environmentId: string | null
   /** As edited, saved or not, before variable substitution. */
   request: HttpRequest
+  /** Variable layers to use instead of the current ones (Collection Runner workers). */
+  layers?: VariableLayer[]
+  /** false: don't keep the body for "顯示 / 下載" (the Runner keeps its own). */
+  storeBody?: boolean
 }
 
 /** Sends requests from the editor, tracks running ones (for cancel) and keeps bodies. */
@@ -107,7 +111,8 @@ export class HttpService {
 
     try {
       const chain = await this.deps.getContainerChain(input.parentId)
-      const layers = await this.deps.getVariableLayers(input.parentId, input.environmentId)
+      const layers =
+        input.layers ?? (await this.deps.getVariableLayers(input.parentId, input.environmentId))
       const resolver = new VariableResolver(buildVariableMap(layers))
       const request = resolver.request(input.request)
       const inherited = resolver.inherited(this.deps.resolveInherited(chain))
@@ -149,7 +154,7 @@ export class HttpService {
             : null,
         signal: controller.signal
       })
-      if (result.kind === 'response' && body) {
+      if (result.kind === 'response' && body && input.storeBody !== false) {
         this.store.put(input.runId, { body, contentType: result.contentType, url: result.url })
       }
       return { ...result, unresolvedVariables: unresolved }

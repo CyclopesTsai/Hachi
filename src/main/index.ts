@@ -32,6 +32,7 @@ import { TransferService } from './services/transfer-service'
 import { RuntimeVariables } from './services/runtime-variables'
 import { ScriptHost } from './services/scripts/script-host'
 import { RequestExecutor } from './services/http/executor'
+import { RunnerService } from './services/runner-service'
 import { WorkspaceService } from './services/workspace-service'
 import { createMainWindow, getRendererUrl } from './window'
 
@@ -90,6 +91,7 @@ async function bootstrap(): Promise<void> {
     void collections.open(current?.path ?? null, current?.id ?? null)
     environments.open(current?.path ?? null)
     ws.disconnectAll()
+    runner.cancelAll()
     if (current) void history.sync(current.path).catch(showError)
   })
   collections.onChange((tree) => send(EVENTS.treeChanged, tree))
@@ -136,7 +138,7 @@ async function bootstrap(): Promise<void> {
       variablesChanged({ environmentId: null, collectionId: null })
     }
   })
-  const executor = new RequestExecutor({
+  const executor: RequestExecutor = new RequestExecutor({
     http,
     runtime,
     runScript: (input) => scriptHost.run(input),
@@ -150,6 +152,28 @@ async function bootstrap(): Promise<void> {
     },
     applyCollectionChanges: (id, changes) => collections.applyVariableChanges(id, changes),
     variablesChanged
+  })
+  const runner = new RunnerService({
+    executor,
+    cancelHttp: (runId) => {
+      http.cancel(runId)
+    },
+    getTree: () => collections.getTree(),
+    getRequest: async (id) => {
+      const { request } = await collections.getRequest(id)
+      return request.type === 'http' ? request : null
+    },
+    runtimeValues: () => {
+      const ws = workspaces.getCurrent()
+      return ws ? runtime.values(ws.path) : {}
+    },
+    getEnvironment: (id) => (id ? environments.get(id).catch(() => null) : Promise.resolve(null)),
+    getCollection: (parentId) => collections.getCollectionFor(parentId).catch(() => null),
+    scriptsTrusted: () => {
+      const ws = workspaces.getCurrent()
+      return !!ws && config.isScriptTrusted(ws.path)
+    },
+    emit: (event) => send(EVENTS.runnerEvent, event)
   })
 
   const environmentName = (id: string | null): Promise<string | null> =>
@@ -270,6 +294,7 @@ async function bootstrap(): Promise<void> {
     created.on('closed', () => {
       if (mainWindow === created) mainWindow = null
       ws.disconnectAll()
+      runner.cancelAll()
       closeGuardDirty = false
       closeConfirmed = false
     })
@@ -277,6 +302,7 @@ async function bootstrap(): Promise<void> {
     created.webContents.on('did-start-loading', () => {
       closeGuardDirty = false
       ws.disconnectAll()
+      runner.cancelAll()
     })
     created.webContents.on('render-process-gone', () => {
       closeGuardDirty = false
@@ -351,6 +377,7 @@ async function bootstrap(): Promise<void> {
     sessions,
     transfer,
     runtime,
+    runner,
     sendHttp,
     ws,
     connectWs,

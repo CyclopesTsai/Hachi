@@ -93,7 +93,17 @@ export interface StaticTab extends TabBase {
   itemId: string
 }
 
-export type Tab = RequestTab | ContainerTab | EnvironmentsTab | StaticTab | WsTab
+/**
+ * Collection Runner for a Collection / folder (Phase 5c). Its settings and results live
+ * in the runner store (keyed by `uid`); the tab is never dirty and not remembered.
+ */
+export interface RunnerTab extends TabBase {
+  kind: 'runner'
+  /** The Collection / folder that is run. */
+  itemId: string
+}
+
+export type Tab = RequestTab | ContainerTab | EnvironmentsTab | StaticTab | WsTab | RunnerTab
 
 /** Tabs that edit a request file (HTTP or WebSocket), saved or not. */
 export type RequestLikeTab = RequestTab | WsTab
@@ -106,6 +116,16 @@ export const ENVIRONMENTS_TAB_KEY = 'environments'
 export const EMPTY_INHERITED: InheritedSettings = { headers: [], auth: null }
 
 export const itemTabKey = (id: string): TabKey => `item:${id}`
+export const runnerTabKey = (id: string): TabKey => `runner:${id}`
+
+export function createRunnerTab(targetId: string): RunnerTab {
+  return {
+    ...tabBase(runnerTabKey(targetId), false),
+    kind: 'runner',
+    itemId: targetId,
+    status: 'ready'
+  }
+}
 
 export function tabItemId(tab: Tab): string | null {
   return tab.kind === 'environments' ? null : tab.itemId
@@ -214,7 +234,7 @@ export function createEnvironmentsTab(): EnvironmentsTab {
 }
 
 export function isTabDirty(tab: Tab): boolean {
-  if (tab.kind === 'static' || tab.status !== 'ready') return false
+  if (tab.kind === 'static' || tab.kind === 'runner' || tab.status !== 'ready') return false
   if (isRequestLike(tab) && tab.saved === null) return true
   if (tab.draft === null) return false
   return JSON.stringify(tab.draft) !== JSON.stringify(tab.saved)
@@ -227,6 +247,7 @@ export function isDraftTab(tab: Tab): boolean {
 
 export function tabTitle(tab: Tab, tree: WorkspaceTree): string {
   if (tab.kind === 'environments') return '環境'
+  if (tab.kind === 'runner') return `執行：${findNode(tree, tab.itemId)?.node.name ?? ''}`
   if (isRequestLike(tab) && tab.itemId === null) return tab.draftName
   const id = tabItemId(tab)
   return (id && findNode(tree, id)?.node.name) ?? (isRequestLike(tab) ? tab.draftName : '')
@@ -288,6 +309,7 @@ export function syncTabsWithTree(tabs: readonly Tab[], tree: WorkspaceTree): Tab
     const id = tabItemId(tab)
     if (!id) return [tab]
     const node = findNode(tree, id)?.node
+    if (tab.kind === 'runner') return node && isContainer(node) ? [tab] : []
     if (!node) {
       if (isRequestLike(tab) && isTabDirty(tab)) {
         return [{ ...tab, itemId: null, draftParentId: null, saved: null, preview: false }]
@@ -312,7 +334,8 @@ export function toSession(
   activeKey: TabKey | null,
   activeEnvironmentId: string | null
 ): SessionData {
-  const kept = tabs.filter((t) => !isDraftTab(t))
+  // Unsaved requests and Runner tabs are not remembered.
+  const kept = tabs.filter((t) => !isDraftTab(t) && t.kind !== 'runner')
   const sessionTabs = kept.map((t): SessionTab =>
     t.kind === 'environments' ? { kind: 'environments' } : { kind: 'item', id: t.itemId as string }
   )

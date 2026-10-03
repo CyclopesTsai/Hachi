@@ -144,9 +144,19 @@ export const PRELUDE = String.raw`
   environmentScope.name = input.info.environmentName
   collectionScope.name = input.info.collectionName
 
+  // Data-file row of a Collection Runner round (read-only), between runtime and environment.
+  var dataRow = input.iterationData || null
+  var iterationData = {
+    get: function (key) { return dataRow && hasOwn(dataRow, String(key)) ? dataRow[String(key)] : undefined },
+    has: function (key) { return !!dataRow && hasOwn(dataRow, String(key)) },
+    toObject: function () { return Object.assign({}, dataRow || {}) },
+    toJSON: function () { return Object.assign({}, dataRow || {}) }
+  }
   function lookup(key) {
     key = String(key)
-    var order = ['runtime', 'environment', 'collection']
+    if (hasOwn(scopes.runtime, key)) return scopes.runtime[key]
+    if (dataRow && hasOwn(dataRow, key)) return dataRow[key]
+    var order = ['environment', 'collection']
     for (var i = 0; i < order.length; i++) {
       var s = scopes[order[i]]
       if (s && hasOwn(s, key)) return s[key]
@@ -173,7 +183,7 @@ export const PRELUDE = String.raw`
     unset: runtimeScope.unset,
     replaceIn: replaceIn,
     toObject: function () {
-      return Object.assign({}, scopes.collection || {}, scopes.environment || {}, scopes.runtime)
+      return Object.assign({}, scopes.collection || {}, scopes.environment || {}, dataRow || {}, scopes.runtime)
     }
   }
 
@@ -526,18 +536,14 @@ export const PRELUDE = String.raw`
     info: {
       requestName: input.info.requestName,
       eventName: phase === 'preRequest' ? 'prerequest' : 'test',
-      iteration: 0,
-      iterationCount: 1
+      iteration: input.info.iteration,
+      iterationCount: input.info.iterationCount
     },
     variables: variables,
     environment: environmentScope,
     collectionVariables: collectionScope,
     globals: runtimeScope,
-    iterationData: {
-      get: function () { return undefined },
-      has: function () { return false },
-      toObject: function () { return {} }
-    },
+    iterationData: iterationData,
     request: pmRequest,
     response: pmResponse,
     test: pmTest,
@@ -593,6 +599,7 @@ export const PRELUDE = String.raw`
     request: hachiRequest,
     response: hachiResponse,
     info: pm.info,
+    iterationData: iterationData,
     test: test,
     expect: hachiExpect
   }

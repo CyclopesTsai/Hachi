@@ -168,6 +168,7 @@ async function runIsolated(input: ScriptRunInput): Promise<ScriptRunOutput> {
     const snapshot = JSON.stringify({
       phase: input.phase,
       variables: input.variables,
+      iterationData: input.iterationData,
       info: input.info,
       request: input.request,
       response: input.response,

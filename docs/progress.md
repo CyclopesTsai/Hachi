@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a、5b 已確認；**目前進行：5c Collection Runner**（決策 86–92），完成後給使用者確認。已改由本機（macOS）的 Claude Code 桌面版接手
+- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a、5b 已確認；**5c（Collection Runner）完成，等使用者確認**後進 Phase 6。已改由本機（macOS）的 Claude Code 桌面版接手
 - **最後更新**：2026-10-03
 
 ## Phase 進度
@@ -122,6 +122,18 @@
 
 **驗證方式**：`npm run verify`（374 個單元測試，新增：沙箱引擎（變數優先順序、修改請求、Jest / Chai / pm 斷言、無 Node / 網路、無窮迴圈 / 記憶體 / 遞迴的中止與恢復、偽造結果、CryptoJS 與 Node 結果一致、console 上限）、斷言與擷取、整條執行流程對本機伺服器實測（HMAC 簽章 Header、腳本設定的變數用在同一個請求、擷取先於 Post-response、變更寫入環境 / Collection、未信任 / 略過腳本、Pre-request 失敗不發送）、信任設定、變數變更套用）；`npm run test:e2e`（macOS，冒煙檢查新增 2 項：信任 Workspace 後執行腳本、擷取、斷言 3/4、Console 與 CryptoJS、`pm.environment.set` 寫入 dev.json、環境管理分頁的暫存變數查看 / 清除、取消信任後「這次不執行腳本」只跑斷言）。冒煙檢查共 45 項。另修正 E2E 的拖曳輔助函式（放開前先停一下），之後的 7 次執行都沒有再逾時。
 
+### Phase 5c 完成內容（待使用者確認）
+
+- Collection Runner：Collection / 資料夾右鍵「執行…」開 Runner 分頁（分頁列 ▷ 圖示，不記在 session）
+- 設定：勾選請求（WebSocket 不能勾、未儲存修改時提示）、環境、執行次數（每個 worker）、並行數（顯示總輪數）、請求間隔、失敗時停止、回應內容「不保留 / 全部保留」、資料檔（CSV / JSON，原生對話框）
+- 執行：main 的 `RunnerService`，worker 共用輪次計數器，資料列依輪次循環；並行數 > 1 時變數為每個 worker 的複本；走與編輯器相同的腳本 / 擷取 / 斷言流程；可停止；腳本信任沿用決策 84
+- 結果：狀態與進度條、統計表（每個請求＋總計：次數、成功、失敗、錯誤率、測試通過、平均 / 最小 / 最大 / p50 / p90 / p95 / p99 / 標準差）、狀態碼與錯誤類別分布、即時圖表（耗時 p50 / p95、每秒完成的請求數；自寫 SVG，滑鼠移上去有十字線與數值，附資料表）、結果列表（全部 / 只看失敗、每頁 100 筆）、點一筆看 Tests / Console / 回應（Headers＋保留的 Body）/ 請求 Headers / 資料列；匯出 JSON
+- 圖表配色依 dataviz 準則：類別色第 1、2 槽（藍 / 橘），以驗證工具檢查過淺色與深色背景（CVD、對比皆通過）；單一 y 軸，耗時與請求數分成兩張圖
+- 全域搜尋：側欄上方預留停用的搜尋框（決策 80）
+- 新 IPC：`runner:start|cancel|rows|row|export|discard|pickDataFile`、事件 `runner:event`
+
+**驗證方式**：`npm run verify`（387 個單元測試，新增：百分位數 / 標準差、統計彙總與每秒時間軸、CSV（引號、跳脫、多行、BOM）/ JSON 資料檔、Runner 對本機伺服器實測：樹的順序與略過 WebSocket、並行數 1 共用變數並寫檔、3 個 worker × 2 輪且資料列依輪次循環、worker 變數不外洩、失敗即停止、執行中取消、保留 Body 與匯出、資料檔第 n 輪的資料、丟棄結果）；`npm run test:e2e`（macOS，冒煙檢查新增 2 項：3 輪 × 2 個 worker＋CSV 資料檔、統計 12/12、兩張圖表、明細的資料列與 Body、匯出 JSON、搜尋框停用；長時間執行可停止），共 47 項，連續 3 次通過。
+
 ## 決策紀錄（已與使用者確認）
 
 | #   | 決策                | 內容                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -221,7 +233,7 @@
 
 ## 下一步
 
-- Phase 5c（Collection Runner＋全域搜尋預留）實作中；完成後給使用者確認，再做 Phase 6
+- Phase 5c 已完成，等使用者確認後進 Phase 6（視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg）
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 - Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽

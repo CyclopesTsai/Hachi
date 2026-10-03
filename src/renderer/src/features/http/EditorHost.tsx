@@ -9,6 +9,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { ContainerEditor } from './ContainerEditor'
 import { RequestEditor } from './RequestEditor'
+import { RunnerView } from '@renderer/features/runner/RunnerView'
 
 function Placeholder({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -65,6 +66,8 @@ function TabContent({ tab }: { tab: Tab }) {
       return tab.draft ? <WebSocketEditor key={key} tab={tab} title={title} /> : null
     case 'environments':
       return <EnvironmentsEditor key={key} tab={tab} />
+    case 'runner':
+      return <RunnerView tab={tab} />
   }
 }
 

@@ -1,4 +1,4 @@
-import { AlertTriangle, Folder, Globe, Layers, Plus, Radio, X } from 'lucide-react'
+import { AlertTriangle, Folder, Globe, Layers, Plus, Radio, X, Play } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { findNode } from '@shared/tree'
 import {
@@ -48,6 +48,7 @@ function TabIcon({ tab }: { tab: Tab }) {
     return id ? findNode(s.tree, id)?.node : undefined
   })
   if (tab.kind === 'environments') return <Globe className="size-3.5 shrink-0 text-primary" />
+  if (tab.kind === 'runner') return <Play className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'request') {
     return (
       <RequestBadge node={{ requestType: 'http', method: tab.draft?.method }} className="w-auto" />
@@ -84,6 +85,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
           aria-selected={active}
           tabIndex={active ? 0 : -1}
           data-testid="tab"
+          data-kind={tab.kind}
           data-title={title}
           data-preview={tab.preview || undefined}
           data-dirty={dirty || undefined}

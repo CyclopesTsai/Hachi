@@ -13,6 +13,7 @@ import {
   createDraftTab,
   createEnvironmentsTab,
   createItemTab,
+  createRunnerTab,
   fromSession,
   insertTab,
   isDraftTab,
@@ -21,6 +22,7 @@ import {
   itemTabKey,
   nextActiveKey,
   parentIdOf,
+  runnerTabKey,
   syncTabsWithTree,
   tabItemId,
   type ContainerContent,
@@ -36,6 +38,7 @@ import {
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { hasScripts } from '@shared/scripts'
 import { useAppStore } from './app-store'
+import { useRunnerStore } from './runner-store'
 import { useEnvStore } from './env-store'
 import { useTreeStore } from './tree-store'
 import { isLive, useWsStore } from './ws-store'
@@ -81,6 +84,8 @@ interface TabsState {
   openEnvironments(): void
   /** New unsaved HTTP or WebSocket request ("+" button). */
   newRequest(type?: 'http' | 'websocket'): void
+  /** Opens the Collection Runner for a Collection / folder (Phase 5c). */
+  openRunner(targetId: string): void
   /** Opens a request (e.g. from a cURL import) as a new unsaved tab. */
   openDraft(request: HttpRequest): void
   /** Opens a history entry as a new unsaved request. */
@@ -137,7 +142,7 @@ interface TabsState {
 const tree = () => useTreeStore.getState().tree
 
 /** Whether the current Workspace's scripts are trusted on this computer (decision 84). */
-function scriptsTrusted(): boolean {
+export function scriptsTrusted(): boolean {
   const { config, currentWorkspace } = useAppStore.getState()
   return !!currentWorkspace && !!config?.scripts.trustedWorkspaces.includes(currentWorkspace.path)
 }
@@ -196,7 +201,8 @@ export const useTabsStore = create<TabsState>()((set, get) => {
 
   async function load(key: TabKey): Promise<void> {
     const tab = find(key)
-    if (!tab || tab.kind === 'static' || (isRequestLike(tab) && !tab.itemId)) return
+    if (!tab || tab.kind === 'static' || tab.kind === 'runner') return
+    if (isRequestLike(tab) && !tab.itemId) return
     patch(key, (t) => ({ ...t, status: 'loading', loadError: null }))
     try {
       if (isRequestLike(tab)) {
@@ -265,6 +271,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
     const tab = find(key)
     if (tab?.kind === 'request' && tab.runId) void window.hachi.http.cancel({ runId: tab.runId })
     if (tab?.kind === 'websocket') useWsStore.getState().remove(tab.uid)
+    if (tab?.kind === 'runner') useRunnerStore.getState().remove(tab.uid)
     const next = nextActiveKey(get().tabs, key, get().activeKey)
     set((s) => ({ tabs: s.tabs.filter((t) => t.key !== key) }))
     setActive(next)
@@ -351,6 +358,17 @@ export const useTabsStore = create<TabsState>()((set, get) => {
           ? createDraftTab(newWsRequest(), { parentId: null })
           : createDraftTab(newHttpRequest(), { parentId: null })
       )
+    },
+
+    openRunner(targetId) {
+      const existing = find(runnerTabKey(targetId))
+      if (existing) {
+        setActive(existing.key)
+        return
+      }
+      const tab = createRunnerTab(targetId)
+      useRunnerStore.getState().open(tab.uid, targetId)
+      addTab(tab)
     },
 
     openDraft(request) {
@@ -553,21 +571,9 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       const request = tab.draft
       let skipScripts = false
       if (hasScripts(request.scripts) && !scriptsTrusted()) {
-        const choice = await new Promise<TrustChoice>((resolve) =>
-          set({ trustPrompt: { resolve } })
-        )
-        set({ trustPrompt: null })
+        const choice = await askScriptTrust()
         if (choice === 'cancel') return
-        if (choice === 'skip') skipScripts = true
-        else {
-          try {
-            const config = await unwrap(window.hachi.workspace.setScriptTrust({ trusted: true }))
-            useAppStore.getState().configChanged(config)
-          } catch (error) {
-            useAppStore.getState().setNotice(errorMessage(error))
-            return
-          }
-        }
+        skipScripts = choice === 'skip'
       }
       const current = find(key)
       if (current?.kind !== 'request' || current.runId) return
@@ -737,3 +743,23 @@ useTreeStore.subscribe((state, prev) => {
 })
 
 export { isTabDirty }
+
+/**
+ * "信任這個 Workspace 的腳本？" (decision 84). "trust" stores the trust before resolving;
+ * resolves "cancel" if storing it failed.
+ */
+export async function askScriptTrust(): Promise<TrustChoice> {
+  const choice = await new Promise<TrustChoice>((resolve) =>
+    useTabsStore.setState({ trustPrompt: { resolve } })
+  )
+  useTabsStore.setState({ trustPrompt: null })
+  if (choice !== 'trust') return choice
+  try {
+    const config = await unwrap(window.hachi.workspace.setScriptTrust({ trusted: true }))
+    useAppStore.getState().configChanged(config)
+    return 'trust'
+  } catch (error) {
+    useAppStore.getState().setNotice(errorMessage(error))
+    return 'cancel'
+  }
+}

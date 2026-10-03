@@ -24,6 +24,7 @@ import { useEnvStore } from '@renderer/stores/env-store'
 import { useHistoryStore } from '@renderer/stores/history-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTransferStore } from '@renderer/stores/transfer-store'
+import { useRunnerStore } from '@renderer/stores/runner-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isLive, useWsStore } from '@renderer/stores/ws-store'
 
@@ -39,6 +40,7 @@ function useMainProcessEvents(): void {
         useHistoryStore.getState().usageChanged(usage)
       ),
       window.hachi.on(EVENTS.wsEvent, (payload) => useWsStore.getState().handleEvent(payload)),
+      window.hachi.on(EVENTS.runnerEvent, (event) => useRunnerStore.getState().handleEvent(event)),
       window.hachi.on(EVENTS.variablesChanged, (event) => {
         void useEnvStore.getState().variablesChanged(event)
         useTabsStore.getState().variablesChanged(event)
@@ -144,6 +146,7 @@ function useSessionPersistence(): void {
 function useWorkspaceData(workspaceId: string | null): void {
   useEffect(() => {
     useTabsStore.getState().reset()
+    useRunnerStore.getState().reset()
     useWsStore.getState().reset()
     useEnvStore.getState().reset()
     useHistoryStore.getState().reset()

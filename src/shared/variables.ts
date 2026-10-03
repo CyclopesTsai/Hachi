@@ -35,7 +35,7 @@ export function isDynamicVariable(name: string): name is DynamicVariableName {
 }
 
 /** `runtime`: set by scripts / extractions, in memory only (decision 71). */
-export type VariableSource = 'runtime' | 'environment' | 'collection'
+export type VariableSource = 'runtime' | 'data' | 'environment' | 'collection'
 
 export interface VariableLayer {
   source: VariableSource

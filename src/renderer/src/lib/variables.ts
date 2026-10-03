@@ -69,7 +69,12 @@ export interface VariableInfo {
   detail: string
 }
 
-const SOURCE_LABEL = { runtime: '暫存變數', environment: '環境', collection: 'Collection' } as const
+const SOURCE_LABEL = {
+  runtime: '暫存變數',
+  data: '資料檔',
+  environment: '環境',
+  collection: 'Collection'
+} as const
 
 export function describeVariable(name: string, map: VariableMap): VariableInfo {
   const variable = map.get(name)
