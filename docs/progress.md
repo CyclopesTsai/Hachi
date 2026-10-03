@@ -5,7 +5,7 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a 已確認；**5b（腳本與斷言）完成，等使用者確認**後再做 5c。已改由本機（macOS）的 Claude Code 桌面版接手
+- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；5a、5b 已確認；**目前進行：5c Collection Runner**（決策 86–92），完成後給使用者確認。已改由本機（macOS）的 Claude Code 桌面版接手
 - **最後更新**：2026-10-03
 
 ## Phase 進度
@@ -107,7 +107,7 @@
 
 **E2E 在 macOS 的調整**：選單的 Settings… 在 macOS 位於 Hachi 選單（改用依名稱尋找選單項目）；刪除的項目改移到測試自己的暫存資料夾，不會進到電腦的垃圾桶；刪除 Workspace 後等待 app-config 寫入；失敗時自動截圖（`failure.png`）。Phase 1 的拖曳排序檢查在 macOS 偶爾逾時（原因：放開滑鼠時拖曳函式庫還沒讀到最後的位置，5b 已修正測試）。
 
-### Phase 5b 完成內容（待使用者確認）
+### Phase 5b 完成內容
 
 - 腳本：請求編輯器新增 Scripts 分頁（Pre-request / Post-response，JavaScript 語法標示，附 API 說明與範例）；在 Electron `utilityProcess` 的 QuickJS 沙箱執行（5 秒 / 64 MB，卡住時結束程序重啟）；`hachi.*` API、Postman `pm.*` 與舊版 `tests[...]` 常用子集、CryptoJS、`btoa` / `atob`、`console`
 - 執行順序：Pre-request 腳本（可改 URL / 方法 / Headers / Body，可設定變數，之後才替換變數）→ 發送 → 擷取 → Post-response 腳本 → 斷言；Pre-request 出錯不發送
@@ -211,10 +211,17 @@
 | 83  | CryptoJS            | 沙箱內附 `crypto-js`（MIT）：全域 `CryptoJS` 與 `require('crypto-js')`；只在腳本用到時載入（約多 20 ms）；另有 `btoa` / `atob`                                                                                                                                                                                                                                                                                                                                  |
 | 84  | 腳本信任            | 每個 Workspace 第一次要執行腳本時詢問「信任這個 Workspace 的腳本？」（信任並執行 / 這次不執行腳本 / 取消），記在本機 `app-config.json`（依 Workspace 路徑）；Workspace 設定可取消信任。斷言與擷取表格不是腳本，不需要信任                                                                                                                                                                                                                                       |
 | 85  | 腳本執行位置        | 腳本在 Electron `utilityProcess`（獨立程序）中的 QuickJS 執行，卡住時可直接結束該程序；沙箱只拿到變數 / 請求 / 回應的複本，執行完回傳變更，由 main 寫檔                                                                                                                                                                                                                                                                                                         |
+| 86  | Runner 結束條件     | 依執行次數結束；**不做**逐步增加並行數（ramp-up）                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 87  | Runner 統計         | 基本（總請求數、成功 / 失敗、錯誤率、斷言 / 測試通過與失敗、總耗時；每個請求一列＋總計）、耗時分布（平均 / 最小 / 最大 / p50 / p90 / p95 / p99 / 標準差）、狀態碼與錯誤類別分布、執行中每秒更新的即時圖表（耗時 p50 / p95 與每秒請求數，自寫 SVG）。不另列吞吐量表格                                                                                                                                                                                            |
+| 88  | 執行次數            | 「執行次數」＝**每個 worker** 跑的輪數：總輪數 = 執行次數 × 並行數（上限：執行次數 10,000、並行數 20）                                                                                                                                                                                                                                                                                                                                                          |
+| 89  | 資料檔              | CSV（第一列為欄名）或 JSON（物件陣列）；**依輪次循環取列**：第 n 輪（全部 worker 合計的開始順序）用第 n mod 列數 列；欄位可用 `{{欄名}}`（優先順序：暫存 > 資料列 > 環境 > Collection）與 `pm.iterationData` / `hachi.iterationData`                                                                                                                                                                                                                            |
+| 90  | 回應 Body           | 執行前選「全部保留 / 不保留」（預設不保留）；每筆上限 1 MB、總量上限 200 MB，超過只留統計                                                                                                                                                                                                                                                                                                                                                                       |
+| 91  | Runner 變數         | 並行數 1：與手動發送相同（共用暫存變數、環境 / Collection 寫檔）；並行數 > 1：每個 worker 從目前的暫存變數 / 環境 / Collection 各拿一份複本，修改只在該 worker 內有效（決策 75、76）                                                                                                                                                                                                                                                                            |
+| 92  | Runner 其他         | 可設定請求間隔（ms）、失敗時停止（網路錯誤、腳本錯誤或任一測試 / 斷言失敗即停止全部 worker）；執行已儲存的檔案（有未儲存的分頁時提示）；腳本信任同決策 84；Runner 分頁不記在 session；結果可匯出 JSON                                                                                                                                                                                                                                                           |
 
 ## 下一步
 
-- Phase 5b 已完成，等使用者確認後做 5c（Runner，並行與壓測細節先確認）
+- Phase 5c（Collection Runner＋全域搜尋預留）實作中；完成後給使用者確認，再做 Phase 6
 - 5c 開始前再確認壓測細節：結束條件（次數 / 固定時間）、逐步增加並行數、統計項目、是否保留回應 Body
 - Phase 4 的 WebSocket 連線 / 中斷 / 送出訊息**不設快捷鍵**（延續決策 21）
 - Phase 6「快捷鍵整理」剩下的建議項目（尚未確認）：樹狀清單用 ↑ / ↓ 移動選取、Help → Keyboard Shortcuts 一覽
