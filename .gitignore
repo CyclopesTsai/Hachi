@@ -6,5 +6,3 @@ release
 .DS_Store
 .vite
 coverage
-# Progress notes and design decisions: kept on the maintainer's computer only
-docs/progress.md

@@ -4,18 +4,18 @@ Hachi 是類似 Postman / Bruno 的桌面 API 測試工具（HTTP + WebSocket）
 
 ## 開始工作前
 
-- 先讀 **`docs/progress.md`**：目前狀態、已確認的設計決策（編號 1 起，程式註解中的「decision N」指的就是它）、Roadmap、開發環境注意事項。這個檔案**只存在使用者的電腦上，不進 git**；若不存在，先問使用者。
+- 先讀 **`docs/progress.md`**：目前狀態、已確認的設計決策（編號 1 起，程式註解中的「decision N」指的就是它）、Roadmap、開發環境注意事項。
 - 再讀 `README.md`（指令、打包、發佈）與需要的 `docs/ipc.md`、`docs/schema.md`。
 
 ## 工作流程
 
 - 新功能或新階段：先說明規劃、把不確定的設計決策問清楚，**等使用者確認再實作**；不要自行假設。
 - 完成後實際執行驗證（`npm run verify`、`npm run test:e2e`），簡述做了什麼與如何驗證，等使用者確認。
-- 做出新決策或完成工作時更新 `docs/progress.md`（本機檔）。
+- 做出新決策或完成工作時更新 `docs/progress.md`，與程式碼一起 commit。
 - IPC 或 JSON 格式有變動時同步更新 `docs/ipc.md` 與 `docs/schema.md`。
-- Git：直接 commit 並 push 到 `main`，不另開分支（決策 8）。改動已推送的 tag 等不可逆操作前先問使用者。
+- 改動已推送的 tag、強制推送等不可逆的 git 操作前，先問使用者。
 - 跑 E2E 前先告訴使用者：會跳出 Hachi 視窗、可能搶焦點。
-- 回覆使用者用繁體中文；App 介面用繁體中文，原生選單用英文（決策 10）。
+- App 介面用繁體中文，原生選單用英文（決策 10）。
 
 ## 硬性規則
 
