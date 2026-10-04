@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前進度：**Phase 6**（視窗狀態記憶、外觀設定、快捷鍵一覽、macOS dmg 打包、GitHub Actions CI 與自動發佈）。詳細進度與決策請見 [docs/progress.md](docs/progress.md)。
+> 目前版本：**v0.1.0**（[Releases](https://github.com/CyclopesTsai/Hachi/releases)）。HTTP / WebSocket、環境變數、腳本與斷言、Collection Runner、Postman / cURL 匯入匯出、程式碼產生。
 
 ## 技術棧
 

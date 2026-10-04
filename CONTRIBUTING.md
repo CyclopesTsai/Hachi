@@ -15,6 +15,6 @@
 
 ## 開發流程
 
-- 開發、測試與打包方式見 [README](README.md)；目前進度與設計決策見 [docs/progress.md](docs/progress.md)。
+- 開發、測試與打包方式見 [README](README.md)；IPC 與檔案格式見 [docs/ipc.md](docs/ipc.md)、[docs/schema.md](docs/schema.md)。
 - 送出前請執行 `npm run verify`（型別檢查、ESLint、Prettier、單元測試、授權檢查）。
 - IPC 或 JSON 格式有變動時，請同步更新 [docs/ipc.md](docs/ipc.md) 與 [docs/schema.md](docs/schema.md)。
