@@ -254,10 +254,12 @@
 | 99  | Phase 5c 細節       | 使用者確認：Runner 明細只保留前 2000 筆與之後失敗的 2000 筆、記憶體保留最近 5 次結果、資料檔上限 10 MB / 10,000 列                                                                                                                                                                                                                                                                                                                                              |
 | 100 | 配色                | 改用 **Nord**（使用者偏好，取代原本的近黑底＋亮橘）：深色 Polar Night 底＋Frost 主色 `#88c0d0`，淺色白底＋主色 `#4c6e98`（Nord 10 加深以達 WCAG AA），Logo 與佔位圖示同步改為 Nord 藍；深色的紅色與次要文字調亮到 4.5:1 以上；語法顏色深色改 Nord；Runner 圖表維持驗證過的藍 / 橘（在 Nord 底色重新驗證通過）                                                                                                                                                   |
 | 101 | 文件整理            | `CLAUDE.md` 改寫成精簡的工作說明（原規格只留在 git 歷史：`git show 1c7c257:CLAUDE.md`）；`docs/progress.md` 留在 git（2026-10-04 曾短暫改為只放本機，使用者決定放回）；個人工作偏好（直接 push 到 main、用繁體中文回覆）改放 Claude Code 的專案 memory（只在使用者電腦上），不寫在 CLAUDE.md；`CLA.md`、`CONTRIBUTING.md`、`__fixtures__/README.md` 保留                                                                                                        |
+| 102 | macOS 簽章          | 沒有 Apple Developer 憑證前改用 **ad-hoc 簽章**（`identity: '-'`、`hardenedRuntime: false`）：v0.1.0 用 `identity: null`，App 保留 Electron 原本的簽章（識別碼 Electron、資源未封存），從網路下載後在 Apple Silicon 上被判定「已損毀」。ad-hoc 簽章後仍需使用者在「隱私權與安全性」按「強制打開」（未公證），正式簽章 / 公證時再開 hardened runtime                                                                                                             |
 
 ## 下一步
 
 - **v0.1.0 已發佈**（2026-10-03）：https://github.com/CyclopesTsai/Hachi/releases/tag/v0.1.0（`Hachi-0.1.0-arm64.dmg` 130.9 MB、`Hachi-0.1.0-x64.dmg` 134.8 MB，未簽章）。第一次 Release 失敗原因：GitHub macOS 機器螢幕只有 1024×768，E2E 寫死的視窗大小超出螢幕被 App 自動縮小 → 測試改用螢幕可用範圍內的大小；`v0.1.0` tag 經使用者同意移到修正後的 commit 重新發佈
+- **v0.1.0 的 arm64 dmg 下載後顯示「已損毀」**（2026-10-06 使用者回報）：簽章不完整，見決策 102；v0.1.1 修正。v0.1.0 的使用者可用 `xattr -dr com.apple.quarantine /Applications/Hachi.app` 暫時解決
 - Phase 6 等使用者確認
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 

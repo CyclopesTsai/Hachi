@@ -85,7 +85,16 @@ npm run dist:mac     # 產生 release/<version>/Hachi-<version>-arm64.dmg（Appl
 - `app.asar` 只放 main process 執行時需要的套件（renderer 用的套件已由 Vite 打包進 JS），清單在打包時由 `electron-builder.config.mjs` 從 `out/main` 自動算出。
 - 打包後的 App 也能跑冒煙測試：`SMOKE_APP_PATH=release/<version>/mac-arm64/Hachi.app/Contents/MacOS/Hachi node scripts/smoke-e2e.mjs`。
 
-目前**未簽章、未公證**。從網路下載的 dmg 第一次開啟時會被 macOS 擋下：請到「系統設定 → 隱私權與安全性」，在下方按「強制打開」（較舊的 macOS 也可在 Finder 中對 App 按右鍵 →「打開」）。
+目前只有 **ad-hoc 簽章、未經 Apple 公證**（沒有 Apple Developer 憑證）。從網路下載的 App 第一次開啟時會被 macOS 擋下（「無法驗證開發者」或「Apple 無法檢查是否含有惡意軟體」），處理方式：
+
+1. 把 Hachi 拖到「應用程式」後打開一次，出現警告時按「完成」。
+2. 到「系統設定 → 隱私權與安全性」，在下方找到 Hachi，按「強制打開」並確認（較舊的 macOS 也可在 Finder 中對 App 按右鍵 →「打開」）。
+
+如果看到「**已損毀，無法打開**」（v0.1.0 的已知問題：簽章不完整，v0.1.1 起已修正），可以先在終端機移除下載標記：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Hachi.app
+```
 
 ## GitHub Actions（CI 與自動發佈）
 

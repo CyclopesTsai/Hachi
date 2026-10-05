@@ -83,8 +83,14 @@ export default {
     icon: 'build/icon.png',
     target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
     artifactName: '${productName}-${version}-${arch}.${ext}',
-    // Unsigned for now — see README "Code signing & notarization".
-    identity: null
+    // Ad-hoc signature ("-"): no Apple Developer certificate yet, but the whole bundle is
+    // re-signed consistently. With `null` the app kept Electron's own (now invalid)
+    // signature and macOS reported downloaded copies as "damaged" on Apple Silicon.
+    // Real signing / notarization: see README.
+    identity: '-',
+    // Hardened runtime is only needed for notarization; with an ad-hoc signature it makes
+    // library validation reject Electron's frameworks. Turn on together with real signing.
+    hardenedRuntime: false
   },
   // Windows targets (planned): nsis (.exe) / msi
   win: {
