@@ -264,7 +264,7 @@
 
 - **v0.1.0 已發佈**（2026-10-03）：https://github.com/CyclopesTsai/Hachi/releases/tag/v0.1.0（`Hachi-0.1.0-arm64.dmg` 130.9 MB、`Hachi-0.1.0-x64.dmg` 134.8 MB，未簽章）。第一次 Release 失敗原因：GitHub macOS 機器螢幕只有 1024×768，E2E 寫死的視窗大小超出螢幕被 App 自動縮小 → 測試改用螢幕可用範圍內的大小；`v0.1.0` tag 經使用者同意移到修正後的 commit 重新發佈
 - **v0.1.0 的 arm64 dmg 下載後顯示「已損毀」**（2026-10-06 使用者回報）：簽章不完整，見決策 102；v0.1.1 修正。v0.1.0 的使用者可用 `xattr -dr com.apple.quarantine /Applications/Hachi.app` 暫時解決
-- **Bruno / OpenAPI / 側欄「＋」完成，等使用者確認**（2026-10-07，決策 103–106）：
+- **v0.2.0 發佈**（2026-10-07）：Bruno / OpenAPI / 側欄「＋」（決策 103–106）：
   - `src/shared/transfer/bru-lang.ts`（`.bru` 解析 / 寫出）、`bruno.ts`（資料夾 / JSON 匯入、資料夾匯出）、`openapi.ts`（OpenAPI 3.0 + Redoc HTML）；`src/main/redoc.ts` 在建置時把 Redoc bundle 放進獨立 chunk
   - 沙箱加上 `bru` / `req` / `res` / `test` / `expect`（`prelude.ts`）；匯入時檢查不支援的 Bruno API
   - IPC：`transfer:exportPostman` 改為 `transfer:export { id, format, environmentId }`，新增 `transfer:importBrunoFolder`；`ImportReport.environments`
