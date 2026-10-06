@@ -65,6 +65,7 @@
     "globals": "^17.12.0",
     "playwright-core": "^1.63.0",
     "prettier": "^3.9.9",
+    "redoc": "^2.5.4",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0",
     "typescript-eslint": "^8.71.0",
