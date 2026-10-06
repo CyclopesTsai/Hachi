@@ -41,6 +41,16 @@ Licenses of all packages shipped in the app are audited by `npm run check:licens
 The full license texts are generated with `node scripts/check-licenses.mjs --write`
 into `out/THIRD_PARTY_LICENSES.txt` and bundled into the packaged app.
 
+## Embedded in exported files
+
+OpenAPI HTML exports (decision 105) contain the **Redoc** standalone bundle
+(`redoc/bundles/redoc.standalone.js`, [Redoc](https://github.com/Redocly/redoc) 2.x, MIT License,
+Copyright (c) 2015-present, Rebilly, Inc.). The bundle includes React, React DOM, scheduler,
+react-is, use-sync-external-store, mobx, styled-components, classnames, mark.js, perfect-scrollbar,
+Stickyfill, Prism (MIT) and DOMPurify (Apache-2.0 / MPL-2.0). `redoc` is a development dependency:
+the app carries only this bundle (inlined at build time), and every exported page starts with the
+Redoc license and the bundle's own license notices (`redoc.standalone.js.LICENSE.txt`).
+
 ## Fonts and icons
 
 - No font files are bundled; the UI uses the operating system's fonts.

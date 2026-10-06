@@ -47,7 +47,19 @@ function contentSecurityPolicy(): Plugin {
 
 export default defineConfig({
   main: {
-    resolve: { alias }
+    resolve: { alias },
+    build: {
+      rollupOptions: {
+        output: {
+          // Text inlined with `?raw` (the Redoc bundle) goes to out/main/raw/, which the
+          // packaging scan of runtime imports skips (electron-builder.config.mjs).
+          chunkFileNames: (chunk) =>
+            chunk.moduleIds.some((id) => id.endsWith('?raw'))
+              ? 'raw/[name]-[hash].js'
+              : '[name]-[hash].js'
+        }
+      }
+    }
   },
   preload: {
     resolve: { alias },

@@ -258,13 +258,18 @@
 | 103 | Bruno 匯入匯出      | 匯入：Bruno collection 資料夾（`bruno.json`、`.bru`、`folder.bru`、`collection.bru`、`environments/*.bru`）與 Bruno 匯出的 JSON；匯出：Bruno collection 資料夾（可直接在 Bruno 打開）。`assert` → 斷言表格、`vars:post-response` → 擷取表格、腳本保留；不支援的（GraphQL、gRPC、OAuth2…）列在匯入報告                                                                                                                                                           |
 | 104 | Bruno 腳本相容      | 沙箱加 `bru` / `req` / `res` 常用子集（類似決策 72 的 `pm.*`），匯入的 Bruno 腳本大多可直接執行；不支援的寫法在匯入報告提醒                                                                                                                                                                                                                                                                                                                                     |
 | 105 | OpenAPI 匯出        | Collection 右鍵「匯出…」對話框選格式（Postman v2.1 / Bruno / OpenAPI 文件 HTML / OpenAPI JSON）。HTML 內嵌 **Redoc**（MIT，standalone bundle 約 1.1 MB，離線可看；`redoc` 只放 devDependencies，App 只帶這一個檔案，授權記錄在 THIRD_PARTY_NOTICES）。資料夾 → tags、`{{baseUrl}}` → server（匯出時選環境或保留變數）、路徑中的 `{{x}}` → path 參數、JSON Body → 範例＋推斷 schema、Auth → securitySchemes；沒有保存回應，responses 只有說明                    |
-| 106 | 側欄「＋」          | 改成選單：新增 Collection / 資料夾 / HTTP 請求 / WebSocket，以及「匯入…」「匯入 cURL…」；資料夾 / 請求放進目前選取的位置（選取 Collection / 資料夾 → 放裡面；選取請求 → 放在同一層），沒有選取時詢問要放在哪個 Collection                                                                                                                                                                                                                                       |
+| 106 | 側欄「＋」          | 改成選單：新增 Collection / 資料夾 / HTTP 請求 / WebSocket，以及「匯入檔案（Postman / Bruno JSON）…」「匯入 Bruno 資料夾…」「匯入 cURL…」；資料夾 / 請求放進目前選取的位置（選取 Collection / 資料夾 → 放裡面；選取請求 → 放在同一層），沒有選取時詢問要放在哪個 Collection                                                                                                                                                                                     |
 
 ## 下一步
 
 - **v0.1.0 已發佈**（2026-10-03）：https://github.com/CyclopesTsai/Hachi/releases/tag/v0.1.0（`Hachi-0.1.0-arm64.dmg` 130.9 MB、`Hachi-0.1.0-x64.dmg` 134.8 MB，未簽章）。第一次 Release 失敗原因：GitHub macOS 機器螢幕只有 1024×768，E2E 寫死的視窗大小超出螢幕被 App 自動縮小 → 測試改用螢幕可用範圍內的大小；`v0.1.0` tag 經使用者同意移到修正後的 commit 重新發佈
 - **v0.1.0 的 arm64 dmg 下載後顯示「已損毀」**（2026-10-06 使用者回報）：簽章不完整，見決策 102；v0.1.1 修正。v0.1.0 的使用者可用 `xattr -dr com.apple.quarantine /Applications/Hachi.app` 暫時解決
-- **進行中（2026-10-07）**：Bruno 匯入匯出、OpenAPI HTML 匯出、側欄「＋」選單（決策 103–106）
+- **Bruno / OpenAPI / 側欄「＋」完成，等使用者確認**（2026-10-07，決策 103–106）：
+  - `src/shared/transfer/bru-lang.ts`（`.bru` 解析 / 寫出）、`bruno.ts`（資料夾 / JSON 匯入、資料夾匯出）、`openapi.ts`（OpenAPI 3.0 + Redoc HTML）；`src/main/redoc.ts` 在建置時把 Redoc bundle 放進獨立 chunk
+  - 沙箱加上 `bru` / `req` / `res` / `test` / `expect`（`prelude.ts`）；匯入時檢查不支援的 Bruno API
+  - IPC：`transfer:exportPostman` 改為 `transfer:export { id, format, environmentId }`，新增 `transfer:importBrunoFolder`；`ImportReport.environments`
+  - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
+  - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
 - Phase 6 等使用者確認
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 

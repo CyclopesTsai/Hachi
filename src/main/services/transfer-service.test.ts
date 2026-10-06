@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -6,7 +6,7 @@ import { POSTMAN_SCHEMA_V21 } from '@shared/transfer/postman'
 import { CollectionService } from './collection-service'
 import { ConfigService } from './config-service'
 import { EnvironmentService } from './environment-service'
-import { TransferService } from './transfer-service'
+import { TransferService, readBrunoFolder } from './transfer-service'
 import { WorkspaceService } from './workspace-service'
 
 let tmp: string
@@ -52,7 +52,10 @@ beforeEach(async () => {
   environments = new EnvironmentService(async (p) => rm(p, { force: true }))
   await collections.open(root, ws.id)
   environments.open(root)
-  transfer = new TransferService(collections, environments)
+  transfer = new TransferService(collections, environments, async () => ({
+    bundle: 'window.Redoc = { init() {} }',
+    licenses: 'MIT'
+  }))
 })
 
 afterEach(async () => {
@@ -161,7 +164,8 @@ describe('TransferService export', () => {
       requestType: 'websocket'
     })
 
-    const exported = await transfer.exportPostman(id)
+    const exported = await transfer.export(id, 'postman', null)
+    if (exported.kind !== 'file') throw new Error('expected a file')
     expect(exported.fileName).toBe('shop.postman_collection.json')
     expect(exported.result.skipped).toEqual(['Live'])
     expect(exported.result.unreadable).toEqual([])
@@ -190,9 +194,104 @@ describe('TransferService export', () => {
   it('only exports Collections', async () => {
     const { id } = await transfer.importText('shop.json', JSON.stringify(postman))
     const folderId = (await collections.getTree()).collections[0]?.children[0]?.id as string
-    await expect(transfer.exportPostman(folderId)).rejects.toMatchObject({
+    await expect(transfer.export(folderId, 'postman', null)).rejects.toMatchObject({
       code: 'INVALID_OPERATION'
     })
     expect(id).toBeTruthy()
+  })
+})
+
+describe('TransferService Bruno and OpenAPI', () => {
+  const bruno: Record<string, string> = {
+    'bruno.json': '{"version":"1","name":"Pets","type":"collection"}',
+    'collection.bru': 'auth {\n  mode: bearer\n}\n\nauth:bearer {\n  token: {{token}}\n}\n',
+    'pets/folder.bru': 'meta {\n  name: Pets\n}\n',
+    'pets/list.bru':
+      'meta {\n  name: List pets\n  type: http\n  seq: 1\n}\n\nget {\n  url: {{baseUrl}}/pets/{{petId}}\n  body: none\n  auth: inherit\n}\n\nassert {\n  res.status: eq 200\n}\n',
+    'environments/local.bru':
+      'vars {\n  baseUrl: http://localhost:4000\n  petId: 7\n}\nvars:secret [\n  token\n]\n',
+    'node_modules/x/ignored.bru': 'not bru',
+    '.git/ignored.bru': 'not bru',
+    'readme.md': '# not imported'
+  }
+
+  async function writeTree(dir: string, files: Record<string, string>) {
+    for (const [rel, content] of Object.entries(files)) {
+      const file = path.join(dir, ...rel.split('/'))
+      await mkdir(path.dirname(file), { recursive: true })
+      await writeFile(file, content)
+    }
+  }
+
+  it('reads a Bruno folder (skipping node_modules and dot folders) and imports it', async () => {
+    const dir = path.join(tmp, 'pets-bruno')
+    await writeTree(dir, bruno)
+    expect(Object.keys(await readBrunoFolder(dir)).sort()).toEqual([
+      'bruno.json',
+      'collection.bru',
+      'environments/local.bru',
+      'pets/folder.bru',
+      'pets/list.bru'
+    ])
+    const report = await transfer.importBrunoFolder(dir)
+    expect(report).toMatchObject({
+      kind: 'collection',
+      name: 'Pets',
+      fileName: 'pets-bruno',
+      folders: 1,
+      requests: 1,
+      environments: ['local']
+    })
+    const env = await environments.get((await environments.list())[0]?.id as string)
+    expect(env.variables.map((v) => [v.key, v.value, v.secret])).toEqual([
+      ['baseUrl', 'http://localhost:4000', false],
+      ['petId', '7', false],
+      ['token', '', true]
+    ])
+  })
+
+  it('imports Bruno collection JSON dropped as text', async () => {
+    const report = await transfer.importText(
+      'pets.json',
+      JSON.stringify({ name: 'Pets JSON', version: '1', items: [], environments: [] })
+    )
+    expect(report).toMatchObject({ kind: 'collection', name: 'Pets JSON', environments: [] })
+  })
+
+  it('rejects a folder without bruno.json', async () => {
+    const dir = path.join(tmp, 'empty')
+    await mkdir(dir)
+    await expect(transfer.importBrunoFolder(dir)).rejects.toMatchObject({ code: 'INVALID_FILE' })
+  })
+
+  it('exports Bruno folders and OpenAPI documents', async () => {
+    const dir = path.join(tmp, 'pets-bruno')
+    await writeTree(dir, bruno)
+    const { id } = await transfer.importBrunoFolder(dir)
+    const envId = (await environments.list())[0]?.id as string
+
+    const folder = await transfer.export(id, 'bruno', null)
+    if (folder.kind !== 'folder') throw new Error('expected a folder')
+    expect(folder.folderName).toBe('Pets')
+    expect(Object.keys(folder.files).sort()).toEqual([
+      'Pets/List pets.bru',
+      'Pets/folder.bru',
+      'bruno.json',
+      'collection.bru',
+      'environments/local.bru'
+    ])
+
+    const json = await transfer.export(id, 'openapi-json', envId)
+    if (json.kind !== 'file') throw new Error('expected a file')
+    expect(json.fileName).toBe('pets.openapi.json')
+    const doc = JSON.parse(json.content) as { servers: unknown; paths: Record<string, unknown> }
+    expect(doc.servers).toEqual([{ url: 'http://localhost:4000' }])
+    expect(Object.keys(doc.paths)).toEqual(['/pets/{petId}'])
+
+    const html = await transfer.export(id, 'openapi-html', null)
+    if (html.kind !== 'file') throw new Error('expected a file')
+    expect(html.fileName).toBe('pets.html')
+    expect(html.content).toContain('window.Redoc = { init() {} }')
+    expect(html.result.warnings[0]).toMatch(/伺服器網址中的變數沒有值/)
   })
 })

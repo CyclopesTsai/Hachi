@@ -47,7 +47,8 @@ export const INVOKE = {
   httpResolve: 'http:resolve',
   transferImportFile: 'transfer:importFile',
   transferImportText: 'transfer:importText',
-  transferExportPostman: 'transfer:exportPostman',
+  transferImportBrunoFolder: 'transfer:importBrunoFolder',
+  transferExport: 'transfer:export',
   envList: 'env:list',
   envGet: 'env:get',
   envCreate: 'env:create',
@@ -106,6 +107,7 @@ export const MENU_COMMANDS = [
   'app.settings',
   'import.file',
   'import.curl',
+  'import.bruno',
   'help.shortcuts'
 ] as const
 export type MenuCommand = (typeof MENU_COMMANDS)[number]

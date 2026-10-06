@@ -14,10 +14,12 @@ export interface MenuActions {
   /** Closes the active tab (CmdOrCtrl+W); the window when no tab is open. */
   closeTab(): void
   openSettings(): void
-  /** Import a Postman Collection / Environment file (no shortcut). */
+  /** Import a Postman Collection / Environment or Bruno JSON file (no shortcut). */
   importFile(): void
   /** Paste a cURL command into a new request (no shortcut). */
   importCurl(): void
+  /** Import a Bruno collection folder (no shortcut). */
+  importBruno(): void
   /** Help → Keyboard Shortcuts (decision 96, no shortcut). */
   showShortcuts(): void
 }
@@ -94,6 +96,7 @@ export function buildMenuTemplate(
         { label: 'Switch Workspace…', click: () => actions.switchWorkspace() },
         { type: 'separator' },
         { label: 'Import…', click: () => actions.importFile() },
+        { label: 'Import Bruno Collection…', click: () => actions.importBruno() },
         { label: 'Import cURL…', click: () => actions.importCurl() },
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => actions.save() },

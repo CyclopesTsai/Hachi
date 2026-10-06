@@ -30,7 +30,7 @@ import {
   RUNNER_MAX_DELAY_MS,
   RUNNER_MAX_ITERATIONS
 } from '../runner'
-import type { InvokeMap } from './api'
+import type { ExportFormat, InvokeMap } from './api'
 import { INVOKE, type InvokeChannel } from './channels'
 
 const MAX_PATH_LENGTH = 4096
@@ -201,7 +201,12 @@ export const inputSchemas = {
     fileName: z.string().max(1000),
     text: z.string().max(MAX_IMPORT_TEXT)
   }),
-  [INVOKE.transferExportPostman]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.transferImportBrunoFolder]: noInput,
+  [INVOKE.transferExport]: z.strictObject({
+    id: itemIdSchema,
+    format: z.enum(['postman', 'bruno', 'openapi-html', 'openapi-json'] satisfies ExportFormat[]),
+    environmentId: itemIdSchema.nullable()
+  }),
   [INVOKE.envList]: noInput,
   [INVOKE.envGet]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.envCreate]: z.strictObject({ name: itemNameSchema }),

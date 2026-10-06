@@ -292,11 +292,9 @@ export function TreeRow({
               複製
             </ContextMenuItem>
             {node.kind === 'collection' && (
-              <ContextMenuItem
-                onSelect={() => void useTransferStore.getState().exportPostman(node.id)}
-              >
+              <ContextMenuItem onSelect={() => useTransferStore.getState().setExportId(node.id)}>
                 <Share />
-                匯出為 Postman Collection…
+                匯出…
               </ContextMenuItem>
             )}
             <ContextMenuSeparator />

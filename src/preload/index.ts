@@ -78,7 +78,8 @@ const api: HachiApi = {
   transfer: {
     importFile: () => invoke(INVOKE.transferImportFile),
     importText: (input) => invoke(INVOKE.transferImportText, input),
-    exportPostman: (input) => invoke(INVOKE.transferExportPostman, input)
+    importBrunoFolder: () => invoke(INVOKE.transferImportBrunoFolder),
+    export: (input) => invoke(INVOKE.transferExport, input)
   },
   env: {
     list: () => invoke(INVOKE.envList),

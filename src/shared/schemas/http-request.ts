@@ -147,6 +147,8 @@ export const httpRequestSchema = z.looseObject({
   settings: httpRequestSettingsSchema.prefault({}),
   scripts: requestScriptsSchema.prefault({}),
   assertions: z.array(assertionSchema).max(ROWS_MAX).default([]),
-  extractions: z.array(extractionSchema).max(ROWS_MAX).default([])
+  extractions: z.array(extractionSchema).max(ROWS_MAX).default([]),
+  /** Markdown notes (e.g. Bruno `docs`); used as the description in OpenAPI exports. */
+  docs: z.string().max(MAX_SCRIPT_TEXT).default('')
 })
 export type HttpRequest = z.infer<typeof httpRequestSchema>

@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { app, ipcMain, nativeTheme, type BrowserWindow } from 'electron'
 import { APP_ID, APP_NAME } from '@shared/app-info'
@@ -16,6 +16,7 @@ import type { WsService } from '../services/ws/ws-service'
 import type { HttpService } from '../services/http/http-service'
 import type { WorkspaceService } from '../services/workspace-service'
 import type { TransferService } from '../services/transfer-service'
+import { uniqueFileName } from '../services/fs/unique-name'
 import type { RuntimeVariables } from '../services/runtime-variables'
 import type { RunnerService } from '../services/runner-service'
 import { DataFileError, parseDataFile } from '@shared/runner'
@@ -201,7 +202,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       const file = await selectFile(ctx.getWindow(), {
         title: 'Import',
         filters: [
-          { name: 'Postman Collection / Environment', extensions: ['json'] },
+          { name: 'Postman / Bruno JSON', extensions: ['json'] },
           { name: 'All Files', extensions: ['*'] }
         ]
       })
@@ -211,10 +212,30 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       workspacePath()
       return ctx.transfer.importText(input.fileName, input.text)
     },
-    [INVOKE.transferExportPostman]: async (input) => {
-      const exported = await ctx.transfer.exportPostman(input.id)
+    [INVOKE.transferImportBrunoFolder]: async () => {
+      workspacePath()
+      const dir = await selectDirectory(ctx.getWindow(), { title: 'Import Bruno Collection' })
+      return dir ? ctx.transfer.importBrunoFolder(dir) : null
+    },
+    [INVOKE.transferExport]: async (input) => {
+      const exported = await ctx.transfer.export(input.id, input.format, input.environmentId)
+      if (exported.kind === 'folder') {
+        // Bruno: a new folder inside the chosen one.
+        const parent = await selectDirectory(ctx.getWindow(), {
+          title: 'Export Bruno Collection',
+          defaultPath: app.getPath('downloads')
+        })
+        if (!parent) return null
+        const target = path.join(parent, await uniqueFileName(parent, exported.folderName, ''))
+        for (const [relPath, content] of Object.entries(exported.files)) {
+          const file = path.join(target, ...relPath.split('/'))
+          await mkdir(path.dirname(file), { recursive: true })
+          await writeFile(file, content, 'utf8')
+        }
+        return { path: target, ...exported.result }
+      }
       const target = await selectSavePath(ctx.getWindow(), {
-        title: 'Export Postman Collection',
+        title: 'Export Collection',
         defaultPath: path.join(app.getPath('downloads'), exported.fileName)
       })
       if (!target) return null

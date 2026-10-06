@@ -328,14 +328,26 @@ export interface ImportReport {
   folders: number
   requests: number
   variables: number
+  /** Environments created along with a Collection (Bruno). */
+  environments: string[]
   /** What could not be imported exactly (unsupported auth, body types, …). */
   warnings: string[]
 }
 
+export type ExportFormat = 'postman' | 'bruno' | 'openapi-html' | 'openapi-json'
+
+export interface ExportInput {
+  /** Collection id. */
+  id: string
+  format: ExportFormat
+  /** OpenAPI only: environment whose values fill server URLs and path examples. */
+  environmentId: string | null
+}
+
 export interface ExportResult {
-  /** Where the file was written. */
+  /** Where the file (or the Bruno folder) was written. */
   path: string
-  /** WebSocket requests left out (Postman v2.1 has no WebSocket items). */
+  /** WebSocket requests left out (Postman v2.1 / Bruno / OpenAPI have no WebSocket items). */
   skipped: string[]
   /** Items whose files could not be read. */
   unreadable: string[]
@@ -424,7 +436,8 @@ export interface InvokeMap {
   'http:resolve': { input: HttpResolveInput; output: HttpResolveResult }
   'transfer:importFile': { input: void; output: ImportReport | null }
   'transfer:importText': { input: ImportTextInput; output: ImportReport }
-  'transfer:exportPostman': { input: ItemIdInput; output: ExportResult | null }
+  'transfer:importBrunoFolder': { input: void; output: ImportReport | null }
+  'transfer:export': { input: ExportInput; output: ExportResult | null }
   'env:list': { input: void; output: EnvironmentSummary[] }
   'env:get': { input: ItemIdInput; output: EnvironmentData }
   'env:create': { input: EnvironmentCreateInput; output: EnvironmentMutationResult }
@@ -552,11 +565,16 @@ export interface HachiApi {
     resolve: InvokeFn<'http:resolve'>
   }
   transfer: {
-    /** Open dialog, then imports a Postman Collection / Environment. Null if cancelled. */
+    /** Open dialog, then imports a Postman / Bruno JSON file. Null if cancelled. */
     importFile: InvokeFn<'transfer:importFile'>
     importText: InvokeFn<'transfer:importText'>
-    /** Save dialog, then writes the Collection as Postman v2.1. Null if cancelled. */
-    exportPostman: InvokeFn<'transfer:exportPostman'>
+    /** Folder dialog, then imports a Bruno collection folder. Null if cancelled. */
+    importBrunoFolder: InvokeFn<'transfer:importBrunoFolder'>
+    /**
+     * Save dialog (a folder dialog for Bruno), then writes the Collection in the chosen
+     * format. Null if cancelled.
+     */
+    export: InvokeFn<'transfer:export'>
   }
   env: {
     list: InvokeFn<'env:list'>

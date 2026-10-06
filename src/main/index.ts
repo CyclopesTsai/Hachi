@@ -34,6 +34,7 @@ import { ScriptHost } from './services/scripts/script-host'
 import { RequestExecutor } from './services/http/executor'
 import { RunnerService } from './services/runner-service'
 import { WorkspaceService } from './services/workspace-service'
+import { loadRedoc } from './redoc'
 import { createMainWindow, getRendererUrl } from './window'
 
 app.setName(APP_NAME)
@@ -125,7 +126,7 @@ async function bootstrap(): Promise<void> {
     userAgent: `${APP_NAME}/${app.getVersion()}`
   }
   const http = new HttpService(requestDeps)
-  const transfer = new TransferService(collections, environments)
+  const transfer = new TransferService(collections, environments, loadRedoc)
   const variablesChanged = (change: {
     environmentId: string | null
     collectionId: string | null
@@ -349,6 +350,7 @@ async function bootstrap(): Promise<void> {
     openSettings: () => sendMenuCommand('app.settings'),
     importFile: () => sendMenuCommand('import.file'),
     importCurl: () => sendMenuCommand('import.curl'),
+    importBruno: () => sendMenuCommand('import.bruno'),
     showShortcuts: () => sendMenuCommand('help.shortcuts'),
     openWorkspace: () => sendMenuCommand('workspace.open'),
     openRecentWorkspace: (workspacePath) =>

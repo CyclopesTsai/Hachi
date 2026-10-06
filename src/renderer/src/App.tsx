@@ -16,7 +16,11 @@ import { AppSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
 import { ShortcutsDialog } from '@renderer/features/settings/ShortcutsDialog'
 import { useShortcutsDialog } from '@renderer/stores/shortcuts-store'
 import { SaveAsDialog } from '@renderer/features/tabs/SaveAsDialog'
-import { CurlImportDialog, TransferResultDialog } from '@renderer/features/transfer/TransferDialogs'
+import {
+  CurlImportDialog,
+  ExportDialog,
+  TransferResultDialog
+} from '@renderer/features/transfer/TransferDialogs'
 import { isTabDirty, toSession } from '@renderer/features/tabs/tab-model'
 import { WorkspaceShell } from '@renderer/features/workspace/WorkspaceShell'
 import { useSystemTheme } from '@renderer/hooks/use-system-theme'
@@ -86,6 +90,10 @@ function useMainProcessEvents(): void {
             break
           case 'help.shortcuts':
             useShortcutsDialog.getState().setOpen(true)
+            break
+          case 'import.bruno':
+            if (store().currentWorkspace) void useTransferStore.getState().importBrunoFolder()
+            else store().setNotice('請先建立或開啟 Workspace 再匯入')
             break
           case 'import.curl':
             if (store().currentWorkspace) useTransferStore.getState().setCurlOpen(true)
@@ -245,6 +253,7 @@ export function App() {
       <ScriptTrustDialog />
       <ShortcutsDialog />
       <CurlImportDialog />
+      <ExportDialog />
       <TransferResultDialog />
       <NoticeDialog />
     </>

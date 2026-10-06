@@ -567,6 +567,91 @@ export const PRELUDE = String.raw`
     setNextRequest: unsupported('postman.setNextRequest')
   }
 
+  // ---- Bruno compatibility (bru / req / res, decision 104) -----------------------
+  function parsedOrText(text) {
+    try { return JSON.parse(text) } catch (e) { return text }
+  }
+  var bru = {
+    getEnvName: function () { return input.info.environmentName },
+    getEnvVar: environmentScope.get,
+    setEnvVar: environmentScope.set,
+    hasEnvVar: environmentScope.has,
+    deleteEnvVar: environmentScope.unset,
+    getVar: runtimeScope.get,
+    setVar: runtimeScope.set,
+    hasVar: runtimeScope.has,
+    deleteVar: runtimeScope.unset,
+    getGlobalEnvVar: runtimeScope.get,
+    setGlobalEnvVar: runtimeScope.set,
+    getCollectionVar: collectionScope.get,
+    getCollectionName: function () { return input.info.collectionName },
+    getRequestVar: lookup,
+    getFolderVar: lookup,
+    interpolate: function (v) { return typeof v === 'string' ? replaceIn(v) : v },
+    sleep: function () { logger('warn')('Hachi 的腳本是同步執行，bru.sleep() 不會等待') },
+    getProcessEnv: unsupported('bru.getProcessEnv'),
+    sendRequest: unsupported('bru.sendRequest'),
+    runRequest: unsupported('bru.runRequest'),
+    setNextRequest: unsupported('bru.setNextRequest')
+  }
+  Object.defineProperty(bru, 'runner', { get: unsupported('bru.runner') })
+  Object.defineProperty(bru, 'cookies', { get: unsupported('bru.cookies') })
+
+  var brunoReq = {
+    getName: function () { return input.info.requestName },
+    getUrl: function () { return req.url },
+    setUrl: function (u) { editable(); req.url = String(u) },
+    getMethod: function () { return req.method },
+    setMethod: function (m) { editable(); req.method = String(m).toUpperCase() },
+    getHeader: function (name) { return requestHeaders.get(name) },
+    getHeaders: function () { return requestHeaders.toObject() },
+    setHeader: function (name, value) { requestHeaders.set(name, value) },
+    setHeaders: function (obj) {
+      Object.keys(obj || {}).forEach(function (k) { requestHeaders.set(k, obj[k]) })
+    },
+    deleteHeader: function (name) { requestHeaders.remove(name) },
+    getBody: function () { return req.body === null ? undefined : parsedOrText(req.body) },
+    setBody: function (v) { setBody(v) },
+    getTimeout: unsupported('req.getTimeout'),
+    setTimeout: unsupported('req.setTimeout'),
+    setMaxRedirects: unsupported('req.setMaxRedirects')
+  }
+  Object.defineProperty(brunoReq, 'url', { get: brunoReq.getUrl, set: brunoReq.setUrl })
+  Object.defineProperty(brunoReq, 'method', { get: brunoReq.getMethod, set: brunoReq.setMethod })
+  Object.defineProperty(brunoReq, 'headers', { get: brunoReq.getHeaders })
+  Object.defineProperty(brunoReq, 'body', { get: brunoReq.getBody, set: brunoReq.setBody })
+
+  // res is a function in Bruno: res('data.items[0].id') reads the JSON body.
+  var brunoRes = null
+  if (res) {
+    var lowerHeaders = {}
+    res.headers.forEach(function (h) { lowerHeaders[h[0].toLowerCase()] = h[1] })
+    var resBody = function () {
+      var text
+      try { text = bodyText() } catch (e) { return undefined }
+      return parsedOrText(text)
+    }
+    brunoRes = function (path) {
+      var body = resBody()
+      if (path === undefined || path === '') return body
+      if (body === null || typeof body !== 'object') return undefined
+      var found = getPath(body, String(path))
+      return found.found ? found.value : undefined
+    }
+    brunoRes.getStatus = function () { return res.status }
+    brunoRes.getStatusText = function () { return res.statusText }
+    brunoRes.getHeader = function (name) { return lowerHeaders[String(name).toLowerCase()] }
+    brunoRes.getHeaders = function () { return Object.assign({}, lowerHeaders) }
+    brunoRes.getBody = resBody
+    brunoRes.getResponseTime = function () { return res.timeMs }
+    brunoRes.getSize = function () { return { body: res.sizeBytes, header: 0, total: res.sizeBytes } }
+    brunoRes.status = res.status
+    brunoRes.statusText = res.statusText
+    brunoRes.headers = lowerHeaders
+    brunoRes.responseTime = res.timeMs
+    Object.defineProperty(brunoRes, 'body', { get: resBody })
+  }
+
   // ---- base64 ------------------------------------------------------------------
   var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
   function btoa(input) {
@@ -606,6 +691,12 @@ export const PRELUDE = String.raw`
   globalThis.pm = pm
   globalThis.postman = postman
   globalThis.tests = legacyTests
+  globalThis.bru = bru
+  globalThis.req = brunoReq
+  if (brunoRes) globalThis.res = brunoRes
+  // Bruno tests: test('name', fn) with Chai's expect.
+  globalThis.test = test
+  globalThis.expect = chaiExpect
   globalThis.btoa = btoa
   globalThis.atob = atob
   globalThis.require = function (name) {

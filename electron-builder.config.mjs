@@ -13,7 +13,7 @@ const info = JSON.parse(
 
 /**
  * Packages the main process loads at runtime: bare imports in out/main (run `npm run build`
- * first) plus their dependencies. Everything else in `dependencies` is bundled into the
+ * first; out/main/raw/ holds inlined text, not code) plus their dependencies. Everything else in `dependencies` is bundled into the
  * renderer by Vite, so its node_modules copy is left out of app.asar.
  */
 function mainRuntimePackages() {

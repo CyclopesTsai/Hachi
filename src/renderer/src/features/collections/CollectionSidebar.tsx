@@ -9,7 +9,18 @@ import {
   type DragMoveEvent,
   type DragStartEvent
 } from '@dnd-kit/core'
-import { Plus, RefreshCw, X } from 'lucide-react'
+import {
+  FileDown,
+  FilePlus2,
+  FolderInput,
+  FolderPlus,
+  Layers,
+  Plus,
+  Radio,
+  RefreshCw,
+  Terminal,
+  X
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { findNode, isContainer, type TreeNode } from '@shared/tree'
 import {
@@ -23,6 +34,23 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 import { Button } from '@renderer/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
+import { NativeSelect } from '@renderer/components/ui/native-select'
+import { useTransferStore } from '@renderer/stores/transfer-store'
 import { HistoryPanel } from '@renderer/features/history/HistoryPanel'
 import { cn } from '@renderer/lib/utils'
 import { useHistoryStore, type SidebarMode } from '@renderer/stores/history-store'
@@ -141,7 +169,103 @@ export function CollectionSidebar() {
   )
 }
 
+type NewKind = { kind: 'folder' } | { kind: 'request'; requestType: 'http' | 'websocket' }
+
+const NEW_LABELS: Record<string, string> = {
+  folder: '新增資料夾',
+  http: '新增 HTTP 請求',
+  websocket: '新增 WebSocket'
+}
+
+/**
+ * Where "＋" puts a folder / request (decision 106): inside the selected collection /
+ * folder, next to a selected request; null when nothing usable is selected.
+ */
+function selectedContainerId(): string | null {
+  const { tree, selectedId } = useTreeStore.getState()
+  if (!selectedId) return null
+  const found = findNode(tree, selectedId)
+  if (!found || found.node.error) return null
+  return isContainer(found.node) ? found.node.id : (found.parent?.id ?? null)
+}
+
+function createIn(parentId: string, what: NewKind): void {
+  const { create, reveal } = useTreeStore.getState()
+  reveal(parentId)
+  useTreeStore.getState().expand(parentId)
+  void (
+    what.kind === 'folder'
+      ? create(parentId, 'folder')
+      : create(parentId, 'request', what.requestType)
+  ).then((id) => {
+    if (id) useTabsStore.getState().openItem(id, { preview: false })
+  })
+}
+
+/** Nothing selected: ask which Collection the new item goes into. */
+function PickCollectionDialog({ what, onClose }: { what: NewKind | null; onClose: () => void }) {
+  // Select the stable array and filter outside: a new array per call would re-render forever.
+  const all = useTreeStore((s) => s.tree.collections)
+  const collections = useMemo(() => all.filter((c) => !c.error), [all])
+  const [target, setTarget] = useState('')
+  const chosen = collections.find((c) => c.id === target) ?? collections[0]
+  const label = what ? NEW_LABELS[what.kind === 'folder' ? 'folder' : what.requestType] : ''
+  return (
+    <Dialog open={what !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent data-testid="pick-collection-dialog">
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (what && chosen) createIn(chosen.id, what)
+            onClose()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{label}</DialogTitle>
+            <DialogDescription>
+              左側沒有選取位置，要放在哪個 Collection？（先在左側選取 Collection
+              或資料夾，就會直接放進去）
+            </DialogDescription>
+          </DialogHeader>
+          <NativeSelect
+            aria-label="Collection"
+            autoFocus
+            value={chosen?.id ?? ''}
+            onChange={(e) => setTarget(e.target.value)}
+          >
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </NativeSelect>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              取消
+            </Button>
+            <Button type="submit" disabled={!chosen}>
+              新增
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function CollectionActions() {
+  const hasCollections = useTreeStore((s) => s.tree.collections.some((c) => !c.error))
+  const [asking, setAsking] = useState<NewKind | null>(null)
+  // A new item opens its rename field: the closing menu must not pull focus back to "+".
+  const creating = useRef(false)
+  const add = (what: NewKind) => {
+    creating.current = true
+    const parentId = selectedContainerId()
+    if (parentId) createIn(parentId, what)
+    else setAsking(what)
+  }
+  const transfer = useTransferStore.getState()
   return (
     <div className="flex items-center">
       <Button
@@ -154,16 +278,71 @@ function CollectionActions() {
       >
         <RefreshCw />
       </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="size-7"
-        title="新增 Collection"
-        aria-label="新增 Collection"
-        onClick={() => void createCollection()}
-      >
-        <Plus />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            title="新增…"
+            aria-label="新增"
+            data-testid="sidebar-add"
+          >
+            <Plus />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          data-testid="sidebar-add-menu"
+          onCloseAutoFocus={(e) => {
+            if (creating.current) e.preventDefault()
+            creating.current = false
+          }}
+        >
+          <DropdownMenuItem
+            onSelect={() => {
+              creating.current = true
+              void createCollection()
+            }}
+          >
+            <Layers />
+            新增 Collection
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={!hasCollections}
+            onSelect={() => add({ kind: 'request', requestType: 'http' })}
+          >
+            <FilePlus2 />
+            新增 HTTP 請求
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!hasCollections}
+            onSelect={() => add({ kind: 'request', requestType: 'websocket' })}
+          >
+            <Radio />
+            新增 WebSocket
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!hasCollections} onSelect={() => add({ kind: 'folder' })}>
+            <FolderPlus />
+            新增資料夾
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void transfer.importFile()}>
+            <FileDown />
+            匯入檔案（Postman / Bruno JSON）…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void transfer.importBrunoFolder()}>
+            <FolderInput />
+            匯入 Bruno 資料夾…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => transfer.setCurlOpen(true)}>
+            <Terminal />
+            匯入 cURL…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <PickCollectionDialog what={asking} onClose={() => setAsking(null)} />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ExportResult, ImportReport } from '@shared/ipc/api'
+import type { ExportFormat, ImportReport } from '@shared/ipc/api'
 import { MAX_CURL_TEXT, parseCurl } from '@shared/transfer/curl'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from './app-store'
@@ -19,8 +19,18 @@ export interface TransferResultEntry {
 const MAX_DROP_BYTES = 50 * 1024 * 1024
 const MAX_DROP_FILES = 20
 
+/** Formats offered in the export dialog (decision 105). */
+export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+  postman: 'Postman Collection v2.1',
+  bruno: 'Bruno 資料夾',
+  'openapi-html': 'OpenAPI 文件（HTML）',
+  'openapi-json': 'OpenAPI 3.0（JSON）'
+}
+
 interface TransferState {
   curlOpen: boolean
+  /** Collection whose export dialog is open. */
+  exportId: string | null
   result: { title: string; entries: TransferResultEntry[] } | null
   busy: boolean
 
@@ -31,7 +41,14 @@ interface TransferState {
   importFile(): Promise<void>
   /** Files dropped on the window (decision 68). */
   importDropped(files: File[]): Promise<void>
-  exportPostman(collectionId: string): Promise<void>
+  /** Folder dialog, then imports a Bruno collection folder. */
+  importBrunoFolder(): Promise<void>
+  setExportId(collectionId: string | null): void
+  exportCollection(
+    collectionId: string,
+    format: ExportFormat,
+    environmentId: string | null
+  ): Promise<void>
   closeResult(): void
 }
 
@@ -40,7 +57,10 @@ function reportEntry(report: ImportReport): TransferResultEntry {
     report.kind === 'collection'
       ? [
           `已建立 Collection「${report.name}」`,
-          `${report.requests} 個請求、${report.folders} 個資料夾、${report.variables} 個變數`
+          `${report.requests} 個請求、${report.folders} 個資料夾、${report.variables} 個變數`,
+          ...(report.environments.length > 0
+            ? [`已建立環境：${report.environments.map((n) => `「${n}」`).join('、')}`]
+            : [])
         ]
       : [`已建立環境「${report.name}」`, `${report.variables} 個變數`]
   return { title: report.fileName, lines, warnings: report.warnings }
@@ -51,13 +71,32 @@ async function revealImported(report: ImportReport): Promise<void> {
   if (report.kind === 'collection') {
     useTreeStore.getState().reveal(report.id)
     useTreeStore.getState().expand(report.id)
-  } else {
+  }
+  if (report.kind === 'environment' || report.environments.length > 0) {
     await useEnvStore.getState().loadList()
+  }
+}
+
+/** Runs a native-dialog import and shows its report (nothing when cancelled). */
+async function importWith(run: typeof window.hachi.transfer.importFile): Promise<void> {
+  const store = useTransferStore
+  if (store.getState().busy) return
+  store.setState({ busy: true })
+  try {
+    const report = await unwrap(run())
+    if (!report) return
+    await revealImported(report)
+    store.setState({ result: { title: '匯入完成', entries: [reportEntry(report)] } })
+  } catch (error) {
+    useAppStore.getState().setNotice(errorMessage(error))
+  } finally {
+    store.setState({ busy: false })
   }
 }
 
 export const useTransferStore = create<TransferState>()((set, get) => ({
   curlOpen: false,
+  exportId: null,
   result: null,
   busy: false,
 
@@ -80,17 +119,41 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
   },
 
   async importFile() {
-    if (get().busy) return
-    set({ busy: true })
+    await importWith(() => window.hachi.transfer.importFile())
+  },
+
+  async importBrunoFolder() {
+    await importWith(() => window.hachi.transfer.importBrunoFolder())
+  },
+
+  setExportId(collectionId) {
+    set({ exportId: collectionId })
+  },
+
+  async exportCollection(collectionId, format, environmentId) {
     try {
-      const report = await unwrap(window.hachi.transfer.importFile())
-      if (!report) return
-      await revealImported(report)
-      set({ result: { title: '匯入完成', entries: [reportEntry(report)] } })
+      const result = await unwrap(
+        window.hachi.transfer.export({ id: collectionId, format, environmentId })
+      )
+      if (!result) return
+      set({ exportId: null })
+      const warnings = [...result.warnings]
+      if (result.skipped.length > 0) {
+        warnings.push(`這個格式不支援 WebSocket，以下項目未匯出：${result.skipped.join('、')}`)
+      }
+      if (result.unreadable.length > 0) {
+        warnings.push(`以下項目的檔案無法讀取，未匯出：${result.unreadable.join('、')}`)
+      }
+      set({
+        result: {
+          title: '匯出完成',
+          entries: [
+            { title: EXPORT_FORMAT_LABELS[format], lines: [`已儲存到 ${result.path}`], warnings }
+          ]
+        }
+      })
     } catch (error) {
       useAppStore.getState().setNotice(errorMessage(error))
-    } finally {
-      set({ busy: false })
     }
   },
 
@@ -130,34 +193,6 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
       set({ result: { title: '匯入結果', entries } })
     } finally {
       set({ busy: false })
-    }
-  },
-
-  async exportPostman(collectionId) {
-    try {
-      const result: ExportResult | null = await unwrap(
-        window.hachi.transfer.exportPostman({ id: collectionId })
-      )
-      if (!result) return
-      const warnings = [...result.warnings]
-      if (result.skipped.length > 0) {
-        warnings.push(
-          `Postman Collection v2.1 不支援 WebSocket，以下項目未匯出：${result.skipped.join('、')}`
-        )
-      }
-      if (result.unreadable.length > 0) {
-        warnings.push(`以下項目的檔案無法讀取，未匯出：${result.unreadable.join('、')}`)
-      }
-      set({
-        result: {
-          title: '匯出完成',
-          entries: [
-            { title: 'Postman Collection v2.1', lines: [`已儲存到 ${result.path}`], warnings }
-          ]
-        }
-      })
-    } catch (error) {
-      useAppStore.getState().setNotice(errorMessage(error))
     }
   },
 

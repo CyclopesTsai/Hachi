@@ -139,6 +139,8 @@ async function launch() {
     }
   }, trashDir)
   const page = await app.firstWindow()
+  // Renderer crashes show up as a blank window; print why.
+  page.on('pageerror', (error) => console.error('Renderer error:', error.message))
   await page.waitForLoadState('domcontentloaded')
   // SMOKE_COLOR_SCHEME=dark takes every screenshot in dark mode (for reviewing it).
   if (process.env.SMOKE_COLOR_SCHEME) {
@@ -433,7 +435,9 @@ try {
   let t = treeHelpers(page)
   const colDir = path.join(wsDir, 'collections')
 
-  await page.getByRole('button', { name: '新增 Collection' }).first().click()
+  // "+" opens a menu of what to add (decision 106).
+  await page.getByTestId('sidebar-add').click()
+  await page.getByRole('menuitem', { name: '新增 Collection' }).click()
   await t.typeName('Users API')
   await t.contextAction('Users API', '新增 HTTP 請求')
   await t.typeName('Get Users')
@@ -1117,7 +1121,10 @@ try {
   await app.evaluate(({ dialog }, file) => {
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
   }, shopExport)
-  await t.contextAction('Shop', '匯出為 Postman Collection…')
+  await t.contextAction('Shop', '匯出…')
+  const exportDialog = page.getByTestId('export-dialog')
+  await exportDialog.getByLabel(/Postman Collection v2\.1/).check()
+  await exportDialog.getByRole('button', { name: '匯出…' }).click()
   await transferResult.waitFor()
   await transferResult.getByRole('button', { name: '確定' }).click()
   const exportedShop = await readJson(shopExport)
@@ -1418,6 +1425,58 @@ try {
     'no proxy'
   )
   step('app proxy setting (userData) is used; a request can opt out of the proxy')
+
+  // ---- Sidebar "+" menu, Bruno / OpenAPI export and import (decisions 103–106) ----
+  // "+" adds into the selected place: the selected Collection here.
+  await page.locator('[data-testid="tree-row"][title="collections/shop"]').click()
+  await page.getByTestId('sidebar-add').click()
+  await page.getByRole('menuitem', { name: '新增 HTTP 請求' }).click()
+  await t.typeName('Added By Plus')
+  await access(path.join(colDir, 'shop', 'added-by-plus.json'))
+  step('sidebar "+" menu adds a request into the selected Collection')
+
+  const htmlExport = path.join(tmp, 'shop-api.html')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
+  }, htmlExport)
+  await t.contextAction('Shop', '匯出…')
+  await exportDialog.getByLabel(/OpenAPI 文件（HTML）/).check()
+  await exportDialog.getByTestId('export-env').selectOption({ label: 'Shop Prod' })
+  await page.screenshot({ path: path.join(shots, '15-export.png') })
+  await exportDialog.getByRole('button', { name: '匯出…' }).click()
+  await transferResult.waitFor()
+  await transferResult.getByRole('button', { name: '確定' }).click()
+  const exportedHtml = await readFile(htmlExport, 'utf8')
+  assert.ok(exportedHtml.includes('Redoc.init('), 'Redoc bundled')
+  assert.ok(exportedHtml.includes('"openapi":"3.0.3"'), 'OpenAPI document inlined')
+  assert.ok(exportedHtml.includes('"summary":"Ping"'), 'requests documented')
+  assert.ok(!exportedHtml.includes('tok-1'), 'secret values stay out of the document')
+  step('export a Collection as an OpenAPI HTML page (Redoc inlined)')
+
+  const brunoParent = path.join(tmp, 'bruno-export')
+  await mkdir(brunoParent)
+  await app.evaluate(({ dialog }, dir) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+  }, brunoParent)
+  await t.contextAction('Shop', '匯出…')
+  await exportDialog.getByLabel(/Bruno 資料夾/).check()
+  await exportDialog.getByRole('button', { name: '選擇資料夾…' }).click()
+  await transferResult.waitFor()
+  await transferResult.getByRole('button', { name: '確定' }).click()
+  const brunoDir = path.join(brunoParent, 'Shop')
+  assert.equal((await readJson(path.join(brunoDir, 'bruno.json'))).name, 'Shop')
+  assert.ok((await readFile(path.join(brunoDir, 'Added By Plus.bru'), 'utf8')).includes('meta {'))
+  await app.evaluate(({ dialog }, dir) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
+  }, brunoDir)
+  await page.getByTestId('sidebar-add').click()
+  await page.getByRole('menuitem', { name: '匯入 Bruno 資料夾…' }).click()
+  await transferResult.waitFor()
+  const brunoReport = await transferResult.innerText()
+  assert.ok(brunoReport.includes('已建立 Collection「Shop copy'), brunoReport)
+  assert.ok(brunoReport.includes('已建立環境'), brunoReport)
+  await transferResult.getByRole('button', { name: '確定' }).click()
+  step('export a Collection as a Bruno folder; "+" → 匯入 Bruno 資料夾… reads it back')
 
   // Window position / size are remembered (decision 94).
   // Inside the primary screen's work area: CI machines have small screens (1024×768), where

@@ -761,7 +761,8 @@ describe('createRequest (save as)', () => {
       settings: { timeoutMs: null, validateSSL: null, followRedirects: null, useProxy: true },
       scripts: { preRequest: '', postResponse: '' },
       assertions: [],
-      extractions: []
+      extractions: [],
+      docs: ''
     })
     expect(created.request).toMatchObject({ name: 'From Draft', method: 'POST', id: created.id })
     expect(created.id).not.toBe('draft-id')

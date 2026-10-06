@@ -290,3 +290,67 @@ describe('sanitizeOutput', () => {
     })
   })
 })
+
+describe('runScript: Bruno compatibility (bru / req / res)', () => {
+  it('maps bru variables and req in a pre-request script', async () => {
+    const out = await runScript(
+      input(`
+        bru.setVar('ts', bru.interpolate('{{host}}-1'))
+        bru.setEnvVar('count', 2)
+        console.log(bru.getEnvName(), bru.getEnvVar('token'), bru.getVar('r'), bru.getCollectionVar('base'))
+        console.log(req.getMethod(), req.getUrl(), req.getHeader('accept'), req.getBody().a, req.getName())
+        req.setUrl(req.url + '?x=1')
+        req.setMethod('post')
+        req.setHeader('X-Id', 9)
+        req.deleteHeader('Accept')
+        req.setBody({ b: 2 })
+      `)
+    )
+    expect(out.error).toBeNull()
+    expect(out.logs.map((l) => l.text)).toEqual([
+      'dev s3cret run https://{{host}}',
+      'GET {{base}}/users application/json 1 Get users'
+    ])
+    expect(out.changes).toEqual([
+      { scope: 'runtime', name: 'ts', value: 'api.test-1' },
+      { scope: 'environment', name: 'count', value: '2' }
+    ])
+    expect(out.request).toEqual({
+      method: 'POST',
+      url: '{{base}}/users?x=1',
+      headers: [['X-Id', '9']],
+      body: '{"b":2}'
+    })
+  })
+
+  it('provides res as a function and object, with test() and Chai expect()', async () => {
+    const out = await runScript(
+      post(`
+        test('status', function () { expect(res.getStatus()).to.equal(201) })
+        test('body', function () {
+          expect(res.body.items).to.have.lengthOf(2)
+          expect(res('items[1].name')).to.equal('b')
+          expect(res.getHeader('X-ID')).to.equal('7')
+          expect(res.headers['content-type']).to.contain('json')
+          expect(res.responseTime).to.be.below(100)
+        })
+        test('fails', function () { expect(res.status).to.equal(200) })
+        bru.setVar('id', res.body.id)
+      `)
+    )
+    expect(out.error).toBeNull()
+    expect(out.tests).toEqual([
+      { name: 'status', passed: true },
+      { name: 'body', passed: true },
+      { name: 'fails', passed: false, error: 'expected 201 to equal 200' }
+    ])
+    expect(out.changes).toEqual([{ scope: 'runtime', name: 'id', value: '7' }])
+  })
+
+  it('reports Bruno APIs Hachi does not provide', async () => {
+    const out = await runScript(input(`bru.sendRequest({})`))
+    expect(out.error).toMatch(/Hachi 不支援 bru.sendRequest/)
+    const edit = await runScript(post(`req.setUrl('x')`))
+    expect(edit.error).toMatch(/Post-response 腳本不能修改請求/)
+  })
+})

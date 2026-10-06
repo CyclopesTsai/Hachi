@@ -319,7 +319,8 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
       "operator": "eq", // eq | neq | contains | notContains | exists | notExists | gt | gte | lt | lte | matches | isType
       "expected": "{{userId}}" // 執行時替換變數；isType 用 string / number / boolean / object / array / null
     }
-  ]
+  ],
+  "docs": "" // Markdown 說明（Bruno 的 docs；OpenAPI 匯出時當作 description），最多約 1 MB
 }
 ```
 
@@ -458,6 +459,47 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 | `settings.validateSSL` / `followRedirects` 為 `false` | `protocolProfileBehavior`；請求的 timeout 與「不使用 App 的 Proxy」無法對應（提示）                   |
 | Collection 變數                                       | `variable[]`（`type: "string"`）；**機密變數的值留空**                                                |
 | 損毀的項目                                            | 略過並列出                                                                                            |
+
+### Bruno → Hachi（`src/shared/transfer/bruno.ts`、`bru-lang.ts`，決策 103 / 104）
+
+來源：Bruno collection 資料夾（`bruno.json` 必須存在）或 Bruno 匯出的 Collection JSON（有 `items` 陣列、沒有 Postman 的 `info`）。
+
+| Bruno                                                      | Hachi                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bruno.json` 的 `name`                                     | Collection 名稱                                                                                                                                                                                          |
+| 子資料夾（`folder.bru` 的 `meta.name` / `seq`）            | 資料夾（名稱沒有 `folder.bru` 時用資料夾名稱）；依 `seq` 排序；資料夾變數不支援（提示）                                                                                                                  |
+| `.bru`（`meta.type: http` / `graphql`）                    | HTTP 請求，依 `seq` 排序；GraphQL 轉成 JSON Body `{ query, variables }`（提示）；其他類型略過（提示）                                                                                                    |
+| `get { url }` 等方法區塊                                   | 方法 + URL；`params:path` 的值代入 `:name`，query 移到 Params                                                                                                                                            |
+| `params:query`、`headers`、`body:form-urlencoded`          | Params / Headers / x-www-form-urlencoded（`~` 開頭 → 停用）                                                                                                                                              |
+| `body:json` / `text` / `xml`、`body:multipart-form`        | JSON / Raw（Content-Type 對應）/ Form-data（`@file(path)` → 檔案欄位）                                                                                                                                   |
+| `auth`：`none` / `inherit` / `bearer` / `basic` / `apikey` | None / 沿用上層 / Bearer / Basic / API Key；其他（OAuth2、AWS、Digest…）→ None（提示）                                                                                                                   |
+| `collection.bru`                                           | Collection 的 Headers、Auth、`vars:pre-request` → Collection 變數；腳本保留但不執行（提示）                                                                                                              |
+| `assert`（`res.status: eq 200`…）                          | 斷言表格：`eq / neq / gt / gte / lt / lte / contains / notContains / matches`、`isDefined` → exists、`isString` 等 → isType、`startsWith / endsWith` → matches；其他（`length`、`between`…）略過（提示） |
+| `vars:pre-request`                                         | Pre-request 腳本開頭的 `bru.setVar(name, bru.interpolate(value))`                                                                                                                                        |
+| `vars:post-response`                                       | 單純路徑（`res.body.a.b`、`res.headers.x`、`res.status`）→ 擷取表格（暫存變數）；其他運算式 → `bru.setVar(name, 運算式)` 腳本                                                                            |
+| `script:pre-request` / `script:post-response`、`tests`     | `scripts.preRequest` / `scripts.postResponse`（`tests` 接在後面）；用到不支援的 API（`bru.sendRequest`、`await` 等）時提示                                                                               |
+| `docs`                                                     | `docs`                                                                                                                                                                                                   |
+| `environments/*.bru`                                       | 環境（`vars:secret` 只有名稱 → 空值的機密變數，提示重新輸入）                                                                                                                                            |
+
+### Hachi → Bruno 資料夾
+
+`bruno.json`、`collection.bru`（Headers、Auth、Collection 變數）、每個資料夾的 `folder.bru`、每個 HTTP 請求一個 `<名稱>.bru`（檔名去掉不合法字元，重名加數字）、`environments/<環境>.bru`（Workspace 的所有環境；**機密變數只寫名稱**）。擷取表格 → `vars:post-response`（Regex 擷取改為整個 Body、存到環境的擷取變成暫存變數，提示）；斷言 → `assert`；腳本原樣寫出（用了 `hachi.*` 時提示）；請求的逾時 / SSL 設定無法對應（提示）。WebSocket 略過。
+
+### Hachi → OpenAPI 3.0（`src/shared/transfer/openapi.ts`，決策 105）
+
+| Hachi                                                 | OpenAPI                                                                                                                         |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Collection 名稱                                       | `info.title`（`version: 1.0.0`）                                                                                                |
+| URL 開頭的 `{{變數}}` 或 `https://host`               | `servers`（變數用 Collection 變數＋所選環境的值；最常用的放在文件層級，其他放在 operation）；沒有值時提示                       |
+| 路徑中的 `{{x}}` / `:x`                               | `{x}` path 參數（必填，範例為變數值）                                                                                           |
+| Params、URL 中的 query                                | query 參數（選填，範例為值）                                                                                                    |
+| 請求與上層（Collection / 資料夾）的 Headers           | header 參數；`Authorization` / `Content-Type` / `Accept` 不列（由 security / requestBody 表示）                                 |
+| JSON / Raw / urlencoded / Form-data Body              | `requestBody`：JSON 附範例與推導的 schema（不是有效 JSON 時只附原文，提示）；GET / HEAD 不寫                                    |
+| Auth（沿用上層時往上找）                              | `components.securitySchemes`（`bearerAuth` / `basicAuth` / `apiKey_<in>_<name>`）與 operation `security`；None → `security: []` |
+| 資料夾路徑                                            | `tags`（`A / B`）                                                                                                               |
+| 請求名稱 / `docs`                                     | `summary` / `description`                                                                                                       |
+| 啟用的 `status eq N` 斷言                             | `responses.N`（狀態碼說明）；沒有時 `default`                                                                                   |
+| 同一路徑＋方法的第二個請求、沒有網址的請求、WebSocket | 略過（提示 / 列出）                                                                                                             |
 
 ### cURL 匯入（`src/shared/transfer/curl.ts`）
 
