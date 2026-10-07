@@ -232,6 +232,12 @@ export const inputSchemas = {
   [INVOKE.gitAbortMerge]: noInput,
   [INVOKE.gitFinishMerge]: noInput,
   [INVOKE.gitOpenFile]: z.strictObject({ path: z.string().min(1).max(4096) }),
+  [INVOKE.gitLog]: z.strictObject({ skip: z.number().int().min(0).max(10_000_000) }),
+  [INVOKE.gitCommitDetail]: z.strictObject({ hash: z.string().regex(/^[0-9a-f]{7,64}$/) }),
+  [INVOKE.gitCommitDiff]: z.strictObject({
+    hash: z.string().regex(/^[0-9a-f]{7,64}$/),
+    path: z.string().min(1).max(4096)
+  }),
   [INVOKE.gitAnswerPrompt]: z.strictObject({
     id: z.string().min(1).max(100),
     value: z.string().max(10_000).nullable()

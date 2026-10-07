@@ -1774,6 +1774,29 @@ try {
   await page.getByTestId('git-back').click()
   step('a conflicting Pull: 保留我的 → 完成合併 → Push')
 
+  // ---- History (decision 116) ----
+  await page.getByTestId('branch-menu').click()
+  await page.getByRole('menuitem', { name: 'History…' }).click()
+  const history = page.getByTestId('git-history')
+  await history.waitFor()
+  const commitRows = history.getByTestId('git-commit-row')
+  await commitRows.first().waitFor()
+  assert.equal(await commitRows.count(), Number(gitIn('rev-list', '--all', '--count')))
+  const refs = await history.getByTestId('git-ref').allInnerTexts()
+  for (const name of ['main', 'origin/main', 'feature/e2e']) {
+    assert.ok(refs.includes(name), `${name} label in ${JSON.stringify(refs)}`)
+  }
+  await commitRows.filter({ hasText: 'our change' }).click()
+  const commitDetail = page.getByTestId('git-commit-detail')
+  await commitDetail.getByText('Hachi Tester').waitFor()
+  await commitDetail.getByTestId('git-commit-file').filter({ hasText: '.gitignore' }).click()
+  await commitDetail.getByTestId('git-diff').getByText('# ours').waitFor()
+  await page.screenshot({ path: path.join(shots, '19-git-history.png') })
+  await page.getByTestId('git-tab-commit').click()
+  await page.getByTestId('git-panel').waitFor()
+  await page.getByTestId('git-back').click()
+  step('History: every branch as a graph, labels, commit details and file diffs')
+
   // Fetch when the Workspace opens (Workspace setting, off by default).
   await page.getByTestId('workspace-menu').click()
   await page.getByRole('menuitem', { name: 'Workspace 設定…' }).click()

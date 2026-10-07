@@ -246,6 +246,9 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       if (error) throw new HachiError('IO_ERROR', error)
     },
     [INVOKE.gitAnswerPrompt]: (input) => ctx.answerGitPrompt(input.id, input.value),
+    [INVOKE.gitLog]: (input) => ctx.git.log(workspacePath(), input.skip),
+    [INVOKE.gitCommitDetail]: (input) => ctx.git.commitDetail(workspacePath(), input.hash),
+    [INVOKE.gitCommitDiff]: (input) => ctx.git.commitDiff(workspacePath(), input.hash, input.path),
     [INVOKE.transferImportText]: (input) => {
       workspacePath()
       return ctx.transfer.importText(input.fileName, input.text)

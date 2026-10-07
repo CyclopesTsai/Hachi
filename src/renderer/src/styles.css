@@ -48,6 +48,13 @@
   --diff-inserted-text: rgb(163 190 140 / 0.45);
   --diff-deleted: rgb(191 97 106 / 0.16);
   --diff-deleted-text: rgb(191 97 106 / 0.35);
+  /* Git history graph: one color per lane, cycling. */
+  --git-lane-1: #4c6e98;
+  --git-lane-2: #b4505b;
+  --git-lane-3: #5f8a46;
+  --git-lane-4: #b97a2a;
+  --git-lane-5: #8a5f8f;
+  --git-lane-6: #2f8a8a;
 }
 
 .dark {
@@ -90,6 +97,12 @@
   --diff-inserted-text: rgb(163 190 140 / 0.35);
   --diff-deleted: rgb(191 97 106 / 0.2);
   --diff-deleted-text: rgb(191 97 106 / 0.42);
+  --git-lane-1: #88c0d0;
+  --git-lane-2: #bf616a;
+  --git-lane-3: #a3be8c;
+  --git-lane-4: #ebcb8b;
+  --git-lane-5: #b48ead;
+  --git-lane-6: #8fbcbb;
 }
 
 @theme inline {

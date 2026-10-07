@@ -5,7 +5,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { GitRepoStatus } from '@shared/git'
 import { GitService } from './git-service'
-import { parseBranches, parseStatus } from './parse'
+import { parseBranches, parseLog, parseNameStatus, parseRefs, parseStatus } from './parse'
 
 describe('parseStatus / parseBranches', () => {
   it('reads porcelain v2 with branch headers, renames, conflicts and untracked files', () => {
@@ -55,6 +55,51 @@ describe('parseStatus / parseBranches', () => {
       { name: 'main', remote: false, current: true, upstream: 'origin/main' },
       { name: 'dev', remote: false, current: false, upstream: null },
       { name: 'origin/main', remote: true, current: false, upstream: null }
+    ])
+  })
+})
+
+describe('parseRefs / parseLog / parseNameStatus', () => {
+  it('classifies decorations', () => {
+    expect(
+      parseRefs(
+        'HEAD -> refs/heads/feature/x, refs/remotes/origin/HEAD, refs/remotes/origin/main, tag: refs/tags/v1.0, refs/stash'
+      )
+    ).toEqual([
+      { name: 'HEAD', kind: 'head' },
+      { name: 'feature/x', kind: 'branch' },
+      { name: 'origin/main', kind: 'remote' },
+      { name: 'v1.0', kind: 'tag' }
+    ])
+  })
+
+  it('reads log records and name-status output', () => {
+    const log = `abc\x1fp1 p2\x1fAnn\x1fann@x\x1f1700000000\x1frefs/heads/main\x1fMerge\x1e\ndef\x1f\x1fBob\x1fbob@x\x1f1600000000\x1f\x1fFirst\x1e`
+    expect(parseLog(log)).toEqual([
+      {
+        hash: 'abc',
+        parents: ['p1', 'p2'],
+        author: 'Ann',
+        email: 'ann@x',
+        date: 1700000000000,
+        refs: [{ name: 'main', kind: 'branch' }],
+        subject: 'Merge'
+      },
+      {
+        hash: 'def',
+        parents: [],
+        author: 'Bob',
+        email: 'bob@x',
+        date: 1600000000000,
+        refs: [],
+        subject: 'First'
+      }
+    ])
+    expect(parseNameStatus('M\0a.json\0R095\0old.json\0new.json\0A\0b.json\0D\0c.json\0')).toEqual([
+      { repoPath: 'a.json', kind: 'modified' },
+      { repoPath: 'new.json', kind: 'renamed', oldRepoPath: 'old.json' },
+      { repoPath: 'b.json', kind: 'added' },
+      { repoPath: 'c.json', kind: 'deleted' }
     ])
   })
 })
@@ -306,5 +351,75 @@ describe('GitService', () => {
     const aborted = (await service.abortMerge(ws)) as GitRepoStatus
     expect(aborted).toMatchObject({ merging: false, files: [] })
     expect(await readFile(file, 'utf8')).toBe('ours\n')
+  })
+
+  it('lists the history of every branch, with commit details and file diffs', async () => {
+    git(repo, 'init', '-q', '-b', 'main')
+    git(repo, 'config', 'user.name', 'Tester')
+    git(repo, 'config', 'user.email', 'tester@example.com')
+    expect(await service.log(ws, 0)).toEqual({ commits: [], more: false })
+    const a = path.join(ws, 'collections', 'a.json')
+    await writeFile(a, 'v1\n')
+    await writeFile(path.join(repo, 'README.md'), 'outside\n')
+    git(repo, 'add', '-A')
+    git(repo, 'commit', '-q', '-m', 'first')
+    git(repo, 'switch', '-q', '-c', 'feature')
+    await writeFile(path.join(ws, 'collections', 'b.json'), 'b\n')
+    git(repo, 'add', '-A')
+    git(repo, 'commit', '-q', '-m', 'feature work')
+    git(repo, 'switch', '-q', 'main')
+    await writeFile(a, 'v2\n')
+    git(repo, 'commit', '-q', '-am', 'second\n\nwith a body')
+    git(repo, 'merge', '-q', '--no-edit', 'feature')
+    git(repo, 'tag', 'v1')
+
+    const { commits, more } = await service.log(ws, 0)
+    expect(more).toBe(false)
+    expect(commits.map((c) => c.subject)).toEqual([
+      "Merge branch 'feature'",
+      'second',
+      'feature work',
+      'first'
+    ])
+    expect(commits[0]?.parents).toHaveLength(2)
+    expect(commits[0]?.refs).toEqual([
+      { name: 'HEAD', kind: 'head' },
+      { name: 'main', kind: 'branch' },
+      { name: 'v1', kind: 'tag' }
+    ])
+    expect(commits[2]?.refs).toEqual([{ name: 'feature', kind: 'branch' }])
+
+    const second = await service.commitDetail(ws, commits[1]?.hash as string)
+    expect(second.message).toBe('second\n\nwith a body')
+    expect(second.files).toEqual([
+      {
+        repoPath: 'api/collections/a.json',
+        path: 'collections/a.json',
+        inWorkspace: true,
+        kind: 'modified'
+      }
+    ])
+    const first = await service.commitDetail(ws, commits[3]?.hash as string)
+    expect(first.files.map((f) => [f.path, f.inWorkspace, f.kind])).toEqual([
+      ['collections/a.json', true, 'added'],
+      ['README.md', false, 'added']
+    ])
+    expect(
+      await service.commitDiff(ws, commits[1]?.hash as string, 'api/collections/a.json')
+    ).toEqual({
+      path: 'collections/a.json',
+      conflict: false,
+      before: 'v1\n',
+      after: 'v2\n',
+      unavailable: null
+    })
+    await expect(
+      service.commitDiff(ws, commits[1]?.hash as string, 'README.md')
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR'
+    })
+    await expect(service.commitDetail(ws, '--all')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR'
+    })
   })
 })

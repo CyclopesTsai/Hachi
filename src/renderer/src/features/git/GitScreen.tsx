@@ -39,6 +39,7 @@ import { useGitStore } from '@renderer/stores/git-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { DiffView } from './DiffView'
+import { GitHistory } from './GitHistory'
 import { fileIndex, gitInstallHint, labelFor, type FileLabel } from './git-names'
 
 /** While the Git screen is open, changes made by saving files show up without a click. */
@@ -517,6 +518,7 @@ function RemoteButtons() {
  */
 export function GitScreen() {
   const status = useGitStore((s) => s.status)
+  const view = useGitStore((s) => s.view)
   const error = useGitStore((s) => s.error)
 
   useEffect(() => {
@@ -540,7 +542,29 @@ export function GitScreen() {
           <ArrowLeft />
           返回
         </Button>
-        <span className="text-sm font-medium">Commit</span>
+        <div role="tablist" aria-label="Git" className="flex items-center gap-0.5">
+          {(
+            [
+              ['commit', 'Commit'],
+              ['history', 'History']
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={view === v}
+              data-testid={`git-tab-${v}`}
+              className={cn(
+                'rounded-sm px-2.5 py-1 text-sm',
+                view === v ? 'bg-accent font-medium' : 'text-muted-foreground hover:text-foreground'
+              )}
+              onClick={() => useGitStore.getState().openView(v)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex-1" />
         <RemoteButtons />
       </div>
@@ -548,6 +572,8 @@ export function GitScreen() {
         <NoGit />
       ) : status.state === 'not-repo' ? (
         <NotRepo />
+      ) : view === 'history' ? (
+        <GitHistory />
       ) : (
         <RepoScreen status={status} />
       )}

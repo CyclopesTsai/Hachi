@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type {
   GitBranch,
+  GitCommitDetail,
+  GitCommitSummary,
   GitFileDiff,
   GitIdentity,
   GitPrompt,
@@ -13,7 +15,7 @@ import { useAppStore } from './app-store'
 import { useTabsStore } from './tabs-store'
 
 /** The Git screen that replaces the sidebar and tabs (decision 119); null = closed. */
-export type GitView = 'commit'
+export type GitView = 'commit' | 'history'
 
 /** Git of the current Workspace (decisions 111–119). */
 interface GitState {
@@ -31,6 +33,13 @@ interface GitState {
   /** A network operation in progress (its button shows it). */
   running: 'fetch' | 'pull' | 'push' | null
   remote: GitRemote | null
+  /** History tab (decision 116). */
+  log: { commits: GitCommitSummary[]; more: boolean } | null
+  logLoading: boolean
+  commitDetail: GitCommitDetail | null
+  /** Repository path of the commit's file shown in the diff. */
+  commitFile: string | null
+  commitDiff: GitFileDiff | null
   /** Credential prompts from git, oldest first (decision 113). */
   prompts: GitPrompt[]
   /** Shown in the Git panel until the next successful operation. */
@@ -65,6 +74,10 @@ interface GitState {
   abortMerge(): Promise<void>
   finishMerge(): Promise<void>
   openFile(path: string): Promise<void>
+  /** First page (reset) or the next page of the History. */
+  loadLog(reset: boolean): Promise<void>
+  selectCommit(hash: string | null): Promise<void>
+  selectCommitFile(repoPath: string | null): Promise<void>
   /** git asked for a credential (`git:prompt` event). */
   prompted(prompt: GitPrompt): void
   answerPrompt(value: string | null): Promise<void>
@@ -79,6 +92,9 @@ export const useGitStore = create<GitState>()((set, get) => {
       const status = await run()
       if (status) set({ status })
       set({ error: null })
+      // Commits, pulls, branches… change the History: reload it now, or when it opens.
+      if (get().view === 'history') void get().loadLog(true)
+      else set({ log: null })
       return true
     } catch (error) {
       set({ error: errorMessage(error) })
@@ -99,6 +115,11 @@ export const useGitStore = create<GitState>()((set, get) => {
     busy: false,
     running: null,
     remote: null,
+    log: null,
+    logLoading: false,
+    commitDetail: null,
+    commitFile: null,
+    commitDiff: null,
     prompts: [],
     error: null,
     askIdentity: false,
@@ -134,17 +155,22 @@ export const useGitStore = create<GitState>()((set, get) => {
         error: null,
         askIdentity: false,
         running: null,
-        remote: null
+        remote: null,
+        log: null,
+        commitDetail: null,
+        commitFile: null,
+        commitDiff: null
       })
     },
 
     openView(view) {
       set({ view })
       void get().refresh()
+      if (view === 'history') void get().loadLog(true)
     },
 
     closeView() {
-      set({ view: null, selected: null, diff: null })
+      set({ view: null, selected: null, diff: null, commitFile: null, commitDiff: null })
     },
 
     async select(path) {
@@ -302,6 +328,56 @@ export const useGitStore = create<GitState>()((set, get) => {
         await unwrap(window.hachi.git.openFile({ path }))
       } catch (error) {
         useAppStore.getState().setNotice(errorMessage(error))
+      }
+    },
+
+    async loadLog(reset) {
+      if (get().logLoading) return
+      set({ logLoading: true })
+      try {
+        const skip = reset ? 0 : (get().log?.commits.length ?? 0)
+        const page = await unwrap(window.hachi.git.log({ skip }))
+        const commits = reset ? page.commits : [...(get().log?.commits ?? []), ...page.commits]
+        set({ log: { commits, more: page.more } })
+        // The selected commit may be gone (e.g. after switching branches it stays listed).
+        if (
+          reset &&
+          get().commitDetail &&
+          !commits.some((c) => c.hash === get().commitDetail?.hash)
+        ) {
+          set({ commitDetail: null, commitFile: null, commitDiff: null })
+        }
+      } catch (error) {
+        set({ error: errorMessage(error) })
+      } finally {
+        set({ logLoading: false })
+      }
+    },
+
+    async selectCommit(hash) {
+      set({ commitFile: null, commitDiff: null })
+      if (hash === null) {
+        set({ commitDetail: null })
+        return
+      }
+      try {
+        set({ commitDetail: await unwrap(window.hachi.git.commitDetail({ hash })) })
+      } catch (error) {
+        set({ error: errorMessage(error) })
+      }
+    },
+
+    async selectCommitFile(repoPath) {
+      const commit = get().commitDetail
+      set({ commitFile: repoPath, commitDiff: null })
+      if (!commit || repoPath === null) return
+      try {
+        const diff = await unwrap(
+          window.hachi.git.commitDiff({ hash: commit.hash, path: repoPath })
+        )
+        if (get().commitFile === repoPath) set({ commitDiff: diff })
+      } catch (error) {
+        set({ error: errorMessage(error) })
       }
     },
 

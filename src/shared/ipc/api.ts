@@ -20,7 +20,9 @@ import type { HttpRequest } from '../schemas/http-request'
 import type { WsEventPayload } from '../ws'
 import type {
   GitBranch,
+  GitCommitDetail,
   GitFileDiff,
+  GitLog,
   GitIdentity,
   GitPrompt,
   GitRemote,
@@ -498,6 +500,9 @@ export interface InvokeMap {
   'git:finishMerge': { input: void; output: GitStatus }
   'git:openFile': { input: { path: string }; output: void }
   'git:answerPrompt': { input: { id: string; value: string | null }; output: void }
+  'git:log': { input: { skip: number }; output: GitLog }
+  'git:commitDetail': { input: { hash: string }; output: GitCommitDetail }
+  'git:commitDiff': { input: { hash: string; path: string }; output: GitFileDiff }
   'transfer:importBrunoCollections': {
     input: ImportBrunoCollectionsInput
     output: ImportOutcome[]
@@ -665,6 +670,11 @@ export interface HachiApi {
     openFile: InvokeFn<'git:openFile'>
     /** Answer to a `git:prompt` event (null = cancelled). */
     answerPrompt: InvokeFn<'git:answerPrompt'>
+    /** Commits of every branch, newest first, 300 per page (decision 116). */
+    log: InvokeFn<'git:log'>
+    commitDetail: InvokeFn<'git:commitDetail'>
+    /** A file of a commit against its first parent (`path`: repository path). */
+    commitDiff: InvokeFn<'git:commitDiff'>
   }
   transfer: {
     /** Open dialog, then imports a Postman / Bruno JSON file. Null if cancelled. */

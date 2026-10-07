@@ -81,3 +81,46 @@ export interface GitIdentity {
   name: string
   email: string
 }
+
+// ---- History (decision 116) ------------------------------------------------
+
+export interface GitRef {
+  /** "main", "origin/main", "v1.0" */
+  name: string
+  kind: 'head' | 'branch' | 'remote' | 'tag'
+}
+
+export interface GitCommitSummary {
+  hash: string
+  parents: string[]
+  author: string
+  email: string
+  /** Author time, epoch milliseconds. */
+  date: number
+  refs: GitRef[]
+  subject: string
+}
+
+export interface GitLog {
+  commits: GitCommitSummary[]
+  /** More commits exist after these. */
+  more: boolean
+}
+
+export interface GitCommitFile {
+  /** Relative to the repository, "/" separators (used to ask for its diff). */
+  repoPath: string
+  /** Relative to the Workspace when inside it, otherwise the repository path. */
+  path: string
+  inWorkspace: boolean
+  kind: 'added' | 'modified' | 'deleted' | 'renamed'
+  /** Renames: the previous repository path. */
+  oldRepoPath?: string
+}
+
+export interface GitCommitDetail extends GitCommitSummary {
+  /** The whole message (subject and body). */
+  message: string
+  /** Compared with the first parent (merges: what the merge brought in). */
+  files: GitCommitFile[]
+}

@@ -96,7 +96,10 @@ const api: HachiApi = {
     abortMerge: () => invoke(INVOKE.gitAbortMerge),
     finishMerge: () => invoke(INVOKE.gitFinishMerge),
     openFile: (input) => invoke(INVOKE.gitOpenFile, input),
-    answerPrompt: (input) => invoke(INVOKE.gitAnswerPrompt, input)
+    answerPrompt: (input) => invoke(INVOKE.gitAnswerPrompt, input),
+    log: (input) => invoke(INVOKE.gitLog, input),
+    commitDetail: (input) => invoke(INVOKE.gitCommitDetail, input),
+    commitDiff: (input) => invoke(INVOKE.gitCommitDiff, input)
   },
   transfer: {
     importFile: () => invoke(INVOKE.transferImportFile),

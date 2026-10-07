@@ -5,6 +5,7 @@ import {
   ChevronDown,
   GitBranch,
   GitCommitHorizontal,
+  History,
   Link,
   Loader2,
   Plus,
@@ -241,6 +242,10 @@ export function BranchMenu() {
             {changes > 0 && (
               <span className="ml-auto text-xs text-muted-foreground">{changes} 個變更</span>
             )}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => useGitStore.getState().openView('history')}>
+            <History />
+            History…
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem

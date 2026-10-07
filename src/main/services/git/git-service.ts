@@ -8,7 +8,10 @@ import path from 'node:path'
 import { HachiError } from '@shared/errors'
 import type {
   GitBranch,
+  GitCommitDetail,
+  GitCommitFile,
   GitFileChange,
+  GitLog,
   GitFileDiff,
   GitIdentity,
   GitRemote,
@@ -17,7 +20,7 @@ import type {
   GitStatus
 } from '@shared/git'
 import { findGit, runGit, type GitLocator, type GitResult } from './git-exec'
-import { parseBranches, parseStatus } from './parse'
+import { LOG_FORMAT, parseBranches, parseLog, parseNameStatus, parseStatus } from './parse'
 
 /** Fetch / pull / push may wait for the network and for the user's password. */
 const NETWORK_TIMEOUT_MS = 10 * 60_000
@@ -27,6 +30,11 @@ export type AskpassEnv = () => Promise<Record<string, string>>
 
 /** Larger files are not compared (decision 119). */
 export const MAX_DIFF_BYTES = 2 * 1024 * 1024
+
+/** Commits per page of the History (decision 116). */
+export const LOG_PAGE = 300
+
+const isHash = (hash: string) => /^[0-9a-f]{7,64}$/.test(hash)
 
 /** Moves a file to the trash (recoverable), like deletions elsewhere in Hachi. */
 export type TrashFile = (absPath: string) => Promise<void>
@@ -460,6 +468,119 @@ export class GitService {
       const repo = await this.requireRepo(workspace)
       this.pick(repo, [file])
       return path.join(repo.root, ...this.repoPath(repo, file).split('/'))
+    })
+  }
+
+  // ---- History (decision 116) ------------------------------------------------
+
+  /** Commits of every branch, newest first (date order: children before parents). */
+  log(workspace: string, skip: number): Promise<GitLog> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      if (repo.empty) return { commits: [], more: false }
+      const out = await this.must(
+        repo.root,
+        [
+          'log',
+          '--decorate=full',
+          '--date-order',
+          `--skip=${skip}`,
+          '-n',
+          String(LOG_PAGE + 1),
+          `--format=${LOG_FORMAT}`,
+          '--exclude=refs/stash',
+          '--all'
+        ],
+        '讀取歷史'
+      )
+      const commits = parseLog(out)
+      return { commits: commits.slice(0, LOG_PAGE), more: commits.length > LOG_PAGE }
+    })
+  }
+
+  private async commitFiles(
+    repo: GitRepoStatus & { prefix: string },
+    hash: string,
+    parent: string | undefined
+  ): Promise<GitCommitFile[]> {
+    const out = await this.must(
+      repo.root,
+      parent
+        ? ['diff', '--name-status', '-z', '-M', parent, hash]
+        : ['diff-tree', '--root', '-r', '--no-commit-id', '--name-status', '-z', '-M', hash],
+      '讀取 commit'
+    )
+    const inside = (p: string) => repo.prefix === '' || p.startsWith(`${repo.prefix}/`)
+    // Workspace files first, then the rest of the repository.
+    return parseNameStatus(out)
+      .map((f) => ({
+        ...f,
+        inWorkspace: inside(f.repoPath),
+        path:
+          inside(f.repoPath) && repo.prefix !== ''
+            ? f.repoPath.slice(repo.prefix.length + 1)
+            : f.repoPath
+      }))
+      .sort((a, b) => Number(b.inWorkspace) - Number(a.inWorkspace) || a.path.localeCompare(b.path))
+  }
+
+  /** One commit: whole message and the files it changed (against its first parent). */
+  commitDetail(workspace: string, hash: string): Promise<GitCommitDetail> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      if (!isHash(hash)) throw new HachiError('VALIDATION_ERROR', '不是 commit id')
+      const out = await this.must(
+        repo.root,
+        ['show', '-s', '--decorate=full', `--format=${LOG_FORMAT}%B`, hash],
+        '讀取 commit'
+      )
+      const end = out.indexOf('\x1e')
+      const [summary] = parseLog(out.slice(0, end + 1))
+      if (!summary) throw new HachiError('NOT_FOUND', '找不到這個 commit')
+      return {
+        ...summary,
+        message: out.slice(end + 1).trim(),
+        files: await this.commitFiles(repo, summary.hash, summary.parents[0])
+      }
+    })
+  }
+
+  /** A file of a commit: before (first parent) and after (the commit). */
+  commitDiff(workspace: string, hash: string, repoPath: string): Promise<GitFileDiff> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      if (!isHash(hash)) throw new HachiError('VALIDATION_ERROR', '不是 commit id')
+      const parents = (await this.must(repo.root, ['rev-parse', `${hash}^@`], '讀取 commit'))
+        .split('\n')
+        .filter(Boolean)
+      const file = (await this.commitFiles(repo, hash, parents[0])).find(
+        (f) => f.repoPath === repoPath
+      )
+      if (!file) throw new HachiError('VALIDATION_ERROR', '這個 commit 沒有改到這個檔案')
+      const result: GitFileDiff = {
+        path: file.path,
+        conflict: false,
+        before: null,
+        after: null,
+        unavailable: null
+      }
+      const blob = async (spec: string): Promise<string | null | 'tooLarge'> => {
+        const size = await this.exec(repo.root, ['cat-file', '-s', spec])
+        if (size.code !== 0) return null
+        if (Number(size.stdout.trim()) > MAX_DIFF_BYTES) return 'tooLarge'
+        return this.must(repo.root, ['show', spec], '讀取差異')
+      }
+      const before =
+        parents[0] && file.kind !== 'added'
+          ? await blob(`${parents[0]}:${file.oldRepoPath ?? file.repoPath}`)
+          : null
+      const after = file.kind === 'deleted' ? null : await blob(`${hash}:${file.repoPath}`)
+      if (before === 'tooLarge' || after === 'tooLarge')
+        return { ...result, unavailable: 'tooLarge' }
+      if ([before, after].some((text) => text?.includes('\0'))) {
+        return { ...result, unavailable: 'binary' }
+      }
+      return { ...result, before, after }
     })
   }
 

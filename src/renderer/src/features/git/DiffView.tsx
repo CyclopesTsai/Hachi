@@ -28,7 +28,14 @@ const diffTheme = EditorView.theme({
  * Side by side, read-only: the last commit (left) and the file now (right); for a
  * conflict, our version (left) and theirs (right), without conflict markers.
  */
-export function DiffView({ diff }: { diff: GitFileDiff }) {
+export function DiffView({
+  diff,
+  labels
+}: {
+  diff: GitFileDiff
+  /** Titles of the two sides (History: previous commit / this commit). */
+  labels?: [string, string]
+}) {
   const host = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -65,22 +72,26 @@ export function DiffView({ diff }: { diff: GitFileDiff }) {
     <div className="flex min-h-0 flex-1 flex-col" data-testid="git-diff">
       <div className="grid shrink-0 grid-cols-2 border-b text-xs text-muted-foreground">
         <span className="px-3 py-1.5">
-          {diff.conflict
-            ? diff.before === null
-              ? '我的（目前分支：已刪除）'
-              : '我的（目前分支）'
-            : diff.before === null
-              ? '最後一次 commit（沒有這個檔案）'
-              : '最後一次 commit'}
+          {labels
+            ? `${labels[0]}${diff.before === null ? '（沒有這個檔案）' : ''}`
+            : diff.conflict
+              ? diff.before === null
+                ? '我的（目前分支：已刪除）'
+                : '我的（目前分支）'
+              : diff.before === null
+                ? '最後一次 commit（沒有這個檔案）'
+                : '最後一次 commit'}
         </span>
         <span className="border-l px-3 py-1.5">
-          {diff.conflict
-            ? diff.after === null
-              ? '遠端（theirs：已刪除）'
-              : '遠端（theirs）'
-            : diff.after === null
-              ? '目前（已刪除）'
-              : '目前'}
+          {labels
+            ? `${labels[1]}${diff.after === null ? '（已刪除）' : ''}`
+            : diff.conflict
+              ? diff.after === null
+                ? '遠端（theirs：已刪除）'
+                : '遠端（theirs）'
+              : diff.after === null
+                ? '目前（已刪除）'
+                : '目前'}
         </span>
       </div>
       <div ref={host} className="min-h-0 flex-1 overflow-auto [&_.cm-mergeView]:min-h-full" />
