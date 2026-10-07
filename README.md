@@ -71,7 +71,7 @@ App 名稱、Bundle ID（`tw.com.cyclopes.hachi`）、版權字串集中在 **`s
 
 ## 資料存放位置
 
-- App 設定：`app.getPath('userData')/app-config.json`（macOS：`~/Library/Application Support/Hachi/`）；同一目錄另有 `history-index.json`（歷史紀錄共用上限的索引）與 `sessions/`（各 Workspace 開啟的分頁與目前環境）
+- App 設定：`app.getPath('userData')/app-config.json`（macOS：`~/Library/Application Support/Hachi/`；Windows：`%APPDATA%\Hachi\`）；同一目錄另有 `history-index.json`（歷史紀錄共用上限的索引）與 `sessions/`（各 Workspace 開啟的分頁與目前環境）
 - Workspace：預設 `~/Documents/Hachi/<名稱>/`，可自選。詳細格式請見 [docs/schema.md](docs/schema.md)。
 - **機密變數**：環境 / Collection 變數勾選「機密」後，值只存在 `<workspace>/.hachi-secrets.json`（已列入 Workspace 的 `.gitignore`），環境檔與 `collection.json` 裡留空，可以放心提交到 git。`history.json` 也在 `.gitignore` 中。
 
@@ -98,11 +98,11 @@ xattr -dr com.apple.quarantine /Applications/Hachi.app
 
 ## GitHub Actions（CI 與自動發佈）
 
-| Workflow                        | 觸發                         | 內容                                                                                                                             |
-| ------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `.github/workflows/ci.yml`      | push 到 `main`、Pull Request | `npm run verify` ＋ Linux（Xvfb）上的 E2E 冒煙測試；截圖存成 Actions artifact                                                    |
-| `.github/workflows/release.yml` | 推送 `v*` tag                | 在 macOS 機器上 `verify` → 打包兩個 dmg → 對打包後的 App 跑冒煙測試 → **直接發佈 GitHub Release**（附 dmg 與自動產生的變更說明） |
-| 同上                            | Actions 頁面「Run workflow」 | 只打包，dmg 存成 Actions artifact（不建立 Release）                                                                              |
+| Workflow                        | 觸發                         | 內容                                                                                                                                                                                     |
+| ------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | push 到 `main`、Pull Request | Linux（Xvfb）與 Windows 各跑一次 `npm run verify` ＋ E2E 冒煙測試；截圖存成 Actions artifact                                                                                             |
+| `.github/workflows/release.yml` | 推送 `v*` tag                | macOS 與 Windows 機器各自 `verify` → 打包（dmg ×2；Windows 安裝程式與免安裝版）→ 對打包後的 App 跑冒煙測試 → 兩邊都通過後**發佈同一個 GitHub Release**（附所有檔案與自動產生的變更說明） |
+| 同上                            | Actions 頁面「Run workflow」 | 只打包，檔案存成 Actions artifact（不建立 Release）                                                                                                                                      |
 
 發佈新版本：
 
@@ -113,7 +113,7 @@ git tag v0.2.0                            # tag 必須等於 v + package.json �
 git push origin main --tags
 ```
 
-公開 repo 使用 GitHub Actions 的標準機器（含 macOS）免費。之後要支援 Windows 時，在 `release.yml` 加一個 `windows-latest` 的 job 執行 `electron-builder --win` 即可。
+公開 repo 使用 GitHub Actions 的標準機器（含 macOS、Windows）免費。
 
 ### 之後加入 Apple Developer 簽章與公證（Notarization）
 
@@ -129,9 +129,18 @@ git push origin main --tags
 4. 憑證：本機放在 Keychain；GitHub Actions 則把 `.p12` 轉成 base64 存成 repository secret `CSC_LINK`，密碼存成 `CSC_KEY_PASSWORD`，再把第 3 步的值也存成 secrets，並取消 `release.yml`「Build dmgs」步驟中 `env:` 的註解。
 5. 執行 `npm run dist:mac`（或推 tag），完成後可用 `spctl -a -vv /Applications/Hachi.app` 與 `xcrun stapler validate Hachi-x.y.z-arm64.dmg` 驗證。
 
-### Windows（規劃中）
+## Windows
 
-`electron-builder.config.mjs` 已預留 `win` 設定（nsis）。平台差異集中在 `src/main/platform/`，新增 Windows 支援時主要修改該處。
+Release 中有兩種檔案（x64）：
+
+- `Hachi-x.y.z-setup-x64.exe`：安裝程式，裝在自己的帳號下（不需要系統管理員），可選安裝位置，建立桌面與開始功能表捷徑，可從「設定 → 應用程式」解除安裝。
+- `Hachi-x.y.z-portable-x64.exe`：免安裝版，直接執行（每次啟動會先解壓縮，較慢）。
+
+目前沒有程式碼簽章，第一次執行會出現「**Windows 已保護您的電腦**」：按「其他資訊」→「仍要執行」。
+
+- Git 功能需要先安裝 [Git for Windows](https://git-scm.com/download/win)；它附的 Git Credential Manager 會自己跳出登入視窗，沒有時 Hachi 會詢問帳密。
+- 建議不要把 Workspace 放在 OneDrive 同步的資料夾（例如被同步的「文件」）：同步程式可能鎖住檔案或產生衝突副本，和 git 互相干擾。
+- 本機打包：在 Windows 上執行 `npm run dist:win`（macOS 上打包 Windows 需要 Wine，建議交給 GitHub Actions）。平台差異集中在 `src/main/platform/`。
 
 ## 授權
 

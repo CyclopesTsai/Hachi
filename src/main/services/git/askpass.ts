@@ -59,17 +59,13 @@ export class AskpassServer {
         : path.join(dir, 's.sock')
     const helper = path.join(dir, 'askpass.js')
     await writeFile(helper, HELPER_JS, { mode: 0o600 })
-    let script: string
-    if (process.platform === 'win32') {
-      script = path.join(dir, 'askpass.cmd')
-      await writeFile(script, `@"${this.runtime}" "${helper}" %*\r\n`)
-    } else {
-      script = path.join(dir, 'askpass.sh')
-      const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
-      await writeFile(script, `#!/bin/sh\nexec ${quote(this.runtime)} ${quote(helper)} "$@"\n`, {
-        mode: 0o700
-      })
-    }
+    // A shell script on every platform: Git for Windows runs `#!/bin/sh` scripts with its
+    // own sh (and its ssh does the same for SSH_ASKPASS), which also takes Windows paths.
+    const script = path.join(dir, 'askpass.sh')
+    const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`
+    await writeFile(script, `#!/bin/sh\nexec ${quote(this.runtime)} ${quote(helper)} "$@"\n`, {
+      mode: 0o700
+    })
 
     this.server = net.createServer((conn) => {
       let data = ''

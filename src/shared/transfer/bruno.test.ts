@@ -444,3 +444,12 @@ describe('exportBrunoCollection', () => {
     expect(strip(again.environments)).toEqual(strip(environments))
   })
 })
+
+describe('Bruno file names', () => {
+  it('avoid names Windows reserves', async () => {
+    const { safeName } = await import('./bruno-bru')
+    expect(safeName('CON')).toBe('CON_')
+    expect(safeName('nul.v2')).toBe('nul_.v2')
+    expect(safeName('a: b?')).toBe('a- b-')
+  })
+})

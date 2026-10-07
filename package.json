@@ -88,6 +88,7 @@
     "test:e2e": "npm run build && node scripts/smoke-e2e.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run check:licenses",
-    "dist:mac": "npm run build && node scripts/check-licenses.mjs --write && electron-builder --config electron-builder.config.mjs --mac --publish never"
+    "dist:mac": "npm run build && node scripts/check-licenses.mjs --write && electron-builder --config electron-builder.config.mjs --mac --publish never",
+    "dist:win": "npm run build && node scripts/check-licenses.mjs --write && electron-builder --config electron-builder.config.mjs --win --publish never"
   }
 }

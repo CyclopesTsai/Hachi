@@ -1,5 +1,6 @@
-# Checks every push to main and every pull request (decision 98):
-# type check, lint, format, unit tests, licenses, then the E2E smoke test on Linux.
+# Checks every push to main and every pull request (decisions 98, 123):
+# type check, lint, format, unit tests, licenses, then the E2E smoke test — on Linux and
+# on Windows.
 name: CI
 
 on:
@@ -34,6 +35,29 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: smoke-screenshots
+          name: smoke-screenshots-linux
+          path: out/smoke/
+          if-no-files-found: ignore
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (also downloads the Electron binary)
+        run: npm ci
+      - name: Type check, lint, format, unit tests, licenses
+        run: npm run verify
+      - name: E2E smoke test
+        run: npm run test:e2e
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: smoke-screenshots-windows
           path: out/smoke/
           if-no-files-found: ignore

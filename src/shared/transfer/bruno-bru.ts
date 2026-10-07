@@ -2,6 +2,7 @@
  * Bruno collections in `.bru` files (bruno.json, collection.bru, folder.bru, *.bru,
  * environments/*.bru) ↔ the shared Bruno model (bruno-model.ts).
  */
+import { avoidWindowsReserved } from '../file-names'
 import { HTTP_METHODS, type HttpMethod } from '../schemas/collection'
 import { parseBru, serializeBru, type BruBlock, type BruEntry } from './bru-lang'
 import {
@@ -168,7 +169,7 @@ export function readBruFile(path: string, text: string): BrunoFile {
 
 /** A file / folder name Bruno (and every OS) accepts. */
 export function safeName(name: string): string {
-  return (
+  return avoidWindowsReserved(
     name
       // eslint-disable-next-line no-control-regex -- control characters are not allowed in file names
       .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')

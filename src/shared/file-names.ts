@@ -1,6 +1,11 @@
 // eslint-disable-next-line no-control-regex -- control characters are exactly what we strip
 const INVALID_CHARS = /[<>:"/\\|?*\u0000-\u001f\u007f]/g
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i
+
+/** Windows reserves CON, NUL, COM1… whatever the extension: add "_" to the base name. */
+export function avoidWindowsReserved(name: string): string {
+  return WINDOWS_RESERVED.test(name) ? name.replace(/^[^.]*/, (base) => `${base}_`) : name
+}
 /**
  * File systems limit names by bytes (APFS / NTFS / ext4: ~255), not characters —
  * a CJK character is 3 UTF-8 bytes. 200 leaves room for "-2" suffixes and ".json".
@@ -40,11 +45,7 @@ export function sanitizeFileName(name: string, fallback = 'untitled'): string {
   if (result === '' || /^-+$/.test(result)) {
     result = fallback
   }
-  if (WINDOWS_RESERVED.test(result)) {
-    // Windows reserves the base name regardless of extension (e.g. "nul.txt"), so suffix the base.
-    result = result.replace(/^[^.]*/, (base) => `${base}_`)
-  }
-  return result
+  return avoidWindowsReserved(result)
 }
 
 /**

@@ -138,6 +138,9 @@ describe('GitService', () => {
     expect(await service.status(ws)).toEqual({ state: 'not-repo' })
     const status = (await service.init(ws)) as GitRepoStatus
     expect(status).toMatchObject({ state: 'repo', branch: 'main', empty: true, head: null })
+    // Windows-friendly settings (decision 123).
+    expect(await readFile(path.join(ws, '.gitattributes'), 'utf8')).toContain('* text=auto eol=lf')
+    expect(git(ws, 'config', 'core.longpaths')).toBe('true')
   })
 
   it('commits only the chosen files of the Workspace, with paths inside it', async () => {

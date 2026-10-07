@@ -92,9 +92,25 @@ export default {
     // library validation reject Electron's frameworks. Turn on together with real signing.
     hardenedRuntime: false
   },
-  // Windows targets (planned): nsis (.exe) / msi
+  // Windows (decision 123): x64 installer + portable exe, unsigned for now (SmartScreen
+  // asks "More info → Run anyway"). The .ico is made from build/icon.png.
   win: {
-    target: ['nsis'],
-    artifactName: '${productName}-${version}-${arch}.${ext}'
+    icon: 'build/icon.png',
+    target: [
+      { target: 'nsis', arch: ['x64'] },
+      { target: 'portable', arch: ['x64'] }
+    ]
+  },
+  nsis: {
+    // Per-user install (no administrator), the user may pick the folder.
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    artifactName: '${productName}-${version}-setup-${arch}.${ext}'
+  },
+  portable: {
+    artifactName: '${productName}-${version}-portable-${arch}.${ext}'
   }
 }

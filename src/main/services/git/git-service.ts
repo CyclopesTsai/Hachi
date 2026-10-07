@@ -3,7 +3,7 @@
  * discarding a file's changes, branches. Operations run one at a time; every path from
  * the renderer must be one the status reported.
  */
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { HachiError } from '@shared/errors'
 import type {
@@ -161,6 +161,16 @@ export class GitService {
   init(workspace: string): Promise<GitStatus> {
     return this.run(async () => {
       await this.must(workspace, ['-c', 'init.defaultBranch=main', 'init'], '建立 Git repo')
+      // Windows (decision 123): deep collection folders exceed 260 characters, and
+      // checking out with CRLF would make unchanged Hachi files look modified.
+      await this.must(workspace, ['config', 'core.longpaths', 'true'], '建立 Git repo')
+      const attributes = path.join(workspace, '.gitattributes')
+      if (!(await stat(attributes).catch(() => null))) {
+        await writeFile(
+          attributes,
+          '# Hachi: the same line endings on every platform\n* text=auto eol=lf\n'
+        )
+      }
       return this.readStatus(workspace)
     })
   }
