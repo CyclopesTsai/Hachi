@@ -79,6 +79,7 @@ const api: HachiApi = {
     importFile: () => invoke(INVOKE.transferImportFile),
     importText: (input) => invoke(INVOKE.transferImportText, input),
     importBrunoFolder: () => invoke(INVOKE.transferImportBrunoFolder),
+    importBrunoCollections: (input) => invoke(INVOKE.transferImportBrunoCollections, input),
     export: (input) => invoke(INVOKE.transferExport, input)
   },
   env: {

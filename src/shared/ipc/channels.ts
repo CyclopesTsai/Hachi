@@ -48,6 +48,7 @@ export const INVOKE = {
   transferImportFile: 'transfer:importFile',
   transferImportText: 'transfer:importText',
   transferImportBrunoFolder: 'transfer:importBrunoFolder',
+  transferImportBrunoCollections: 'transfer:importBrunoCollections',
   transferExport: 'transfer:export',
   envList: 'env:list',
   envGet: 'env:get',

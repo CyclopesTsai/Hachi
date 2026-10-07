@@ -17,7 +17,7 @@ import {
   DialogTitle
 } from '@renderer/components/ui/dialog'
 import { Label } from '@renderer/components/ui/label'
-import { NativeSelect } from '@renderer/components/ui/native-select'
+import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-select'
 import { errorMessage } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
 import { useEnvStore } from '@renderer/stores/env-store'
@@ -90,7 +90,8 @@ export function CurlImportDialog() {
 
 const FORMAT_HINTS: Record<ExportFormat, string> = {
   postman: '單一 JSON 檔，可匯入 Postman 或 Hachi',
-  bruno: '每個請求一個 .bru 檔，連同所有環境（機密變數只匯出名稱）',
+  'bruno-yaml': 'Bruno 3.1 起的預設格式（opencollection.yml），連同所有環境（機密變數只匯出名稱）',
+  bruno: '舊版 Bruno 也能開（.bru 檔），連同所有環境（機密變數只匯出名稱）',
   'openapi-html': '可直接用瀏覽器開啟的 API 文件（內嵌 Redoc，離線可用）',
   'openapi-json': '給其他工具使用的 OpenAPI 規格檔'
 }
@@ -175,7 +176,7 @@ function ExportForm({ collectionId }: { collectionId: string }) {
           取消
         </Button>
         <Button type="submit" disabled={busy}>
-          {format === 'bruno' ? '選擇資料夾…' : '匯出…'}
+          {format === 'bruno' || format === 'bruno-yaml' ? '選擇資料夾…' : '匯出…'}
         </Button>
       </DialogFooter>
     </form>
@@ -191,6 +192,93 @@ export function ExportDialog() {
     >
       <DialogContent className="sm:max-w-lg" data-testid="export-dialog">
         {collectionId !== null && <ExportForm collectionId={collectionId} />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+type BrunoChoice = NonNullable<ReturnType<typeof useTransferStore.getState>['brunoChoice']>
+
+function BrunoPickForm({ choice }: { choice: BrunoChoice }) {
+  const busy = useTransferStore((s) => s.busy)
+  const [picked, setPicked] = useState(() => new Set(choice.collections.map((c) => c.path)))
+  const all = picked.size === choice.collections.length
+  const toggle = (path: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+
+  function submit(e: FormEvent): void {
+    e.preventDefault()
+    void useTransferStore
+      .getState()
+      .importBrunoChoice(choice.collections.map((c) => c.path).filter((p) => picked.has(p)))
+  }
+
+  return (
+    <form className="flex flex-col gap-4" onSubmit={submit}>
+      <DialogHeader>
+        <DialogTitle>匯入 Bruno Collection</DialogTitle>
+        <DialogDescription>
+          {`「${choice.folder}」裡有 ${choice.collections.length} 個 Collection，勾選要匯入的項目。環境會命名為「Collection 名稱 / 環境名稱」。`}
+        </DialogDescription>
+      </DialogHeader>
+      <CheckboxLabel
+        checked={all}
+        onChange={() => setPicked(all ? new Set() : new Set(choice.collections.map((c) => c.path)))}
+      >
+        全選
+      </CheckboxLabel>
+      <ul
+        className="flex max-h-[50vh] flex-col gap-0.5 overflow-auto rounded-md border p-1"
+        data-testid="bruno-pick-list"
+      >
+        {choice.collections.map((c) => (
+          <li key={c.path}>
+            <label className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-primary"
+                checked={picked.has(c.path)}
+                onChange={() => toggle(c.path)}
+              />
+              <span className="truncate">{c.name}</span>
+              <span className="ml-auto shrink-0 truncate text-xs text-muted-foreground">
+                {c.path || '.'} · {c.format === 'yaml' ? 'YAML' : '.bru'}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => useTransferStore.getState().cancelBrunoChoice()}
+        >
+          取消
+        </Button>
+        <Button type="submit" disabled={busy || picked.size === 0}>
+          匯入 {picked.size} 個
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
+/** A chosen folder holds several Bruno collections: pick which to import (decision 107). */
+export function BrunoPickDialog() {
+  const choice = useTransferStore((s) => s.brunoChoice)
+  return (
+    <Dialog
+      open={choice !== null}
+      onOpenChange={(o) => !o && useTransferStore.getState().cancelBrunoChoice()}
+    >
+      <DialogContent className="sm:max-w-xl" data-testid="bruno-pick-dialog">
+        {choice && <BrunoPickForm key={choice.scanId} choice={choice} />}
       </DialogContent>
     </Dialog>
   )
@@ -299,7 +387,8 @@ export function FileDropZone({
           <FileDown className="size-8 text-primary" />
           <p className="font-medium">放開以匯入</p>
           <p className="text-muted-foreground">
-            Postman Collection / Environment、Bruno Collection（.json），或內容是 cURL 指令的文字檔
+            Postman Collection / Environment、Bruno Collection（.json），或內容是 cURL
+            指令的文字檔（Bruno 資料夾請用「＋」→ 匯入 Bruno 資料夾…）
           </p>
         </div>
       )}

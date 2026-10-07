@@ -217,6 +217,10 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       const dir = await selectDirectory(ctx.getWindow(), { title: 'Import Bruno Collection' })
       return dir ? ctx.transfer.importBrunoFolder(dir) : null
     },
+    [INVOKE.transferImportBrunoCollections]: (input) => {
+      workspacePath()
+      return ctx.transfer.importBrunoCollections(input.scanId, input.paths)
+    },
     [INVOKE.transferExport]: async (input) => {
       const exported = await ctx.transfer.export(input.id, input.format, input.environmentId)
       if (exported.kind === 'folder') {

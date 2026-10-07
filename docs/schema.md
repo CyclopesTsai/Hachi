@@ -460,9 +460,18 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 | Collection 變數                                       | `variable[]`（`type: "string"`）；**機密變數的值留空**                                                |
 | 損毀的項目                                            | 略過並列出                                                                                            |
 
-### Bruno → Hachi（`src/shared/transfer/bruno.ts`、`bru-lang.ts`，決策 103 / 104）
+### Bruno → Hachi（`src/shared/transfer/bruno*.ts`、`bru-lang.ts`，決策 103 / 104 / 107）
 
-來源：Bruno collection 資料夾（`bruno.json` 必須存在）或 Bruno 匯出的 Collection JSON（有 `items` 陣列、沒有 Postman 的 `info`）。
+來源：
+
+- `.bru` 的 Collection 資料夾（有 `bruno.json`）
+- Bruno 3 的 OpenCollection YAML 資料夾（有 `opencollection.yml`，見下方 YAML 對照）
+- Bruno 匯出的 Collection JSON（有 `items` 陣列、沒有 Postman 的 `info`）
+- Collection 裡的子資料夾（兩種標記檔都沒有）：當成一個 Collection，名稱取 `folder.bru` / `folder.yml` 的 name（沒有就用資料夾名稱），它的 Headers / Auth / 變數成為 Collection 層級；上層的設定與環境沒有匯入（提示）
+
+選的資料夾本身不是 Collection 時，main 往下找子資料夾中的 Collection（最多 4 層、200 個；略過 `.` 開頭與 `node_modules`，不進入已找到的 Collection）：找到多個時由使用者勾選，找到一個直接匯入，都沒有時當成子資料夾匯入。
+
+所有來源先讀成同一個 Bruno 資料模型（`bruno-model.ts`），再依下表對應。環境命名為「Collection 名稱 / 環境名稱」（Hachi 的環境是整個 Workspace 共用）。
 
 | Bruno                                                      | Hachi                                                                                                                                                                                                    |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -481,7 +490,27 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 | `docs`                                                     | `docs`                                                                                                                                                                                                   |
 | `environments/*.bru`                                       | 環境（`vars:secret` 只有名稱 → 空值的機密變數，提示重新輸入）                                                                                                                                            |
 
+OpenCollection YAML 與 `.bru` 的對照（YAML 讀進同一個模型）：
+
+| YAML                                                                                                                        | 對應的 `.bru`                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `opencollection.yml`：`info.name`、`request.headers / auth / variables / scripts`                                           | `bruno.json` 的 name、`collection.bru`                                                                        |
+| `folder.yml`：`info.name / seq`、`request.*`（沒有 `auth` 時視為沿用上層）                                                  | `folder.bru`                                                                                                  |
+| 請求 `*.yml`：`info.name / type / seq`、`http.method / url / params[] / headers[] / body / auth`                            | `meta`、方法區塊、`params:*`、`headers`、`body:*`、`auth:*`（沒有 `auth` → None，`auth: inherit` → 沿用上層） |
+| `body.type`：`json` / `text` / `xml`（`data`）、`form-urlencoded` / `multipart-form`（`data[]`，檔案的 `value` 是路徑陣列） | 對應的 `body:*` 區塊                                                                                          |
+| `graphql:` 區段（`body.query / variables`）                                                                                 | `body:graphql`（轉成 JSON Body）                                                                              |
+| `runtime.variables[]`                                                                                                       | `vars:pre-request`                                                                                            |
+| `runtime.actions[]`（`set-variable`、`selector.expression`）                                                                | `vars:post-response`                                                                                          |
+| `runtime.scripts[]`（`before-request` / `after-response` / `tests`）                                                        | `script:*`、`tests`                                                                                           |
+| `runtime.assertions[]`（`expression` / `operator` / `value`）                                                               | `assert`                                                                                                      |
+| `settings.timeout` / `followRedirects`                                                                                      | （`.bru` 沒有）→ 請求的逾時（0 = 用 Workspace 設定）/ 跟隨轉址                                                |
+| `docs`、`environments/*.yml`（`variables[]`，`secret: true` 只有名稱；值可為 `{ type, data }`）                             | `docs`、`environments/*.bru`                                                                                  |
+
+不是 Bruno 的 `.yml`（沒有 `info` 或對應區段，例如 CI 設定）會略過；`.bru` Collection 不讀 `.yml`，YAML Collection 不讀 `.bru`。
+
 ### Hachi → Bruno 資料夾
+
+匯出時可選 **YAML**（OpenCollection：`opencollection.yml`、`folder.yml`、`<名稱>.yml`、`environments/<環境>.yml`，會寫出請求的逾時 / 轉址設定）或 **.bru**（如下）。環境名稱開頭的「Collection 名稱 / 」會去掉。
 
 `bruno.json`、`collection.bru`（Headers、Auth、Collection 變數）、每個資料夾的 `folder.bru`、每個 HTTP 請求一個 `<名稱>.bru`（檔名去掉不合法字元，重名加數字）、`environments/<環境>.bru`（Workspace 的所有環境；**機密變數只寫名稱**）。擷取表格 → `vars:post-response`（Regex 擷取改為整個 Body、存到環境的擷取變成暫存變數，提示）；斷言 → `assert`；腳本原樣寫出（用了 `hachi.*` 時提示）；請求的逾時 / SSL 設定無法對應（提示）。WebSocket 略過。
 

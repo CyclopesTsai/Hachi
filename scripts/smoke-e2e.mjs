@@ -1453,30 +1453,49 @@ try {
   assert.ok(!exportedHtml.includes('tok-1'), 'secret values stay out of the document')
   step('export a Collection as an OpenAPI HTML page (Redoc inlined)')
 
+  // Bruno: export as .bru and as YAML into one folder, then import that folder back:
+  // it holds two collections, so a list asks which ones (decisions 103 / 107).
   const brunoParent = path.join(tmp, 'bruno-export')
   await mkdir(brunoParent)
   await app.evaluate(({ dialog }, dir) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
   }, brunoParent)
-  await t.contextAction('Shop', '匯出…')
-  await exportDialog.getByLabel(/Bruno 資料夾/).check()
-  await exportDialog.getByRole('button', { name: '選擇資料夾…' }).click()
-  await transferResult.waitFor()
-  await transferResult.getByRole('button', { name: '確定' }).click()
-  const brunoDir = path.join(brunoParent, 'Shop')
-  assert.equal((await readJson(path.join(brunoDir, 'bruno.json'))).name, 'Shop')
-  assert.ok((await readFile(path.join(brunoDir, 'Added By Plus.bru'), 'utf8')).includes('meta {'))
-  await app.evaluate(({ dialog }, dir) => {
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] })
-  }, brunoDir)
+  for (const format of [/Bruno 資料夾（\.bru）/, /Bruno 資料夾（YAML）/]) {
+    await t.contextAction('Shop', '匯出…')
+    await exportDialog.getByLabel(format).check()
+    await exportDialog.getByRole('button', { name: '選擇資料夾…' }).click()
+    await transferResult.waitFor()
+    await transferResult.getByRole('button', { name: '確定' }).click()
+  }
+  const bruDir = path.join(brunoParent, 'Shop')
+  assert.equal((await readJson(path.join(bruDir, 'bruno.json'))).name, 'Shop')
+  assert.ok((await readFile(path.join(bruDir, 'Added By Plus.bru'), 'utf8')).includes('meta {'))
+  const yamlDir = path.join(brunoParent, 'Shop-2')
+  assert.ok(
+    (await readFile(path.join(yamlDir, 'opencollection.yml'), 'utf8')).includes('name: Shop')
+  )
+  assert.ok(
+    (await readFile(path.join(yamlDir, 'Added By Plus.yml'), 'utf8')).includes('type: http')
+  )
+  step('export a Collection as a Bruno folder: .bru or YAML (OpenCollection)')
+
   await page.getByTestId('sidebar-add').click()
   await page.getByRole('menuitem', { name: '匯入 Bruno 資料夾…' }).click()
+  const brunoPick = page.getByTestId('bruno-pick-dialog')
+  await brunoPick.waitFor()
+  const pickList = brunoPick.getByTestId('bruno-pick-list')
+  assert.equal(await pickList.getByRole('checkbox').count(), 2)
+  assert.ok((await pickList.innerText()).includes('YAML'))
+  // Only the YAML one.
+  await pickList.getByRole('checkbox').first().uncheck()
+  await page.screenshot({ path: path.join(shots, '16-bruno-pick.png') })
+  await brunoPick.getByRole('button', { name: '匯入 1 個' }).click()
   await transferResult.waitFor()
   const brunoReport = await transferResult.innerText()
   assert.ok(brunoReport.includes('已建立 Collection「Shop copy'), brunoReport)
-  assert.ok(brunoReport.includes('已建立環境'), brunoReport)
+  assert.ok(brunoReport.includes('「Shop / Shop Prod」'), brunoReport)
   await transferResult.getByRole('button', { name: '確定' }).click()
-  step('export a Collection as a Bruno folder; "+" → 匯入 Bruno 資料夾… reads it back')
+  step('"+" → 匯入 Bruno 資料夾… on a folder with several collections lists them to pick from')
 
   // Window position / size are remembered (decision 94).
   // Inside the primary screen's work area: CI machines have small screens (1024×768), where

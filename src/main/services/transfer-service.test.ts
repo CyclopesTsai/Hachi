@@ -233,14 +233,15 @@ describe('TransferService Bruno and OpenAPI', () => {
       'pets/folder.bru',
       'pets/list.bru'
     ])
-    const report = await transfer.importBrunoFolder(dir)
-    expect(report).toMatchObject({
+    const result = await transfer.importBrunoFolder(dir)
+    if (result.kind !== 'imported') throw new Error('expected an import')
+    expect(result.results[0]?.report).toMatchObject({
       kind: 'collection',
       name: 'Pets',
       fileName: 'pets-bruno',
       folders: 1,
       requests: 1,
-      environments: ['local']
+      environments: ['Pets / local']
     })
     const env = await environments.get((await environments.list())[0]?.id as string)
     expect(env.variables.map((v) => [v.key, v.value, v.secret])).toEqual([
@@ -258,16 +259,64 @@ describe('TransferService Bruno and OpenAPI', () => {
     expect(report).toMatchObject({ kind: 'collection', name: 'Pets JSON', environments: [] })
   })
 
-  it('rejects a folder without bruno.json', async () => {
+  it('rejects a folder without Bruno files', async () => {
     const dir = path.join(tmp, 'empty')
     await mkdir(dir)
     await expect(transfer.importBrunoFolder(dir)).rejects.toMatchObject({ code: 'INVALID_FILE' })
   })
 
+  it('lists the collections inside a folder, then imports the chosen ones', async () => {
+    const dir = path.join(tmp, 'bruno')
+    await writeTree(dir, {
+      'folder.bru': 'meta {\n  name: stray\n}\n',
+      ...Object.fromEntries(Object.entries(bruno).map(([k, v]) => [`Pets/${k}`, v])),
+      'team/Nebula/opencollection.yml': 'opencollection: 1.0.0\ninfo:\n  name: Nebula\n',
+      'team/Nebula/登入.yml':
+        'info:\n  name: 登入\n  type: http\n  seq: 1\nhttp:\n  method: POST\n  url: https://n.test/login\n',
+      'team/Nebula/environments/dev.yml': 'name: dev\nvariables:\n  - name: a\n    value: "1"\n',
+      'Broken/bruno.json': '{"name":"Broken"}',
+      'Broken/x.bru': 'nonsense'
+    })
+    const result = await transfer.importBrunoFolder(dir)
+    if (result.kind !== 'choose') throw new Error('expected a choice')
+    expect(result.folder).toBe('bruno')
+    expect(result.collections).toEqual([
+      { path: 'Broken', name: 'Broken', format: 'bru' },
+      { path: 'Pets', name: 'Pets', format: 'bru' },
+      { path: 'team/Nebula', name: 'Nebula', format: 'yaml' }
+    ])
+    await expect(
+      transfer.importBrunoCollections(result.scanId, ['../elsewhere'])
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+
+    const outcomes = await transfer.importBrunoCollections(result.scanId, ['Broken', 'team/Nebula'])
+    expect(outcomes[0]).toMatchObject({ fileName: 'Broken', report: null })
+    expect(outcomes[0]?.error).toMatch(/x\.bru/)
+    expect(outcomes[1]).toMatchObject({
+      error: null,
+      report: { name: 'Nebula', requests: 1, environments: ['Nebula / dev'] }
+    })
+    // A scan is used once.
+    await expect(transfer.importBrunoCollections(result.scanId, ['Pets'])).rejects.toMatchObject({
+      code: 'INVALID_OPERATION'
+    })
+  })
+
+  it('imports a folder inside a collection on its own', async () => {
+    const dir = path.join(tmp, 'pets-bruno')
+    await writeTree(dir, bruno)
+    const result = await transfer.importBrunoFolder(path.join(dir, 'pets'))
+    if (result.kind !== 'imported') throw new Error('expected an import')
+    expect(result.results[0]?.report).toMatchObject({ name: 'Pets', requests: 1, environments: [] })
+    expect(result.results[0]?.report?.warnings[0]).toMatch(/只匯入這個資料夾/)
+  })
+
   it('exports Bruno folders and OpenAPI documents', async () => {
     const dir = path.join(tmp, 'pets-bruno')
     await writeTree(dir, bruno)
-    const { id } = await transfer.importBrunoFolder(dir)
+    const imported = await transfer.importBrunoFolder(dir)
+    if (imported.kind !== 'imported') throw new Error('expected an import')
+    const id = imported.results[0]?.report?.id as string
     const envId = (await environments.list())[0]?.id as string
 
     const folder = await transfer.export(id, 'bruno', null)
@@ -279,6 +328,15 @@ describe('TransferService Bruno and OpenAPI', () => {
       'bruno.json',
       'collection.bru',
       'environments/local.bru'
+    ])
+
+    const yaml = await transfer.export(id, 'bruno-yaml', null)
+    if (yaml.kind !== 'folder') throw new Error('expected a folder')
+    expect(Object.keys(yaml.files).sort()).toEqual([
+      'Pets/List pets.yml',
+      'Pets/folder.yml',
+      'environments/local.yml',
+      'opencollection.yml'
     ])
 
     const json = await transfer.export(id, 'openapi-json', envId)

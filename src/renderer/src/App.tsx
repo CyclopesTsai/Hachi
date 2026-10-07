@@ -17,6 +17,7 @@ import { ShortcutsDialog } from '@renderer/features/settings/ShortcutsDialog'
 import { useShortcutsDialog } from '@renderer/stores/shortcuts-store'
 import { SaveAsDialog } from '@renderer/features/tabs/SaveAsDialog'
 import {
+  BrunoPickDialog,
   CurlImportDialog,
   ExportDialog,
   TransferResultDialog
@@ -254,6 +255,7 @@ export function App() {
       <ShortcutsDialog />
       <CurlImportDialog />
       <ExportDialog />
+      <BrunoPickDialog />
       <TransferResultDialog />
       <NoticeDialog />
     </>

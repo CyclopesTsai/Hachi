@@ -1,5 +1,10 @@
 import { create } from 'zustand'
-import type { ExportFormat, ImportReport } from '@shared/ipc/api'
+import type {
+  BrunoCollectionChoice,
+  ExportFormat,
+  ImportOutcome,
+  ImportReport
+} from '@shared/ipc/api'
 import { MAX_CURL_TEXT, parseCurl } from '@shared/transfer/curl'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from './app-store'
@@ -22,7 +27,8 @@ const MAX_DROP_FILES = 20
 /** Formats offered in the export dialog (decision 105). */
 export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
   postman: 'Postman Collection v2.1',
-  bruno: 'Bruno 資料夾',
+  'bruno-yaml': 'Bruno 資料夾（YAML）',
+  bruno: 'Bruno 資料夾（.bru）',
   'openapi-html': 'OpenAPI 文件（HTML）',
   'openapi-json': 'OpenAPI 3.0（JSON）'
 }
@@ -32,6 +38,8 @@ interface TransferState {
   /** Collection whose export dialog is open. */
   exportId: string | null
   result: { title: string; entries: TransferResultEntry[] } | null
+  /** A chosen folder holds several Bruno collections: which ones to import. */
+  brunoChoice: { scanId: string; folder: string; collections: BrunoCollectionChoice[] } | null
   busy: boolean
 
   setCurlOpen(open: boolean): void
@@ -41,8 +49,11 @@ interface TransferState {
   importFile(): Promise<void>
   /** Files dropped on the window (decision 68). */
   importDropped(files: File[]): Promise<void>
-  /** Folder dialog, then imports a Bruno collection folder. */
+  /** Folder dialog, then imports a Bruno collection folder (or asks which collections). */
   importBrunoFolder(): Promise<void>
+  /** Imports the collections picked from `brunoChoice`. */
+  importBrunoChoice(paths: string[]): Promise<void>
+  cancelBrunoChoice(): void
   setExportId(collectionId: string | null): void
   exportCollection(
     collectionId: string,
@@ -77,6 +88,20 @@ async function revealImported(report: ImportReport): Promise<void> {
   }
 }
 
+function outcomeEntry(outcome: ImportOutcome): TransferResultEntry {
+  return outcome.report
+    ? reportEntry(outcome.report)
+    : { title: outcome.fileName, lines: [], warnings: [], error: outcome.error ?? '匯入失敗' }
+}
+
+/** Shows the results of importing several Bruno collections. */
+async function showOutcomes(outcomes: ImportOutcome[]): Promise<void> {
+  for (const outcome of outcomes) if (outcome.report) await revealImported(outcome.report)
+  useTransferStore.setState({
+    result: { title: '匯入結果', entries: outcomes.map(outcomeEntry) }
+  })
+}
+
 /** Runs a native-dialog import and shows its report (nothing when cancelled). */
 async function importWith(run: typeof window.hachi.transfer.importFile): Promise<void> {
   const store = useTransferStore
@@ -97,6 +122,7 @@ async function importWith(run: typeof window.hachi.transfer.importFile): Promise
 export const useTransferStore = create<TransferState>()((set, get) => ({
   curlOpen: false,
   exportId: null,
+  brunoChoice: null,
   result: null,
   busy: false,
 
@@ -123,7 +149,50 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
   },
 
   async importBrunoFolder() {
-    await importWith(() => window.hachi.transfer.importBrunoFolder())
+    if (get().busy) return
+    set({ busy: true })
+    try {
+      const result = await unwrap(window.hachi.transfer.importBrunoFolder())
+      if (!result) return
+      if (result.kind === 'choose') {
+        const { scanId, folder, collections } = result
+        set({ brunoChoice: { scanId, folder, collections } })
+        return
+      }
+      const [only] = result.results
+      if (result.results.length === 1 && only?.report) {
+        await revealImported(only.report)
+        set({ result: { title: '匯入完成', entries: [reportEntry(only.report)] } })
+      } else {
+        await showOutcomes(result.results)
+      }
+    } catch (error) {
+      useAppStore.getState().setNotice(errorMessage(error))
+    } finally {
+      set({ busy: false })
+    }
+  },
+
+  async importBrunoChoice(paths) {
+    const choice = get().brunoChoice
+    if (!choice || get().busy || paths.length === 0) return
+    set({ busy: true })
+    try {
+      const outcomes = await unwrap(
+        window.hachi.transfer.importBrunoCollections({ scanId: choice.scanId, paths })
+      )
+      set({ brunoChoice: null })
+      await showOutcomes(outcomes)
+    } catch (error) {
+      set({ brunoChoice: null })
+      useAppStore.getState().setNotice(errorMessage(error))
+    } finally {
+      set({ busy: false })
+    }
+  },
+
+  cancelBrunoChoice() {
+    set({ brunoChoice: null })
   },
 
   setExportId(collectionId) {

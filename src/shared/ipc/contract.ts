@@ -202,9 +202,19 @@ export const inputSchemas = {
     text: z.string().max(MAX_IMPORT_TEXT)
   }),
   [INVOKE.transferImportBrunoFolder]: noInput,
+  [INVOKE.transferImportBrunoCollections]: z.strictObject({
+    scanId: z.string().min(1).max(100),
+    paths: z.array(z.string().max(4096)).min(1).max(200)
+  }),
   [INVOKE.transferExport]: z.strictObject({
     id: itemIdSchema,
-    format: z.enum(['postman', 'bruno', 'openapi-html', 'openapi-json'] satisfies ExportFormat[]),
+    format: z.enum([
+      'postman',
+      'bruno',
+      'bruno-yaml',
+      'openapi-html',
+      'openapi-json'
+    ] satisfies ExportFormat[]),
     environmentId: itemIdSchema.nullable()
   }),
   [INVOKE.envList]: noInput,

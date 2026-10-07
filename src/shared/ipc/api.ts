@@ -334,7 +334,33 @@ export interface ImportReport {
   warnings: string[]
 }
 
-export type ExportFormat = 'postman' | 'bruno' | 'openapi-html' | 'openapi-json'
+export type ExportFormat = 'postman' | 'bruno' | 'bruno-yaml' | 'openapi-html' | 'openapi-json'
+
+/** One import of several (Bruno collections picked from a folder). */
+export interface ImportOutcome {
+  /** Folder name, for the report. */
+  fileName: string
+  report: ImportReport | null
+  error: string | null
+}
+
+/** A Bruno collection found inside a chosen folder. */
+export interface BrunoCollectionChoice {
+  /** Relative to the chosen folder, forward slashes ('' = the folder itself). */
+  path: string
+  name: string
+  format: 'bru' | 'yaml'
+}
+
+export type BrunoFolderResult =
+  | { kind: 'imported'; results: ImportOutcome[] }
+  /** Several collections: ask which ones, then `transfer:importBrunoCollections`. */
+  | { kind: 'choose'; scanId: string; folder: string; collections: BrunoCollectionChoice[] }
+
+export interface ImportBrunoCollectionsInput {
+  scanId: string
+  paths: string[]
+}
 
 export interface ExportInput {
   /** Collection id. */
@@ -436,7 +462,11 @@ export interface InvokeMap {
   'http:resolve': { input: HttpResolveInput; output: HttpResolveResult }
   'transfer:importFile': { input: void; output: ImportReport | null }
   'transfer:importText': { input: ImportTextInput; output: ImportReport }
-  'transfer:importBrunoFolder': { input: void; output: ImportReport | null }
+  'transfer:importBrunoFolder': { input: void; output: BrunoFolderResult | null }
+  'transfer:importBrunoCollections': {
+    input: ImportBrunoCollectionsInput
+    output: ImportOutcome[]
+  }
   'transfer:export': { input: ExportInput; output: ExportResult | null }
   'env:list': { input: void; output: EnvironmentSummary[] }
   'env:get': { input: ItemIdInput; output: EnvironmentData }
@@ -568,8 +598,12 @@ export interface HachiApi {
     /** Open dialog, then imports a Postman / Bruno JSON file. Null if cancelled. */
     importFile: InvokeFn<'transfer:importFile'>
     importText: InvokeFn<'transfer:importText'>
-    /** Folder dialog, then imports a Bruno collection folder. Null if cancelled. */
+    /**
+     * Folder dialog, then imports a Bruno collection folder (.bru or .yml). A folder with
+     * several collections returns them to choose from. Null if cancelled.
+     */
     importBrunoFolder: InvokeFn<'transfer:importBrunoFolder'>
+    importBrunoCollections: InvokeFn<'transfer:importBrunoCollections'>
     /**
      * Save dialog (a folder dialog for Bruno), then writes the Collection in the chosen
      * format. Null if cancelled.

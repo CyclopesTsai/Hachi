@@ -301,7 +301,7 @@ describe('importBrunoFolder', () => {
 
   it('imports environments; secret names come without values', () => {
     expect(environments).toHaveLength(1)
-    expect(environments[0]?.name).toBe('dev')
+    expect(environments[0]?.name).toBe('Shop / dev')
     expect(environments[0]?.variables.map((v) => [v.key, v.value, v.enabled, v.secret])).toEqual([
       ['baseUrl', 'http://localhost:3000', true, false],
       ['old', '1', false, false],
@@ -320,8 +320,21 @@ describe('importBrunoFolder', () => {
     )
   })
 
-  it('requires bruno.json', () => {
-    expect(() => importBrunoFolder({ 'a.bru': CREATE_USER })).toThrow(/bruno\.json/)
+  it('imports a folder inside a collection on its own', () => {
+    const files = Object.fromEntries(
+      Object.entries(folderFiles)
+        .filter(([path]) => path.startsWith('users/'))
+        .map(([path, text]) => [path.slice('users/'.length), text])
+    )
+    const part = importBrunoFolder(files, id, 'users')
+    expect(part.collection.name).toBe('Users')
+    expect(part.collection.children.map((c) => (c as PortableRequest).request.name)).toEqual([
+      'Create user',
+      'Get user'
+    ])
+    expect(part.warnings[0]).toMatch(/只匯入這個資料夾/)
+    expect(importBrunoFolder({ 'a.bru': CREATE_USER }, id, 'loose').collection.name).toBe('loose')
+    expect(() => importBrunoFolder({ 'readme.md': '' })).toThrow(/找不到 Bruno 的檔案/)
   })
 })
 
@@ -386,7 +399,7 @@ describe('importBrunoJson', () => {
       variable: 'first'
     })
     expect(list.assertions[0]).toMatchObject({ target: 'status', operator: 'eq', expected: '200' })
-    expect(environments[0]?.name).toBe('prod')
+    expect(environments[0]?.name).toBe('Shop JSON / prod')
   })
 })
 
