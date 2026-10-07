@@ -293,7 +293,7 @@
 
 開始任何一項前先說明規劃、確認設計決策。
 
-1. **Git 管理**（決策 111–118）：分三階段
+1. **Git 管理**（決策 111–121，**v0.3.0 發佈**，2026-10-07）：分三階段
    - **Git-a ✅（等使用者確認）**：偵測 git / repo、`git init`、Git 畫面（變更清單、檔案差異、commit、捨棄變更、user.name / email 詢問）、標題列的 Git / 分支選單（Commit…、切換 / 建立分支）；另完成決策 117–119。驗證：單元測試 441 個（`git-service.test.ts` 用真的 git、`git-names.test.ts`），E2E 新增 Finder、git init / commit / 捨棄 / 建立與切換分支（淺色、深色）
    - **Git-b ✅（等使用者確認）**：Fetch / Pull（merge）/ Push、設定遠端、帳密 / SSH 密語輸入框（askpass）、衝突逐檔處理（保留我的 / 使用遠端的 / 外部編輯後標記已解決、完成 / 放棄合併）、Workspace 設定「開啟時自動 Fetch」（決策 113、114、120）。驗證：單元測試 447 個（askpass 用真的 helper、Fetch / Pull / Push / 衝突用本機 bare repo），E2E 新增設定遠端 → Push、別人 push → Fetch / Pull、衝突 → 保留我的 → 完成合併 → Push、重新啟動時自動 Fetch（淺色、深色）
    - **Git-c ✅（等使用者確認）**：Git 畫面的 History 分頁（所有分支的線圖、標籤、commit 詳情、檔案差異，決策 116、121）。驗證：單元測試 453 個（`graph.test.ts` 線圖演算法、History 用真的 git：分支、合併、tag、Workspace 外的檔案），E2E 新增 History（commit 數、標籤、詳情、檔案差異；淺色、深色）
