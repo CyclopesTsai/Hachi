@@ -84,7 +84,8 @@ export const inputSchemas = {
     ui: z
       .strictObject({
         requestBodyWrap: z.boolean().optional(),
-        responseBodyWrap: z.boolean().optional()
+        responseBodyWrap: z.boolean().optional(),
+        gitChangesTree: z.boolean().optional()
       })
       .optional(),
     history: historySettingsSchema.optional(),

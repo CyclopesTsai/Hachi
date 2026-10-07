@@ -76,7 +76,8 @@
   },
   "ui": {
     "requestBodyWrap": false, // 請求 Body 編輯器自動換行（僅影響顯示）
-    "responseBodyWrap": false // 回應 Body 自動換行（僅影響顯示）
+    "responseBodyWrap": false, // 回應 Body 自動換行（僅影響顯示）
+    "gitChangesTree": true // Git Commit 畫面的變更以樹狀顯示（false = 清單，決策 122）
   },
   "history": {
     "maxEntries": 200 // 歷史紀錄筆數上限，所有 Workspace 共用（50–1000）

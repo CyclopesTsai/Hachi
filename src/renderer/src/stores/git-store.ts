@@ -55,6 +55,8 @@ interface GitState {
   setMessage(message: string): void
   toggle(path: string): void
   setAll(checked: boolean): void
+  /** Checks / unchecks several files at once (a folder of the tree view). */
+  setChecked(paths: readonly string[], checked: boolean): void
   init(): Promise<void>
   commit(): Promise<void>
   saveIdentity(identity: GitIdentity, global: boolean): Promise<void>
@@ -196,6 +198,15 @@ export const useGitStore = create<GitState>()((set, get) => {
       const unchecked = new Set(get().unchecked)
       if (unchecked.has(path)) unchecked.delete(path)
       else unchecked.add(path)
+      set({ unchecked })
+    },
+
+    setChecked(paths, checked) {
+      const unchecked = new Set(get().unchecked)
+      for (const p of paths) {
+        if (checked) unchecked.delete(p)
+        else unchecked.add(p)
+      }
       set({ unchecked })
     },
 

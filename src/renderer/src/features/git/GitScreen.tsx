@@ -4,12 +4,16 @@ import {
   ArrowLeft,
   ArrowUp,
   ArrowUpFromLine,
+  ChevronRight,
+  Folder,
   GitBranch,
+  List,
+  ListTree,
   Loader2,
   RefreshCw,
   Undo2
 } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import type { GitChangeKind, GitFileChange, GitRepoStatus } from '@shared/git'
 import {
   AlertDialog,
@@ -38,6 +42,7 @@ import { useAppStore } from '@renderer/stores/app-store'
 import { useGitStore } from '@renderer/stores/git-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
+import { buildChangeTree, type ChangeFolder, type ChangeNode } from './change-tree'
 import { DiffView } from './DiffView'
 import { GitHistory } from './GitHistory'
 import { fileIndex, gitInstallHint, labelFor, type FileLabel } from './git-names'
@@ -104,48 +109,62 @@ function FileRow({
   label,
   checked,
   selected,
-  onDiscard
+  onDiscard,
+  depth = 0,
+  name
 }: {
   file: GitFileChange
   label: FileLabel
   checked: boolean
   selected: boolean
   onDiscard: () => void
+  /** Tree view: indentation level, and the short name inside its folder. */
+  depth?: number
+  name?: string
 }) {
   const kind = KINDS[file.kind]
+  const open = () => {
+    if (!label.itemId) return
+    useGitStore.getState().closeView()
+    useTabsStore.getState().openItem(label.itemId)
+  }
   return (
+    // The whole row selects the file (decision 122: no dead spots between its parts).
     <li
       className={cn(
-        'group flex h-7 items-center gap-1.5 rounded-sm px-1 text-sm hover:bg-accent/70',
+        'group flex h-7 cursor-default items-center gap-1.5 rounded-sm pr-1 text-sm hover:bg-accent/70',
         selected && 'bg-accent'
       )}
+      style={{ paddingLeft: 4 + depth * 20 }}
       aria-selected={selected}
       data-testid="git-file"
       data-path={file.path}
-      title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
+      title={`${file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}${label.itemId ? '（按兩下開啟）' : ''}`}
+      onClick={() => void useGitStore.getState().select(file.path)}
+      onDoubleClick={open}
     >
       <input
         type="checkbox"
         className="size-3.5 shrink-0 accent-primary"
         aria-label={`Commit ${label.title}`}
         checked={checked}
+        onClick={(e) => e.stopPropagation()}
         onChange={() => useGitStore.getState().toggle(file.path)}
       />
       <button
         type="button"
-        className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left"
-        title={label.itemId ? '按兩下開啟' : undefined}
-        onClick={() => void useGitStore.getState().select(file.path)}
-        onDoubleClick={() => {
-          if (!label.itemId) return
-          useGitStore.getState().closeView()
-          useTabsStore.getState().openItem(label.itemId)
+        className="flex min-w-0 flex-1 items-baseline gap-1.5 self-stretch text-left"
+        onClick={(e) => {
+          e.stopPropagation()
+          void useGitStore.getState().select(file.path)
         }}
       >
-        <span className="truncate">{label.title}</span>
-        <span className="truncate text-[11px] text-muted-foreground">
-          {file.path.slice(0, file.path.lastIndexOf('/') + 1)}
-        </span>
+        <span className="my-auto truncate">{name ?? label.title}</span>
+        {name === undefined && (
+          <span className="my-auto truncate text-[11px] text-muted-foreground">
+            {file.path.slice(0, file.path.lastIndexOf('/') + 1)}
+          </span>
+        )}
       </button>
       {file.kind !== 'conflicted' && (
         <button
@@ -153,7 +172,10 @@ function FileRow({
           className="hidden shrink-0 text-muted-foreground group-hover:block hover:text-foreground"
           title="捨棄變更…"
           aria-label={`捨棄 ${label.title} 的變更`}
-          onClick={onDiscard}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDiscard()
+          }}
         >
           <Undo2 className="size-3.5" />
         </button>
@@ -167,6 +189,54 @@ function FileRow({
       >
         {kind.letter}
       </span>
+    </li>
+  )
+}
+
+/** A folder of the tree view: open / close, and check every file below at once. */
+function FolderRow({
+  folder,
+  depth,
+  open,
+  onToggle
+}: {
+  folder: ChangeFolder
+  depth: number
+  open: boolean
+  onToggle: () => void
+}) {
+  const unchecked = useGitStore((s) => s.unchecked)
+  const checkedCount = folder.paths.filter((p) => !unchecked.has(p)).length
+  return (
+    <li
+      className="flex h-7 cursor-default items-center gap-1.5 rounded-sm pr-1 text-sm hover:bg-accent/70"
+      style={{ paddingLeft: 4 + depth * 20 }}
+      data-testid="git-folder"
+      title={folder.key}
+      onClick={onToggle}
+    >
+      <input
+        type="checkbox"
+        className="size-3.5 shrink-0 accent-primary"
+        aria-label={`Commit ${folder.name} 內的檔案`}
+        checked={checkedCount === folder.paths.length}
+        ref={(el) => {
+          if (el) el.indeterminate = checkedCount > 0 && checkedCount < folder.paths.length
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onChange={() =>
+          useGitStore.getState().setChecked(folder.paths, checkedCount !== folder.paths.length)
+        }
+      />
+      <ChevronRight
+        className={cn(
+          'size-3.5 shrink-0 text-muted-foreground transition-transform',
+          open && 'rotate-90'
+        )}
+      />
+      <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+      <span className="shrink-0 text-[11px] text-muted-foreground">{folder.paths.length}</span>
     </li>
   )
 }
@@ -277,6 +347,46 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
     null
   )
   const index = useMemo(() => fileIndex(tree), [tree])
+  const treeView = useAppStore((s) => s.config?.ui.gitChangesTree ?? true)
+  const updateConfig = useAppStore((s) => s.updateConfig)
+  const changeTree = useMemo(() => buildChangeTree(status.files, tree), [status.files, tree])
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set())
+  const renderTree = (nodes: ChangeNode[], depth: number): ReactNode[] =>
+    nodes.flatMap((node) => {
+      if (node.kind === 'folder') {
+        const open = !closed.has(node.key)
+        return [
+          <FolderRow
+            key={`d:${node.key}`}
+            folder={node}
+            depth={depth}
+            open={open}
+            onToggle={() =>
+              setClosed((prev) => {
+                const next = new Set(prev)
+                if (open) next.add(node.key)
+                else next.delete(node.key)
+                return next
+              })
+            }
+          />,
+          ...(open ? renderTree(node.children, depth + 1) : [])
+        ]
+      }
+      const label = labelFor(index, node.file.path)
+      return [
+        <FileRow
+          key={node.key}
+          file={node.file}
+          label={label}
+          name={node.name}
+          depth={depth}
+          checked={!unchecked.has(node.file.path)}
+          selected={selected === node.file.path}
+          onDiscard={() => setDiscarding({ file: node.file, label })}
+        />
+      ]
+    })
   const checkedCount = status.files.filter((f) => !unchecked.has(f.path)).length
   const selectedChange = status.files.find((f) => f.path === selected)
   const allChecked = status.files.length > 0 && checkedCount === status.files.length
@@ -329,6 +439,30 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
               全選
             </CheckboxLabel>
           )}
+          <div className="flex items-center rounded-md border" role="group" aria-label="顯示方式">
+            {(
+              [
+                [true, ListTree, '樹狀顯示'],
+                [false, List, '清單顯示']
+              ] as const
+            ).map(([value, Icon, title]) => (
+              <button
+                key={title}
+                type="button"
+                title={title}
+                aria-label={title}
+                aria-pressed={treeView === value}
+                data-testid={value ? 'git-view-tree' : 'git-view-list'}
+                className={cn(
+                  'p-1 text-muted-foreground hover:text-foreground',
+                  treeView === value && 'bg-accent text-foreground'
+                )}
+                onClick={() => void updateConfig({ ui: { gitChangesTree: value } })}
+              >
+                <Icon className="size-3.5" />
+              </button>
+            ))}
+          </div>
         </div>
         {status.files.length === 0 ? (
           <p className="flex-1 px-1 text-sm text-muted-foreground" data-testid="git-clean">
@@ -336,19 +470,21 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
           </p>
         ) : (
           <ul className="min-h-0 flex-1 overflow-auto">
-            {status.files.map((file) => {
-              const label = labelFor(index, file.path)
-              return (
-                <FileRow
-                  key={file.path}
-                  file={file}
-                  label={label}
-                  checked={!unchecked.has(file.path)}
-                  selected={selected === file.path}
-                  onDiscard={() => setDiscarding({ file, label })}
-                />
-              )
-            })}
+            {treeView
+              ? renderTree(changeTree, 0)
+              : status.files.map((file) => {
+                  const label = labelFor(index, file.path)
+                  return (
+                    <FileRow
+                      key={file.path}
+                      file={file}
+                      label={label}
+                      checked={!unchecked.has(file.path)}
+                      selected={selected === file.path}
+                      onDiscard={() => setDiscarding({ file, label })}
+                    />
+                  )
+                })}
           </ul>
         )}
         {status.merging ? (

@@ -1603,6 +1603,20 @@ try {
     0,
     'secrets are ignored'
   )
+  // Tree view by default (decision 122): a folder's checkbox covers every file below it.
+  const folderRows = page.getByTestId('git-folder')
+  assert.ok((await folderRows.count()) > 0, 'changes shown as a tree')
+  const commitButton = page.getByTestId('git-commit')
+  const allLabel = await commitButton.innerText()
+  await folderRows.first().getByRole('checkbox').uncheck()
+  assert.notEqual(await commitButton.innerText(), allLabel, 'folder unchecked its files')
+  await folderRows.first().getByRole('checkbox').check()
+  assert.equal(await commitButton.innerText(), allLabel)
+  await page.getByTestId('git-view-list').click()
+  await waitUntil(async () => (await folderRows.count()) === 0, 'flat list')
+  await page.getByTestId('git-view-tree').click()
+  await folderRows.first().waitFor()
+  await page.screenshot({ path: path.join(shots, '17-git-tree.png') })
   await page.getByTestId('git-message').fill('第一個 commit')
   await page.getByTestId('git-commit').click()
   const identity = page.getByTestId('git-identity-dialog')
@@ -1627,7 +1641,9 @@ try {
   )
   await page.getByRole('button', { name: '重新整理 Git 狀態' }).click()
   const ignoreRow = page.locator('[data-testid="git-file"][data-path=".gitignore"]')
-  await ignoreRow.getByRole('button', { name: '.gitignore' }).click()
+  // Anywhere on the row selects it, e.g. its status letter at the right end.
+  const box = await ignoreRow.boundingBox()
+  await ignoreRow.click({ position: { x: (box?.width ?? 20) - 6, y: (box?.height ?? 20) / 2 } })
   await page.getByTestId('git-diff').getByText('# e2e line').waitFor()
   await page.screenshot({ path: path.join(shots, '17-git.png') })
   await ignoreRow.hover()

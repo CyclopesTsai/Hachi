@@ -49,7 +49,9 @@ export const uiSettingsSchema = z.object({
   /** Soft-wrap long lines in the request body editor (display only). */
   requestBodyWrap: z.boolean().default(false),
   /** Soft-wrap long lines in the response body viewer (display only). */
-  responseBodyWrap: z.boolean().default(false)
+  responseBodyWrap: z.boolean().default(false),
+  /** Git Commit screen: changes as a tree of collections / folders (false = flat list). */
+  gitChangesTree: z.boolean().default(true)
 })
 export type UiSettings = z.infer<typeof uiSettingsSchema>
 
