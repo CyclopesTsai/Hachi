@@ -3,12 +3,22 @@
  * discarding a file's changes, branches. Operations run one at a time; every path from
  * the renderer must be one the status reported.
  */
-import { realpath } from 'node:fs/promises'
+import { readFile, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { HachiError } from '@shared/errors'
-import type { GitBranch, GitFileChange, GitIdentity, GitRepoStatus, GitStatus } from '@shared/git'
+import type {
+  GitBranch,
+  GitFileChange,
+  GitFileDiff,
+  GitIdentity,
+  GitRepoStatus,
+  GitStatus
+} from '@shared/git'
 import { findGit, runGit, type GitLocator, type GitResult } from './git-exec'
 import { parseBranches, parseStatus } from './parse'
+
+/** Larger files are not compared (decision 119). */
+export const MAX_DIFF_BYTES = 2 * 1024 * 1024
 
 /** Moves a file to the trash (recoverable), like deletions elsewhere in Hachi. */
 export type TrashFile = (absPath: string) => Promise<void>
@@ -219,6 +229,34 @@ export class GitService {
           await restore(change.path)
       }
       return this.readStatus(workspace)
+    })
+  }
+
+  /** One changed file in the last commit and on disk now. */
+  diff(workspace: string, file: string): Promise<GitFileDiff> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      const [change] = this.pick(repo, [file])
+      if (!change) throw new HachiError('VALIDATION_ERROR', '沒有這個變更')
+      const result: GitFileDiff = { path: file, before: null, after: null, unavailable: null }
+      const tooLarge = (bytes: number) => bytes > MAX_DIFF_BYTES
+      if (change.kind !== 'untracked' && change.kind !== 'added' && !repo.empty) {
+        const source = this.repoPath(repo, change.oldPath ?? change.path)
+        const size = await this.exec(repo.root, ['cat-file', '-s', `HEAD:${source}`])
+        if (size.code === 0) {
+          if (tooLarge(Number(size.stdout.trim()))) return { ...result, unavailable: 'tooLarge' }
+          result.before = await this.must(repo.root, ['show', `HEAD:${source}`], '讀取差異')
+        }
+      }
+      if (change.kind !== 'deleted') {
+        const abs = path.join(repo.root, ...this.repoPath(repo, change.path).split('/'))
+        if (tooLarge((await stat(abs)).size)) return { ...result, unavailable: 'tooLarge' }
+        result.after = await readFile(abs, 'utf8')
+      }
+      if ([result.before, result.after].some((text) => text?.includes('\0'))) {
+        return { path: file, before: null, after: null, unavailable: 'binary' }
+      }
+      return result
     })
   }
 

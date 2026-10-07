@@ -55,6 +55,7 @@ export const INVOKE = {
   gitSetIdentity: 'git:setIdentity',
   gitCommit: 'git:commit',
   gitDiscard: 'git:discard',
+  gitDiff: 'git:diff',
   gitBranches: 'git:branches',
   gitSwitch: 'git:switch',
   gitCreateBranch: 'git:createBranch',

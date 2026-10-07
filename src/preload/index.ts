@@ -83,6 +83,7 @@ const api: HachiApi = {
     setIdentity: (input) => invoke(INVOKE.gitSetIdentity, input),
     commit: (input) => invoke(INVOKE.gitCommit, input),
     discard: (input) => invoke(INVOKE.gitDiscard, input),
+    diff: (input) => invoke(INVOKE.gitDiff, input),
     branches: () => invoke(INVOKE.gitBranches),
     switch: (input) => invoke(INVOKE.gitSwitch, input),
     createBranch: (input) => invoke(INVOKE.gitCreateBranch, input)

@@ -216,6 +216,7 @@ export const inputSchemas = {
     message: z.string().trim().min(1).max(10_000)
   }),
   [INVOKE.gitDiscard]: z.strictObject({ path: z.string().min(1).max(4096) }),
+  [INVOKE.gitDiff]: z.strictObject({ path: z.string().min(1).max(4096) }),
   [INVOKE.gitBranches]: noInput,
   [INVOKE.gitSwitch]: z.strictObject({ name: z.string().min(1).max(255), remote: z.boolean() }),
   [INVOKE.gitCreateBranch]: z.strictObject({ name: z.string().trim().min(1).max(255) }),

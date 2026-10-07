@@ -55,7 +55,6 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { NativeSelect } from '@renderer/components/ui/native-select'
 import { useTransferStore } from '@renderer/stores/transfer-store'
-import { GitPanel } from '@renderer/features/git/GitPanel'
 import { HistoryPanel } from '@renderer/features/history/HistoryPanel'
 import { cn } from '@renderer/lib/utils'
 import { useHistoryStore, type SidebarMode } from '@renderer/stores/history-store'
@@ -124,8 +123,7 @@ function createCollection(): Promise<void> {
 
 const MODES: { mode: SidebarMode; label: string }[] = [
   { mode: 'collections', label: 'Collections' },
-  { mode: 'history', label: 'History' },
-  { mode: 'git', label: 'Git' }
+  { mode: 'history', label: 'History' }
 ]
 
 /** Left sidebar: Collections tree or History of the current Workspace. */
@@ -161,13 +159,7 @@ export function CollectionSidebar() {
         {mode === 'collections' && <CollectionActions />}
       </div>
       {mode === 'collections' && <TreeToolbar />}
-      {mode === 'collections' ? (
-        <CollectionTree />
-      ) : mode === 'history' ? (
-        <HistoryPanel />
-      ) : (
-        <GitPanel />
-      )}
+      {mode === 'collections' ? <CollectionTree /> : <HistoryPanel />}
     </aside>
   )
 }

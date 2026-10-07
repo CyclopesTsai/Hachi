@@ -1581,13 +1581,22 @@ try {
   )
   step('在 Finder 中顯示: the Workspace folder, or an item in its folder')
 
-  // ---- Git (decisions 111–115) ----
-  await page.getByTestId('sidebar-git').click()
-  await page.getByTestId('git-not-repo').waitFor()
-  assert.equal(await page.getByTestId('branch-menu').count(), 0, 'no branch outside a repo')
-  await page.getByRole('button', { name: /git init/ }).click()
+  // ---- Git (decisions 111–119): entered from the header, a screen of its own ----
+  await page.getByTestId('git-menu').click()
+  await page.getByRole('menuitem', { name: /git init/ }).click()
+  await waitUntil(
+    async () =>
+      (await page
+        .getByTestId('current-branch')
+        .innerText()
+        .catch(() => '')) === 'main',
+    'the header shows the branch after git init'
+  )
+  await page.getByTestId('branch-menu').click()
+  await page.getByRole('menuitem', { name: /^Commit…/ }).click()
+  await page.getByTestId('git-screen').waitFor()
+  assert.ok(!(await page.getByTestId('collection-sidebar').isVisible()), 'sidebar hidden')
   await page.getByTestId('git-panel').waitFor()
-  assert.equal(await page.getByTestId('current-branch').innerText(), 'main')
   assert.ok((await page.getByTestId('git-file').count()) > 5, 'every Workspace file is new')
   assert.equal(
     await page.locator('[data-testid="git-file"][data-path=".hachi-secrets.json"]').count(),
@@ -1609,7 +1618,23 @@ try {
       env: { ...process.env, LC_ALL: 'C' }
     }).trim()
   assert.equal(gitIn('log', '--format=%an|%s'), 'Hachi Tester|第一個 commit')
-  step('Git tab: git init, commit the Workspace (asks for user.name / email first)')
+  step('Git: git init from the header; Commit screen asks for user.name / email, then commits')
+
+  // A changed file shows its difference from the last commit.
+  await writeFile(
+    path.join(wsDir, '.gitignore'),
+    `${await readFile(path.join(wsDir, '.gitignore'), 'utf8')}# e2e line\n`
+  )
+  await page.getByRole('button', { name: '重新整理 Git 狀態' }).click()
+  const ignoreRow = page.locator('[data-testid="git-file"][data-path=".gitignore"]')
+  await ignoreRow.getByRole('button', { name: '.gitignore' }).click()
+  await page.getByTestId('git-diff').getByText('# e2e line').waitFor()
+  await page.screenshot({ path: path.join(shots, '17-git.png') })
+  await ignoreRow.hover()
+  await ignoreRow.getByRole('button', { name: /捨棄/ }).click()
+  await page.getByTestId('git-discard-dialog').getByRole('button', { name: '捨棄變更' }).click()
+  await page.getByTestId('git-clean').waitFor()
+  assert.ok(!(await readFile(path.join(wsDir, '.gitignore'), 'utf8')).includes('# e2e line'))
 
   await writeFile(path.join(wsDir, 'scratch.json'), '{}\n')
   await page.getByRole('button', { name: '重新整理 Git 狀態' }).click()
@@ -1622,7 +1647,9 @@ try {
     (await readdir(trashDir)).some((f) => f.endsWith('scratch.json')),
     'new file trashed'
   )
-  step('discard a file: confirmed, new files go to the trash')
+  await page.getByTestId('git-back').click()
+  await page.getByTestId('collection-sidebar').waitFor()
+  step('diff against the last commit; discard (restore, or new files to the trash); 返回')
 
   await page.getByTestId('branch-menu').click()
   await page.getByRole('menuitem', { name: '建立分支…' }).click()
@@ -1647,8 +1674,6 @@ try {
     'switched back to main'
   )
   assert.equal(gitIn('branch', '--show-current'), 'main')
-  await page.screenshot({ path: path.join(shots, '17-git.png') })
-  await page.getByTestId('sidebar-collections').click()
   step('header shows the branch; create and switch branches from its menu')
 
   // Window position / size are remembered (decision 94).

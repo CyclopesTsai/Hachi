@@ -18,7 +18,7 @@ import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
 import type { HttpRequest } from '../schemas/http-request'
 import type { WsEventPayload } from '../ws'
-import type { GitBranch, GitIdentity, GitStatus } from '../git'
+import type { GitBranch, GitFileDiff, GitIdentity, GitStatus } from '../git'
 import type { CodegenRequest } from '../codegen'
 import type {
   RunnerConfig,
@@ -476,6 +476,7 @@ export interface InvokeMap {
   'git:setIdentity': { input: GitIdentity & { global: boolean }; output: void }
   'git:commit': { input: { paths: string[]; message: string }; output: GitStatus }
   'git:discard': { input: { path: string }; output: GitStatus }
+  'git:diff': { input: { path: string }; output: GitFileDiff }
   'git:branches': { input: void; output: GitBranch[] }
   'git:switch': { input: { name: string; remote: boolean }; output: GitStatus }
   'git:createBranch': { input: { name: string }; output: GitStatus }
@@ -623,6 +624,8 @@ export interface HachiApi {
     commit: InvokeFn<'git:commit'>
     /** Restores one file from the last commit; new files go to the trash. */
     discard: InvokeFn<'git:discard'>
+    /** A changed file in the last commit and now. */
+    diff: InvokeFn<'git:diff'>
     branches: InvokeFn<'git:branches'>
     switch: InvokeFn<'git:switch'>
     createBranch: InvokeFn<'git:createBranch'>

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, GitBranch, RefreshCw, Undo2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, GitBranch, RefreshCw, Undo2 } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { GitChangeKind, GitFileChange, GitRepoStatus } from '@shared/git'
 import {
@@ -28,9 +28,10 @@ import { useAppStore } from '@renderer/stores/app-store'
 import { useGitStore } from '@renderer/stores/git-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
-import { fileIndex, labelFor, type FileLabel } from './git-names'
+import { DiffView } from './DiffView'
+import { fileIndex, gitInstallHint, labelFor, type FileLabel } from './git-names'
 
-/** While the panel is open, changes made by saving files show up without a click. */
+/** While the Git screen is open, changes made by saving files show up without a click. */
 const POLL_MS = 4000
 
 const KINDS: Record<GitChangeKind, { letter: string; label: string; className: string }> = {
@@ -49,17 +50,7 @@ function NoGit() {
       className="flex flex-col gap-2 px-3 py-3 text-sm text-muted-foreground"
       data-testid="git-missing"
     >
-      <p>找不到 git。Hachi 使用這台電腦安裝的 git，請先安裝：</p>
-      {platform === 'win32' ? (
-        <p>安裝 Git for Windows（git-scm.com），安裝後重新偵測。</p>
-      ) : platform === 'darwin' ? (
-        <p>
-          在「終端機」執行 <code className="font-mono text-xs">xcode-select --install</code>
-          ，或用 Homebrew 執行 <code className="font-mono text-xs">brew install git</code>。
-        </p>
-      ) : (
-        <p>用系統的套件管理員安裝 git（例如 apt install git）。</p>
-      )}
+      <p>找不到 git。Hachi 使用這台電腦安裝的 git：{gitInstallHint(platform)}</p>
       <Button
         variant="outline"
         size="sm"
@@ -101,17 +92,23 @@ function FileRow({
   file,
   label,
   checked,
+  selected,
   onDiscard
 }: {
   file: GitFileChange
   label: FileLabel
   checked: boolean
+  selected: boolean
   onDiscard: () => void
 }) {
   const kind = KINDS[file.kind]
   return (
     <li
-      className="group flex h-7 items-center gap-1.5 rounded-sm px-1 text-sm hover:bg-accent/70"
+      className={cn(
+        'group flex h-7 items-center gap-1.5 rounded-sm px-1 text-sm hover:bg-accent/70',
+        selected && 'bg-accent'
+      )}
+      aria-selected={selected}
       data-testid="git-file"
       data-path={file.path}
       title={file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
@@ -126,8 +123,13 @@ function FileRow({
       <button
         type="button"
         className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left"
-        disabled={!label.itemId}
-        onClick={() => label.itemId && useTabsStore.getState().openItem(label.itemId)}
+        title={label.itemId ? '按兩下開啟' : undefined}
+        onClick={() => void useGitStore.getState().select(file.path)}
+        onDoubleClick={() => {
+          if (!label.itemId) return
+          useGitStore.getState().closeView()
+          useTabsStore.getState().openItem(label.itemId)
+        }}
       >
         <span className="truncate">{label.title}</span>
         <span className="truncate text-[11px] text-muted-foreground">
@@ -253,11 +255,13 @@ function IdentityDialog() {
   )
 }
 
-function RepoPanel({ status }: { status: GitRepoStatus }) {
+function RepoScreen({ status }: { status: GitRepoStatus }) {
   const tree = useTreeStore((s) => s.tree)
   const message = useGitStore((s) => s.message)
   const unchecked = useGitStore((s) => s.unchecked)
   const busy = useGitStore((s) => s.busy)
+  const selected = useGitStore((s) => s.selected)
+  const diff = useGitStore((s) => s.diff)
   const [discarding, setDiscarding] = useState<{ file: GitFileChange; label: FileLabel } | null>(
     null
   )
@@ -266,97 +270,113 @@ function RepoPanel({ status }: { status: GitRepoStatus }) {
   const allChecked = status.files.length > 0 && checkedCount === status.files.length
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 pb-2" data-testid="git-panel">
-      <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
-        <GitBranch className="size-3.5 shrink-0" />
-        <span className="truncate font-medium text-foreground" data-testid="git-branch">
-          {status.branch ?? `HEAD ${status.head ?? ''}`}
-        </span>
-        {status.upstream && (status.ahead > 0 || status.behind > 0) && (
-          <span className="flex shrink-0 items-center gap-1" title={`相對於 ${status.upstream}`}>
-            {status.ahead > 0 && (
-              <span className="flex items-center">
-                <ArrowUp className="size-3" />
-                {status.ahead}
-              </span>
-            )}
-            {status.behind > 0 && (
-              <span className="flex items-center">
-                <ArrowDown className="size-3" />
-                {status.behind}
-              </span>
-            )}
+    <div className="flex min-h-0 flex-1" data-testid="git-panel">
+      <aside className="flex w-96 shrink-0 flex-col gap-2 border-r bg-muted/40 p-2">
+        <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+          <GitBranch className="size-3.5 shrink-0" />
+          <span className="truncate font-medium text-foreground" data-testid="git-branch">
+            {status.branch ?? `HEAD ${status.head ?? ''}`}
           </span>
-        )}
-        <div className="flex-1" />
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground"
-          title="重新整理"
-          aria-label="重新整理 Git 狀態"
-          onClick={() => void useGitStore.getState().refresh()}
-        >
-          <RefreshCw className="size-3.5" />
-        </button>
-      </div>
-      <textarea
-        aria-label="Commit 訊息"
-        data-testid="git-message"
-        placeholder="Commit 訊息"
-        rows={3}
-        value={message}
-        onChange={(e) => useGitStore.getState().setMessage(e.target.value)}
-        className="w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      />
-      <Button
-        size="sm"
-        data-testid="git-commit"
-        disabled={busy || checkedCount === 0 || message.trim() === ''}
-        onClick={() => void useGitStore.getState().commit()}
-      >
-        Commit（{checkedCount} 個檔案）
-      </Button>
-      <div className="flex items-center gap-2 px-1 pt-1">
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          變更（{status.files.length}）
-        </span>
-        <div className="flex-1" />
-        {status.files.length > 0 && (
-          <CheckboxLabel
-            checked={allChecked}
-            onChange={() => useGitStore.getState().setAll(!allChecked)}
+          {status.upstream && (status.ahead > 0 || status.behind > 0) && (
+            <span className="flex shrink-0 items-center gap-1" title={`相對於 ${status.upstream}`}>
+              {status.ahead > 0 && (
+                <span className="flex items-center">
+                  <ArrowUp className="size-3" />
+                  {status.ahead}
+                </span>
+              )}
+              {status.behind > 0 && (
+                <span className="flex items-center">
+                  <ArrowDown className="size-3" />
+                  {status.behind}
+                </span>
+              )}
+            </span>
+          )}
+          <div className="flex-1" />
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            title="重新整理"
+            aria-label="重新整理 Git 狀態"
+            onClick={() => void useGitStore.getState().refresh()}
           >
-            全選
-          </CheckboxLabel>
+            <RefreshCw className="size-3.5" />
+          </button>
+        </div>
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            變更（{status.files.length}）
+          </span>
+          <div className="flex-1" />
+          {status.files.length > 0 && (
+            <CheckboxLabel
+              checked={allChecked}
+              onChange={() => useGitStore.getState().setAll(!allChecked)}
+            >
+              全選
+            </CheckboxLabel>
+          )}
+        </div>
+        {status.files.length === 0 ? (
+          <p className="flex-1 px-1 text-sm text-muted-foreground" data-testid="git-clean">
+            沒有變更。
+          </p>
+        ) : (
+          <ul className="min-h-0 flex-1 overflow-auto">
+            {status.files.map((file) => {
+              const label = labelFor(index, file.path)
+              return (
+                <FileRow
+                  key={file.path}
+                  file={file}
+                  label={label}
+                  checked={!unchecked.has(file.path)}
+                  selected={selected === file.path}
+                  onDiscard={() => setDiscarding({ file, label })}
+                />
+              )
+            })}
+          </ul>
         )}
-      </div>
-      {status.files.length === 0 ? (
-        <p className="px-1 text-sm text-muted-foreground" data-testid="git-clean">
-          沒有變更。
-        </p>
-      ) : (
-        <ul className="min-h-0 flex-1 overflow-auto">
-          {status.files.map((file) => {
-            const label = labelFor(index, file.path)
-            return (
-              <FileRow
-                key={file.path}
-                file={file}
-                label={label}
-                checked={!unchecked.has(file.path)}
-                onDiscard={() => setDiscarding({ file, label })}
-              />
-            )
-          })}
-        </ul>
-      )}
+        <textarea
+          aria-label="Commit 訊息"
+          data-testid="git-message"
+          placeholder="Commit 訊息"
+          rows={4}
+          value={message}
+          onChange={(e) => useGitStore.getState().setMessage(e.target.value)}
+          className="w-full shrink-0 resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        />
+        <Button
+          size="sm"
+          className="shrink-0"
+          data-testid="git-commit"
+          disabled={busy || checkedCount === 0 || message.trim() === ''}
+          onClick={() => void useGitStore.getState().commit()}
+        >
+          Commit（{checkedCount} 個檔案）
+        </Button>
+      </aside>
+      <section className="flex min-w-0 flex-1 flex-col">
+        {diff ? (
+          <DiffView diff={diff} />
+        ) : (
+          <p className="m-auto text-sm text-muted-foreground">
+            {selected ? '讀取中…' : '選擇左側的檔案查看與最後一次 commit 的差異'}
+          </p>
+        )}
+      </section>
       <DiscardDialog target={discarding} onClose={() => setDiscarding(null)} />
     </div>
   )
 }
 
-/** Sidebar "Git" tab (decision 112). */
-export function GitPanel() {
+/**
+ * The Git screen (decision 119): replaces the sidebar and tabs until 返回; opened from
+ * the header's Git menu.
+ */
+export function GitScreen() {
   const status = useGitStore((s) => s.status)
   const error = useGitStore((s) => s.error)
 
@@ -364,19 +384,31 @@ export function GitPanel() {
     const refresh = () => {
       if (document.visibilityState === 'visible') void useGitStore.getState().refresh()
     }
-    refresh()
     const timer = setInterval(refresh, POLL_MS)
     return () => clearInterval(timer)
   }, [])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="git-screen">
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b px-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1"
+          data-testid="git-back"
+          onClick={() => useGitStore.getState().closeView()}
+        >
+          <ArrowLeft />
+          返回
+        </Button>
+        <span className="text-sm font-medium">Commit</span>
+      </div>
       {status === null ? null : status.state === 'no-git' ? (
         <NoGit />
       ) : status.state === 'not-repo' ? (
         <NotRepo />
       ) : (
-        <RepoPanel status={status} />
+        <RepoScreen status={status} />
       )}
       {error && (
         <p

@@ -153,6 +153,36 @@ describe('GitService', () => {
     expect(left.files).toEqual([])
   })
 
+  it('compares a changed file with the last commit', async () => {
+    git(repo, 'init', '-q', '-b', 'main')
+    git(repo, 'config', 'user.name', 'Tester')
+    git(repo, 'config', 'user.email', 'tester@example.com')
+    await writeFile(path.join(ws, 'collections', 'a.json'), 'v1\n')
+    await writeFile(path.join(ws, 'collections', 'gone.json'), 'old\n')
+    git(repo, 'add', '-A')
+    git(repo, 'commit', '-q', '-m', 'init')
+    await writeFile(path.join(ws, 'collections', 'a.json'), 'v2\n')
+    await rm(path.join(ws, 'collections', 'gone.json'))
+    await writeFile(path.join(ws, 'collections', 'new.json'), 'new\n')
+
+    expect(await service.diff(ws, 'collections/a.json')).toEqual({
+      path: 'collections/a.json',
+      before: 'v1\n',
+      after: 'v2\n',
+      unavailable: null
+    })
+    expect(await service.diff(ws, 'collections/gone.json')).toMatchObject({
+      before: 'old\n',
+      after: null
+    })
+    expect(await service.diff(ws, 'collections/new.json')).toMatchObject({
+      before: null,
+      after: 'new\n'
+    })
+    await writeFile(path.join(ws, 'collections', 'bin.dat'), Buffer.from([0, 1, 2]))
+    expect((await service.diff(ws, 'collections/bin.dat')).unavailable).toBe('binary')
+  })
+
   it('creates, lists and switches branches', async () => {
     git(repo, 'init', '-q', '-b', 'main')
     git(repo, 'config', 'user.name', 'Tester')

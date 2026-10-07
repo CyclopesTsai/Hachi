@@ -227,6 +227,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       ctx.git.setIdentity(workspacePath(), { name: input.name, email: input.email }, input.global),
     [INVOKE.gitCommit]: (input) => ctx.git.commit(workspacePath(), input.paths, input.message),
     [INVOKE.gitDiscard]: (input) => ctx.git.discard(workspacePath(), input.path),
+    [INVOKE.gitDiff]: (input) => ctx.git.diff(workspacePath(), input.path),
     [INVOKE.gitBranches]: () => ctx.git.branches(workspacePath()),
     [INVOKE.gitSwitch]: (input) => ctx.git.switchBranch(workspacePath(), input.name, input.remote),
     [INVOKE.gitCreateBranch]: (input) => ctx.git.createBranch(workspacePath(), input.name),

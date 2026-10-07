@@ -1,12 +1,19 @@
 import { create } from 'zustand'
-import type { GitBranch, GitIdentity, GitStatus } from '@shared/git'
+import type { GitBranch, GitFileDiff, GitIdentity, GitStatus } from '@shared/git'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from './app-store'
 import { useTabsStore } from './tabs-store'
 
-/** Git of the current Workspace (decisions 111–115). */
+/** The Git screen that replaces the sidebar and tabs (decision 119); null = closed. */
+export type GitView = 'commit'
+
+/** Git of the current Workspace (decisions 111–119). */
 interface GitState {
   status: GitStatus | null
+  view: GitView | null
+  /** File shown in the Commit screen's diff. */
+  selected: string | null
+  diff: GitFileDiff | null
   branches: GitBranch[]
   /** Commit message being written. */
   message: string
@@ -20,6 +27,9 @@ interface GitState {
 
   refresh(): Promise<void>
   reset(): void
+  openView(view: GitView): void
+  closeView(): void
+  select(path: string | null): Promise<void>
   setMessage(message: string): void
   toggle(path: string): void
   setAll(checked: boolean): void
@@ -54,6 +64,9 @@ export const useGitStore = create<GitState>()((set, get) => {
 
   return {
     status: null,
+    view: null,
+    selected: null,
+    diff: null,
     branches: [],
     message: '',
     unchecked: new Set(),
@@ -72,6 +85,9 @@ export const useGitStore = create<GitState>()((set, get) => {
           status,
           ...(unchecked.length !== get().unchecked.size ? { unchecked: new Set(unchecked) } : {})
         })
+        // The shown file may have changed again, or be committed / discarded by now.
+        const selected = get().selected
+        if (selected && get().view) await get().select(paths.has(selected) ? selected : null)
       } catch (error) {
         set({ error: errorMessage(error) })
       }
@@ -80,12 +96,39 @@ export const useGitStore = create<GitState>()((set, get) => {
     reset() {
       set({
         status: null,
+        view: null,
+        selected: null,
+        diff: null,
         branches: [],
         message: '',
         unchecked: new Set(),
         error: null,
         askIdentity: false
       })
+    },
+
+    openView(view) {
+      set({ view })
+      void get().refresh()
+    },
+
+    closeView() {
+      set({ view: null, selected: null, diff: null })
+    },
+
+    async select(path) {
+      if (path === null) {
+        set({ selected: null, diff: null })
+        return
+      }
+      if (path !== get().selected) set({ selected: path, diff: null })
+      try {
+        const diff = await unwrap(window.hachi.git.diff({ path }))
+        // Ignore an answer for a file that is no longer selected.
+        if (get().selected === path) set({ diff })
+      } catch (error) {
+        if (get().selected === path) set({ diff: null, error: errorMessage(error) })
+      }
     },
 
     setMessage(message) {

@@ -12,7 +12,9 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { CollectionSidebar } from '@renderer/features/collections/CollectionSidebar'
 import { BranchMenu } from '@renderer/features/git/BranchMenu'
+import { GitScreen } from '@renderer/features/git/GitScreen'
 import { useGitSync } from '@renderer/features/git/use-git-sync'
+import { useGitStore } from '@renderer/stores/git-store'
 import { EnvironmentSelect } from '@renderer/features/environments/EnvironmentSelect'
 import { HistoryUsageIndicator } from '@renderer/features/history/HistoryUsageIndicator'
 import { EditorHost } from '@renderer/features/http/EditorHost'
@@ -31,6 +33,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
   const loadWorkspaceSettings = useAppStore((s) => s.loadWorkspaceSettings)
   const platform = useAppStore((s) => s.info?.platform)
   useGitSync(workspace.id)
+  const gitView = useGitStore((s) => s.view)
 
   useEffect(() => {
     void loadWorkspaceSettings()
@@ -85,7 +88,9 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
         <EnvironmentSelect />
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {gitView && <GitScreen />}
+      {/* Hidden, not unmounted, while the Git screen is open: tabs keep their state. */}
+      <div className={gitView ? 'hidden' : 'flex min-h-0 flex-1'}>
         <CollectionSidebar />
         <main className="flex min-w-0 flex-1 flex-col">
           <EditorHost />

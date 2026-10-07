@@ -33,3 +33,12 @@ export function labelFor(index: ReadonlyMap<string, FileLabel>, path: string): F
   if (env) return { title: `環境檔 ${env[1]}`, itemId: null }
   return { title: path.slice(path.lastIndexOf('/') + 1), itemId: null }
 }
+
+/** How to install git on this platform (decision 111). */
+export function gitInstallHint(platform: string | undefined): string {
+  if (platform === 'win32') return '請安裝 Git for Windows（git-scm.com）。'
+  if (platform === 'darwin') {
+    return '在「終端機」執行 xcode-select --install，或用 Homebrew 執行 brew install git。'
+  }
+  return '請用系統的套件管理員安裝 git（例如 apt install git）。'
+}

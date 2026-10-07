@@ -271,6 +271,7 @@
 | 116 | Git History                  | 主畫面分頁：**所有分支的線圖**（commit、分支 / tag 標籤）＋**commit 詳情**（訊息、作者、時間、改了哪些檔案）＋**檔案差異**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 117 | 在 Finder 中顯示             | Workspace 選單與樹狀選單的右鍵選單（Collection / 資料夾 / 請求）加「在 Finder 中顯示」（Windows：在檔案總管中顯示；Linux：在檔案管理員中顯示）：資料夾直接開啟，請求在資料夾中選取檔案                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | 118 | 標題列                       | 拿掉 Workspace 名稱右側的路徑（滑鼠移到 Workspace 名稱上可看到）；在 Git repo 中時顯示 **Git 圖示＋分支名稱**（參考 IntelliJ），點開可切換 / 建立分支（取代決策 115 的「狀態列」）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 119 | Git 畫面                     | **拿掉側欄的 Git 分頁**；入口改為標題列的 Git 按鈕：在 repo 中是分支按鈕（選單：Commit…、建立分支、切換分支），不在 repo 時是「Git」按鈕（git init），沒裝 git 時顯示安裝說明。選「Commit…」後**側欄＋主畫面整塊換成 Git 畫面**（標題列保留，「返回」回到原本的畫面，分頁狀態保留）：左邊變更清單＋commit 訊息，**右邊是選取檔案與最後一次 commit 的差異**（`@codemirror/merge`，MIT；超過 2 MB 或非文字檔不顯示），按兩下檔案開啟對應的項目。之後的 History（Git-c）是 Git 畫面中的另一個分頁                                                                                                                                                                                                                                                                                                     |
 
 ## 下一步
 
@@ -291,9 +292,9 @@
 開始任何一項前先說明規劃、確認設計決策。
 
 1. **Git 管理**（決策 111–118）：分三階段
-   - **Git-a ✅（等使用者確認）**：偵測 git / repo、`git init`、GIT 分頁（變更清單、commit、捨棄變更、user.name / email 詢問）、標題列的分支選單（切換 / 建立）；另完成決策 117、118。驗證：單元測試 441 個（`git-service.test.ts` 用真的 git、`git-names.test.ts`），E2E 新增 Finder、git init / commit / 捨棄 / 建立與切換分支（淺色、深色）
+   - **Git-a ✅（等使用者確認）**：偵測 git / repo、`git init`、Git 畫面（變更清單、檔案差異、commit、捨棄變更、user.name / email 詢問）、標題列的 Git / 分支選單（Commit…、切換 / 建立分支）；另完成決策 117–119。驗證：單元測試 441 個（`git-service.test.ts` 用真的 git、`git-names.test.ts`），E2E 新增 Finder、git init / commit / 捨棄 / 建立與切換分支（淺色、深色）
    - **Git-b**：Fetch / Pull / Push、帳密 / SSH 密語輸入框（askpass）、衝突逐檔處理、Workspace 的自動 Fetch 設定
-   - **Git-c**：History 分頁（線圖、commit 詳情、檔案差異）
+   - **Git-c**：Git 畫面的 History 分頁（線圖、commit 詳情、檔案差異）
 2. **Windows 版**：見下方「發佈與平台」的 Windows 版一列（nsis / msi、`src/main/platform/`、CI 加 `windows-latest`）
 3. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 

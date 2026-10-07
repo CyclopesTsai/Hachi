@@ -42,6 +42,17 @@ export interface GitBranch {
   upstream: string | null
 }
 
+/** A file in the last commit and now (decision 119: the Commit screen's diff). */
+export interface GitFileDiff {
+  path: string
+  /** null: not in the last commit (new file) */
+  before: string | null
+  /** null: deleted */
+  after: string | null
+  /** Too large (over 2 MB) or not text: not shown. */
+  unavailable: 'tooLarge' | 'binary' | null
+}
+
 export interface GitIdentity {
   name: string
   email: string

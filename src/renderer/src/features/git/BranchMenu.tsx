@@ -1,4 +1,4 @@
-import { Check, ChevronDown, GitBranch, Plus } from 'lucide-react'
+import { Check, ChevronDown, GitBranch, GitCommitHorizontal, Plus } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import type { GitBranch as Branch } from '@shared/git'
 import {
@@ -28,7 +28,9 @@ import {
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
 import { Input } from '@renderer/components/ui/input'
+import { useAppStore } from '@renderer/stores/app-store'
 import { useGitStore } from '@renderer/stores/git-store'
+import { gitInstallHint } from './git-names'
 
 function CreateBranchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState('')
@@ -77,12 +79,49 @@ function CreateBranchDialog({ open, onClose }: { open: boolean; onClose: () => v
  * Header: Git icon and the current branch (decision 115, like IntelliJ); the menu
  * switches to another branch or creates one. Hidden outside a Git repository.
  */
+/** Outside a repository: a "Git" button offering git init, or how to install git. */
+function NoRepoMenu({ missing }: { missing: boolean }) {
+  const platform = useAppStore((s) => s.info?.platform)
+  return (
+    <DropdownMenu onOpenChange={(open) => open && void useGitStore.getState().refresh()}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="gap-1.5 px-2" data-testid="git-menu">
+          <GitBranch className="text-muted-foreground" />
+          Git
+          <ChevronDown className="text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72">
+        {missing ? (
+          <div className="flex flex-col gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">找不到 git</p>
+            <p>Hachi 使用這台電腦安裝的 git：{gitInstallHint(platform)}</p>
+            <p>安裝後重新開啟這個選單即可。</p>
+          </div>
+        ) : (
+          <>
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+              這個 Workspace 不在 Git repo 中。建立後機密變數與歷史紀錄已在 .gitignore
+              中，不會被提交。
+            </div>
+            <DropdownMenuItem onSelect={() => void useGitStore.getState().init()}>
+              <GitBranch />
+              建立 Git repo（git init）
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function BranchMenu() {
   const status = useGitStore((s) => s.status)
   const branches = useGitStore((s) => s.branches)
   const [creating, setCreating] = useState(false)
   const [confirm, setConfirm] = useState<Branch | null>(null)
-  if (status?.state !== 'repo') return null
+  if (status === null) return null
+  if (status.state !== 'repo') return <NoRepoMenu missing={status.state === 'no-git'} />
 
   const changes = status.files.length
   const pick = (branch: Branch) => {
@@ -119,6 +158,14 @@ export function BranchMenu() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-[60vh] min-w-56 overflow-auto">
+          <DropdownMenuItem onSelect={() => useGitStore.getState().openView('commit')}>
+            <GitCommitHorizontal />
+            Commit…
+            {changes > 0 && (
+              <span className="ml-auto text-xs text-muted-foreground">{changes} 個變更</span>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setCreating(true)}>
             <Plus />
             建立分支…
