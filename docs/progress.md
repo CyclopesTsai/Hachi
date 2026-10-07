@@ -271,7 +271,7 @@
   - IPC：`transfer:exportPostman` 改為 `transfer:export { id, format, environmentId }`，新增 `transfer:importBrunoFolder`；`ImportReport.environments`
   - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
   - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
-- **Bruno YAML 與多個 Collection 匯入完成，等使用者確認**（2026-10-07，決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
+- **v0.2.1 發佈**（2026-10-07）：Bruno YAML 與多個 Collection 匯入（決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
 - Phase 6 等使用者確認
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
