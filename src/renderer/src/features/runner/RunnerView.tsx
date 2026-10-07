@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   Download,
   FileSpreadsheet,
   Play,
@@ -303,9 +304,58 @@ function Settings({
           </Button>
         )}
       </Field>
+      <DataFileExample />
     </fieldset>
   )
 }
+
+const CSV_EXAMPLE = `username,password
+alice,secret1
+bob,secret2`
+
+const JSON_EXAMPLE = `[
+  { "username": "alice", "password": "secret1" },
+  { "username": "bob", "password": "secret2" }
+]`
+
+/** What a data file looks like and how its columns are used. */
+function DataFileExample() {
+  const code = 'overflow-auto rounded bg-muted px-2 py-1.5 font-mono text-[11px] leading-snug'
+  return (
+    <details className="-mt-2 text-xs text-muted-foreground" data-testid="runner-data-example">
+      <summary className="cursor-default select-none hover:text-foreground">查看資料檔範例</summary>
+      <div className="mt-1.5 flex flex-col gap-1.5">
+        <span>CSV（第一列是欄名）：</span>
+        <pre className={code}>{CSV_EXAMPLE}</pre>
+        <span>JSON（物件陣列）：</span>
+        <pre className={code}>{JSON_EXAMPLE}</pre>
+        <span>
+          兩個範例都是 2 列：第 1、3、5… 輪用 alice，第 2、4、6… 輪用 bob。請求中寫{' '}
+          <code className="font-mono">{'{{username}}'}</code>，腳本中用{' '}
+          <code className="font-mono">pm.iterationData.get(&apos;username&apos;)</code>。
+        </span>
+      </div>
+    </details>
+  )
+}
+
+/** Result table columns; a hint explains the less obvious ones on hover. */
+const ROW_COLUMNS: [string, string | null][] = [
+  ['#', '完成的順序'],
+  [
+    '輪',
+    '第幾輪：全部 worker 共用的流水號，依開始的先後編號（不是固定分給某個 worker）。一輪 = 勾選的請求依序各跑一次；有資料檔時第 n 輪用第 n 列'
+  ],
+  [
+    'worker',
+    '由第幾個 worker 執行。並行數 = 同時執行的 worker 數，每個 worker 依序跑「執行次數」輪，變數各自獨立'
+  ],
+  ['請求', null],
+  ['狀態', null],
+  ['耗時', null],
+  ['大小', null],
+  ['測試', '通過數 / 測試與斷言總數；— 表示這個請求沒有測試或斷言']
+]
 
 function StatsTable({ items, total }: { items: RunnerStatsRow[]; total: RunnerStatsRow }) {
   const cols: [string, (l: LatencyStats | null) => string][] = [
@@ -678,9 +728,16 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
           <table className="w-full text-xs whitespace-nowrap" data-testid="runner-rows">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
-                {['#', '輪', 'worker', '請求', '狀態', '耗時', '大小', '測試'].map((h) => (
-                  <th key={h} className="px-2 py-1.5 font-medium">
-                    {h}
+                {ROW_COLUMNS.map(([h, hint]) => (
+                  <th key={h} className="px-2 py-1.5 font-medium" title={hint ?? undefined}>
+                    {hint ? (
+                      <span className="inline-flex items-center gap-1">
+                        {h}
+                        <CircleHelp className="size-3 opacity-60" aria-hidden />
+                      </span>
+                    ) : (
+                      h
+                    )}
                   </th>
                 ))}
               </tr>
