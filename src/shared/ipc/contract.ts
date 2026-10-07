@@ -220,6 +220,22 @@ export const inputSchemas = {
   [INVOKE.gitBranches]: noInput,
   [INVOKE.gitSwitch]: z.strictObject({ name: z.string().min(1).max(255), remote: z.boolean() }),
   [INVOKE.gitCreateBranch]: z.strictObject({ name: z.string().trim().min(1).max(255) }),
+  [INVOKE.gitRemote]: noInput,
+  [INVOKE.gitSetRemote]: z.strictObject({ url: z.string().trim().min(1).max(2048) }),
+  [INVOKE.gitFetch]: noInput,
+  [INVOKE.gitPull]: noInput,
+  [INVOKE.gitPush]: noInput,
+  [INVOKE.gitResolve]: z.strictObject({
+    path: z.string().min(1).max(4096),
+    how: z.enum(['ours', 'theirs', 'resolved'])
+  }),
+  [INVOKE.gitAbortMerge]: noInput,
+  [INVOKE.gitFinishMerge]: noInput,
+  [INVOKE.gitOpenFile]: z.strictObject({ path: z.string().min(1).max(4096) }),
+  [INVOKE.gitAnswerPrompt]: z.strictObject({
+    id: z.string().min(1).max(100),
+    value: z.string().max(10_000).nullable()
+  }),
   [INVOKE.transferImportBrunoCollections]: z.strictObject({
     scanId: z.string().min(1).max(100),
     paths: z.array(z.string().max(4096)).min(1).max(200)

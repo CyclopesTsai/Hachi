@@ -18,7 +18,15 @@ import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
 import type { HttpRequest } from '../schemas/http-request'
 import type { WsEventPayload } from '../ws'
-import type { GitBranch, GitFileDiff, GitIdentity, GitStatus } from '../git'
+import type {
+  GitBranch,
+  GitFileDiff,
+  GitIdentity,
+  GitPrompt,
+  GitRemote,
+  GitResolution,
+  GitStatus
+} from '../git'
 import type { CodegenRequest } from '../codegen'
 import type {
   RunnerConfig,
@@ -480,6 +488,16 @@ export interface InvokeMap {
   'git:branches': { input: void; output: GitBranch[] }
   'git:switch': { input: { name: string; remote: boolean }; output: GitStatus }
   'git:createBranch': { input: { name: string }; output: GitStatus }
+  'git:remote': { input: void; output: GitRemote | null }
+  'git:setRemote': { input: { url: string }; output: GitStatus }
+  'git:fetch': { input: void; output: GitStatus }
+  'git:pull': { input: void; output: GitStatus }
+  'git:push': { input: void; output: GitStatus }
+  'git:resolve': { input: { path: string; how: GitResolution }; output: GitStatus }
+  'git:abortMerge': { input: void; output: GitStatus }
+  'git:finishMerge': { input: void; output: GitStatus }
+  'git:openFile': { input: { path: string }; output: void }
+  'git:answerPrompt': { input: { id: string; value: string | null }; output: void }
   'transfer:importBrunoCollections': {
     input: ImportBrunoCollectionsInput
     output: ImportOutcome[]
@@ -530,6 +548,7 @@ export interface EventPayloads {
   'runner:event': RunnerEvent
   'ws:event': WsEventPayload
   'app:closeRequested': CloseRequest
+  'git:prompt': GitPrompt
 }
 
 export interface HachiApi {
@@ -629,6 +648,23 @@ export interface HachiApi {
     branches: InvokeFn<'git:branches'>
     switch: InvokeFn<'git:switch'>
     createBranch: InvokeFn<'git:createBranch'>
+    /** origin (or the only remote), or null. */
+    remote: InvokeFn<'git:remote'>
+    /** Sets origin's URL (added when missing). */
+    setRemote: InvokeFn<'git:setRemote'>
+    fetch: InvokeFn<'git:fetch'>
+    /** Merge pull; conflicts come back in the status (`merging`), not as an error. */
+    pull: InvokeFn<'git:pull'>
+    /** The first push of a branch sets its upstream. */
+    push: InvokeFn<'git:push'>
+    /** Settles a conflicted file: ours / theirs, or resolved after editing it. */
+    resolve: InvokeFn<'git:resolve'>
+    abortMerge: InvokeFn<'git:abortMerge'>
+    finishMerge: InvokeFn<'git:finishMerge'>
+    /** Opens a changed file in its default app (to fix a conflict by hand). */
+    openFile: InvokeFn<'git:openFile'>
+    /** Answer to a `git:prompt` event (null = cancelled). */
+    answerPrompt: InvokeFn<'git:answerPrompt'>
   }
   transfer: {
     /** Open dialog, then imports a Postman / Bruno JSON file. Null if cancelled. */

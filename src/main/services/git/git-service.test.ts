@@ -214,4 +214,88 @@ describe('GitService', () => {
     )
     expect(await missing.status(ws)).toEqual({ state: 'no-git' })
   })
+
+  it('fetches, pulls (merge), pushes, and settles conflicts file by file', async () => {
+    const remote = path.join(tmp, 'remote.git')
+    const other = path.join(tmp, 'other')
+    git(tmp, 'init', '-q', '--bare', '-b', 'main', remote)
+    git(repo, 'init', '-q', '-b', 'main')
+    for (const dir of [repo]) {
+      git(dir, 'config', 'user.name', 'Tester')
+      git(dir, 'config', 'user.email', 'tester@example.com')
+    }
+    const file = path.join(ws, 'collections', 'a.json')
+    await writeFile(file, 'line 1\nline 2\n')
+    git(repo, 'add', '-A')
+    git(repo, 'commit', '-q', '-m', 'init')
+
+    await expect(service.push(ws)).rejects.toThrow(/還沒有設定遠端/)
+    expect((await service.setRemote(ws, remote)) as GitRepoStatus).toMatchObject({
+      hasRemote: true
+    })
+    await expect(service.setRemote(ws, '--upload-pack=x')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR'
+    })
+    expect(await service.remote(ws)).toEqual({ name: 'origin', url: remote })
+    // First push sets the upstream.
+    expect((await service.push(ws)) as GitRepoStatus).toMatchObject({
+      upstream: 'origin/main',
+      ahead: 0
+    })
+
+    // Someone else pushes a change.
+    git(tmp, 'clone', '-q', remote, other)
+    git(other, 'config', 'user.name', 'Other')
+    git(other, 'config', 'user.email', 'other@example.com')
+    await writeFile(path.join(other, 'api', 'collections', 'a.json'), 'line 1 (theirs)\nline 2\n')
+    git(other, 'commit', '-q', '-am', 'theirs')
+    git(other, 'push', '-q')
+
+    expect(((await service.fetch(ws)) as GitRepoStatus).behind).toBe(1)
+    // Our own change to the same line, then pull: a conflict, not an error.
+    await writeFile(file, 'line 1 (ours)\nline 2\n')
+    git(repo, 'commit', '-q', '-am', 'ours')
+    await expect(service.push(ws)).rejects.toThrow(/請先 Pull/)
+    const merging = (await service.pull(ws)) as GitRepoStatus
+    expect(merging.merging).toBe(true)
+    expect(merging.files).toEqual([{ path: 'collections/a.json', kind: 'conflicted' }])
+    await expect(service.commit(ws, ['collections/a.json'], 'x')).rejects.toThrow(/完成合併/)
+    await expect(service.resolve(ws, 'collections/a.json', 'resolved')).rejects.toThrow(/衝突標記/)
+    await expect(service.finishMerge(ws)).rejects.toThrow(/還有衝突/)
+
+    const settled = (await service.resolve(ws, 'collections/a.json', 'theirs')) as GitRepoStatus
+    expect(settled.files.map((f) => f.kind)).toEqual(['modified'])
+    expect(await readFile(file, 'utf8')).toBe('line 1 (theirs)\nline 2\n')
+    const done = (await service.finishMerge(ws)) as GitRepoStatus
+    expect(done).toMatchObject({ merging: false, files: [], ahead: 2, behind: 0 })
+    expect(((await service.push(ws)) as GitRepoStatus).ahead).toBe(0)
+  })
+
+  it('aborts a merge', async () => {
+    const remote = path.join(tmp, 'remote.git')
+    const other = path.join(tmp, 'other')
+    git(tmp, 'init', '-q', '--bare', '-b', 'main', remote)
+    git(repo, 'init', '-q', '-b', 'main')
+    git(repo, 'config', 'user.name', 'Tester')
+    git(repo, 'config', 'user.email', 'tester@example.com')
+    const file = path.join(ws, 'a.txt')
+    await writeFile(file, 'base\n')
+    git(repo, 'add', '-A')
+    git(repo, 'commit', '-q', '-m', 'init')
+    git(repo, 'remote', 'add', 'origin', remote)
+    git(repo, 'push', '-q', '-u', 'origin', 'main')
+    git(tmp, 'clone', '-q', remote, other)
+    git(other, 'config', 'user.name', 'Other')
+    git(other, 'config', 'user.email', 'other@example.com')
+    await writeFile(path.join(other, 'api', 'a.txt'), 'theirs\n')
+    git(other, 'commit', '-q', '-am', 'theirs')
+    git(other, 'push', '-q')
+    await writeFile(file, 'ours\n')
+    git(repo, 'commit', '-q', '-am', 'ours')
+
+    expect(((await service.pull(ws)) as GitRepoStatus).merging).toBe(true)
+    const aborted = (await service.abortMerge(ws)) as GitRepoStatus
+    expect(aborted).toMatchObject({ merging: false, files: [] })
+    expect(await readFile(file, 'utf8')).toBe('ours\n')
+  })
 })

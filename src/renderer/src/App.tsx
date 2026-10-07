@@ -30,6 +30,8 @@ import { useAppStore } from '@renderer/stores/app-store'
 import { useEnvStore } from '@renderer/stores/env-store'
 import { useHistoryStore } from '@renderer/stores/history-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { GitPromptDialog } from '@renderer/features/git/GitPromptDialog'
+import { useGitStore } from '@renderer/stores/git-store'
 import { useTransferStore } from '@renderer/stores/transfer-store'
 import { useRunnerStore } from '@renderer/stores/runner-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
@@ -43,6 +45,7 @@ function useMainProcessEvents(): void {
       window.hachi.on(EVENTS.workspaceChanged, (ws) => store().workspaceChanged(ws)),
       window.hachi.on(EVENTS.configChanged, (config) => store().configChanged(config)),
       window.hachi.on(EVENTS.treeChanged, (tree) => useTreeStore.getState().applyTree(tree)),
+      window.hachi.on(EVENTS.gitPrompt, (prompt) => useGitStore.getState().prompted(prompt)),
       window.hachi.on(EVENTS.historyChanged, (usage) =>
         useHistoryStore.getState().usageChanged(usage)
       ),
@@ -256,6 +259,7 @@ export function App() {
       <CurlImportDialog />
       <ExportDialog />
       <BrunoPickDialog />
+      <GitPromptDialog />
       <TransferResultDialog />
       <NoticeDialog />
     </>

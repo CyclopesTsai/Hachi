@@ -161,6 +161,20 @@ function WorkspaceSettingsForm({
         />
         <span className="text-xs text-muted-foreground">0–{MAX_REDIRECTS_LIMIT} 次</span>
       </Row>
+      <Row label="Git">
+        <div className="flex flex-col gap-1">
+          <CheckboxLabel
+            checked={value.gitAutoFetch}
+            data-testid="git-auto-fetch"
+            onChange={(e) => setValue({ ...value, gitAutoFetch: e.target.checked })}
+          >
+            開啟 Workspace 時自動 Fetch
+          </CheckboxLabel>
+          <span className="text-xs text-muted-foreground">
+            關閉時只在按下 Fetch / Pull 時連線遠端。
+          </span>
+        </div>
+      </Row>
       <Row label="腳本">
         <div className="flex flex-col gap-1">
           <CheckboxLabel

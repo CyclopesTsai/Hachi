@@ -1,5 +1,16 @@
-import { Check, ChevronDown, GitBranch, GitCommitHorizontal, Plus } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Check,
+  ChevronDown,
+  GitBranch,
+  GitCommitHorizontal,
+  Link,
+  Loader2,
+  Plus,
+  RefreshCw
+} from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
 import type { GitBranch as Branch } from '@shared/git'
 import {
   AlertDialog,
@@ -31,6 +42,58 @@ import { Input } from '@renderer/components/ui/input'
 import { useAppStore } from '@renderer/stores/app-store'
 import { useGitStore } from '@renderer/stores/git-store'
 import { gitInstallHint } from './git-names'
+
+/** origin's URL (decision 113): needed before the first push of a new repository. */
+function RemoteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const remote = useGitStore((s) => s.remote)
+  const busy = useGitStore((s) => s.busy)
+  const [url, setUrl] = useState('')
+
+  useEffect(() => {
+    if (!open) return
+    void useGitStore
+      .getState()
+      .loadRemote()
+      .then(() => setUrl(useGitStore.getState().remote?.url ?? ''))
+  }, [open])
+
+  async function submit(e: FormEvent): Promise<void> {
+    e.preventDefault()
+    if (await useGitStore.getState().setRemote(url.trim())) onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent data-testid="git-remote-dialog">
+        <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
+          <DialogHeader>
+            <DialogTitle>設定遠端</DialogTitle>
+            <DialogDescription>
+              {remote
+                ? `目前的 ${remote.name}：${remote.url}`
+                : '還沒有遠端；設定後會加入 origin。'}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            aria-label="遠端網址"
+            placeholder="https://github.com/me/api.git 或 git@github.com:me/api.git"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              取消
+            </Button>
+            <Button type="submit" disabled={busy || url.trim() === ''}>
+              儲存
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function CreateBranchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState('')
@@ -118,14 +181,18 @@ function NoRepoMenu({ missing }: { missing: boolean }) {
 export function BranchMenu() {
   const status = useGitStore((s) => s.status)
   const branches = useGitStore((s) => s.branches)
+  const running = useGitStore((s) => s.running)
   const [creating, setCreating] = useState(false)
+  const [editingRemote, setEditingRemote] = useState(false)
   const [confirm, setConfirm] = useState<Branch | null>(null)
   if (status === null) return null
   if (status.state !== 'repo') return <NoRepoMenu missing={status.state === 'no-git'} />
 
   const changes = status.files.length
+  // The current branch comes from the latest status: the list may still be loading.
+  const isCurrent = (b: Branch) => !b.remote && b.name === status.branch
   const pick = (branch: Branch) => {
-    if (branch.current) return
+    if (isCurrent(branch)) return
     // Uncommitted changes come along to the other branch (git refuses if they clash).
     if (changes > 0) setConfirm(branch)
     else void useGitStore.getState().switchBranch(branch.name, branch.remote)
@@ -150,10 +217,20 @@ export function BranchMenu() {
             data-testid="branch-menu"
             title={status.upstream ? `追蹤 ${status.upstream}` : '目前分支'}
           >
-            <GitBranch className="text-muted-foreground" />
+            {running ? (
+              <Loader2 className="animate-spin text-muted-foreground" />
+            ) : (
+              <GitBranch className="text-muted-foreground" />
+            )}
             <span className="truncate" data-testid="current-branch">
               {status.branch ?? `HEAD ${status.head ?? ''}`}
             </span>
+            {(status.ahead > 0 || status.behind > 0) && (
+              <span className="flex items-center text-xs text-muted-foreground">
+                {status.ahead > 0 && `↑${status.ahead}`}
+                {status.behind > 0 && `↓${status.behind}`}
+              </span>
+            )}
             <ChevronDown className="text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
@@ -166,6 +243,38 @@ export function BranchMenu() {
             )}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={!status.hasRemote || running !== null}
+            onSelect={() => void useGitStore.getState().fetch()}
+          >
+            <RefreshCw />
+            Fetch
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!status.hasRemote || running !== null || status.merging}
+            onSelect={() => void useGitStore.getState().pull()}
+          >
+            <ArrowDownToLine />
+            Pull
+            {status.behind > 0 && (
+              <span className="ml-auto text-xs text-muted-foreground">{status.behind} 個</span>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!status.hasRemote || running !== null || status.empty}
+            onSelect={() => void useGitStore.getState().push()}
+          >
+            <ArrowUpFromLine />
+            Push
+            {status.ahead > 0 && (
+              <span className="ml-auto text-xs text-muted-foreground">{status.ahead} 個</span>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setEditingRemote(true)}>
+            <Link />
+            設定遠端…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setCreating(true)}>
             <Plus />
             建立分支…
@@ -176,7 +285,7 @@ export function BranchMenu() {
               <div className="px-2 py-1 text-xs text-muted-foreground">本機分支</div>
               {local.map((b) => (
                 <DropdownMenuItem key={b.name} onSelect={() => pick(b)} data-testid="branch-item">
-                  {b.current ? <Check /> : <span className="size-4" />}
+                  {isCurrent(b) ? <Check /> : <span className="size-4" />}
                   <span className="truncate">{b.name}</span>
                 </DropdownMenuItem>
               ))}
@@ -197,6 +306,7 @@ export function BranchMenu() {
         </DropdownMenuContent>
       </DropdownMenu>
       <CreateBranchDialog open={creating} onClose={() => setCreating(false)} />
+      <RemoteDialog open={editingRemote} onClose={() => setEditingRemote(false)} />
       <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
         <AlertDialogContent data-testid="git-switch-dialog">
           <AlertDialogHeader>

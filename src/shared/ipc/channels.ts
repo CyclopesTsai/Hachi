@@ -59,6 +59,16 @@ export const INVOKE = {
   gitBranches: 'git:branches',
   gitSwitch: 'git:switch',
   gitCreateBranch: 'git:createBranch',
+  gitRemote: 'git:remote',
+  gitSetRemote: 'git:setRemote',
+  gitFetch: 'git:fetch',
+  gitPull: 'git:pull',
+  gitPush: 'git:push',
+  gitResolve: 'git:resolve',
+  gitAbortMerge: 'git:abortMerge',
+  gitFinishMerge: 'git:finishMerge',
+  gitOpenFile: 'git:openFile',
+  gitAnswerPrompt: 'git:answerPrompt',
   transferImportBrunoCollections: 'transfer:importBrunoCollections',
   transferExport: 'transfer:export',
   envList: 'env:list',
@@ -101,7 +111,8 @@ export const EVENTS = {
   variablesChanged: 'variables:changed',
   runnerEvent: 'runner:event',
   wsEvent: 'ws:event',
-  appCloseRequested: 'app:closeRequested'
+  appCloseRequested: 'app:closeRequested',
+  gitPrompt: 'git:prompt'
 } as const
 
 export type EventChannel = (typeof EVENTS)[keyof typeof EVENTS]

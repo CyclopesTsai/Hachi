@@ -104,7 +104,8 @@
     "timeoutMs": 30000, // 預設請求逾時，0 = 不限（上限 3600000）
     "validateSSL": true, // 預設 TLS 憑證驗證
     "followRedirects": true, // 預設跟隨重新導向（Phase 2）
-    "maxRedirects": 3 // 最多跟隨次數，0–20（Phase 2）
+    "maxRedirects": 3, // 最多跟隨次數，0–20（Phase 2）
+    "gitAutoFetch": false // 開啟 Workspace 時自動 git fetch（決策 113）
   },
   "collectionOrder": [] // Collection 的 id，依顯示順序（規則同 collection.json 的 order）
 }

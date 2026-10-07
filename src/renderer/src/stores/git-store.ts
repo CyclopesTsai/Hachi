@@ -1,5 +1,13 @@
 import { create } from 'zustand'
-import type { GitBranch, GitFileDiff, GitIdentity, GitStatus } from '@shared/git'
+import type {
+  GitBranch,
+  GitFileDiff,
+  GitIdentity,
+  GitPrompt,
+  GitRemote,
+  GitResolution,
+  GitStatus
+} from '@shared/git'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from './app-store'
 import { useTabsStore } from './tabs-store'
@@ -20,6 +28,11 @@ interface GitState {
   /** Changed files left out of the next commit (everything else is included). */
   unchecked: ReadonlySet<string>
   busy: boolean
+  /** A network operation in progress (its button shows it). */
+  running: 'fetch' | 'pull' | 'push' | null
+  remote: GitRemote | null
+  /** Credential prompts from git, oldest first (decision 113). */
+  prompts: GitPrompt[]
   /** Shown in the Git panel until the next successful operation. */
   error: string | null
   /** user.name / email missing: the identity dialog is open, then the commit continues. */
@@ -42,6 +55,19 @@ interface GitState {
   /** Asks about unsaved tabs, switches, then re-reads the Workspace. */
   switchBranch(name: string, remote: boolean): Promise<void>
   createBranch(name: string): Promise<boolean>
+  loadRemote(): Promise<void>
+  setRemote(url: string): Promise<boolean>
+  fetch(options?: { quiet?: boolean }): Promise<void>
+  /** Asks about unsaved tabs, pulls, re-reads the Workspace; conflicts open the Git screen. */
+  pull(): Promise<void>
+  push(): Promise<void>
+  resolve(path: string, how: GitResolution): Promise<void>
+  abortMerge(): Promise<void>
+  finishMerge(): Promise<void>
+  openFile(path: string): Promise<void>
+  /** git asked for a credential (`git:prompt` event). */
+  prompted(prompt: GitPrompt): void
+  answerPrompt(value: string | null): Promise<void>
 }
 
 export const useGitStore = create<GitState>()((set, get) => {
@@ -71,6 +97,9 @@ export const useGitStore = create<GitState>()((set, get) => {
     message: '',
     unchecked: new Set(),
     busy: false,
+    running: null,
+    remote: null,
+    prompts: [],
     error: null,
     askIdentity: false,
 
@@ -103,7 +132,9 @@ export const useGitStore = create<GitState>()((set, get) => {
         message: '',
         unchecked: new Set(),
         error: null,
-        askIdentity: false
+        askIdentity: false,
+        running: null,
+        remote: null
       })
     },
 
@@ -204,6 +235,85 @@ export const useGitStore = create<GitState>()((set, get) => {
       } else {
         useAppStore.getState().setNotice(get().error ?? '切換分支失敗')
       }
+    },
+
+    async loadRemote() {
+      try {
+        set({ remote: await unwrap(window.hachi.git.remote()) })
+      } catch (error) {
+        set({ error: errorMessage(error) })
+      }
+    },
+
+    async setRemote(url) {
+      const ok = await operate(() => unwrap(window.hachi.git.setRemote({ url })))
+      if (ok) await get().loadRemote()
+      else useAppStore.getState().setNotice(get().error ?? '設定遠端失敗')
+      return ok
+    },
+
+    async fetch(options) {
+      set({ running: 'fetch' })
+      const ok = await operate(() => unwrap(window.hachi.git.fetch()))
+      set({ running: null })
+      if (!ok && !options?.quiet) useAppStore.getState().setNotice(get().error ?? 'Fetch 失敗')
+    },
+
+    async pull() {
+      if (!(await useTabsStore.getState().askSaveUnsaved())) return
+      set({ running: 'pull' })
+      const ok = await operate(() => unwrap(window.hachi.git.pull()))
+      set({ running: null })
+      if (!ok) {
+        useAppStore.getState().setNotice(get().error ?? 'Pull 失敗')
+        return
+      }
+      await useTabsStore.getState().reload({ scope: 'workspace' }, { keepUnsaved: true })
+      const status = get().status
+      if (status?.state === 'repo' && status.merging) {
+        // Conflicts: settle them in the Git screen, which explains what to do (decision 114).
+        get().openView('commit')
+      }
+    },
+
+    async push() {
+      set({ running: 'push' })
+      const ok = await operate(() => unwrap(window.hachi.git.push()))
+      set({ running: null })
+      if (!ok) useAppStore.getState().setNotice(get().error ?? 'Push 失敗')
+    },
+
+    async resolve(path, how) {
+      const ok = await operate(() => unwrap(window.hachi.git.resolve({ path, how })))
+      if (ok) await useTabsStore.getState().reload({ scope: 'workspace' }, { keepUnsaved: true })
+    },
+
+    async abortMerge() {
+      const ok = await operate(() => unwrap(window.hachi.git.abortMerge()))
+      if (ok) await useTabsStore.getState().reload({ scope: 'workspace' }, { keepUnsaved: true })
+    },
+
+    async finishMerge() {
+      await operate(() => unwrap(window.hachi.git.finishMerge()))
+    },
+
+    async openFile(path) {
+      try {
+        await unwrap(window.hachi.git.openFile({ path }))
+      } catch (error) {
+        useAppStore.getState().setNotice(errorMessage(error))
+      }
+    },
+
+    prompted(prompt) {
+      set({ prompts: [...get().prompts, prompt] })
+    },
+
+    async answerPrompt(value) {
+      const [first, ...rest] = get().prompts
+      if (!first) return
+      set({ prompts: rest })
+      await window.hachi.git.answerPrompt({ id: first.id, value })
     },
 
     async createBranch(name) {

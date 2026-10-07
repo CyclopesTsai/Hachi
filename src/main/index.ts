@@ -30,6 +30,7 @@ import { resolveInherited } from './services/http/build-request'
 import { HttpService } from './services/http/http-service'
 import { TransferService } from './services/transfer-service'
 import { GitService } from './services/git/git-service'
+import { AskpassServer, promptKind } from './services/git/askpass'
 import { RuntimeVariables } from './services/runtime-variables'
 import { ScriptHost } from './services/scripts/script-host'
 import { RequestExecutor } from './services/http/executor'
@@ -128,7 +129,20 @@ async function bootstrap(): Promise<void> {
   }
   const http = new HttpService(requestDeps)
   const transfer = new TransferService(collections, environments, loadRedoc)
-  const git = new GitService(platform, trash)
+  // git asks for credentials through a dialog (decision 113). The helper runs this
+  // binary as Node (ELECTRON_RUN_AS_NODE): keep the RunAsNode fuse enabled.
+  const gitPrompts = new Map<string, (value: string | null) => void>()
+  const askpass = new AskpassServer(
+    (prompt) =>
+      new Promise((resolve) => {
+        if (!mainWindow) return resolve(null)
+        const id = randomUUID()
+        gitPrompts.set(id, resolve)
+        send(EVENTS.gitPrompt, { id, prompt, kind: promptKind(prompt) })
+      })
+  )
+  app.on('will-quit', () => void askpass.stop())
+  const git = new GitService(platform, trash, () => askpass.start())
   const variablesChanged = (change: {
     environmentId: string | null
     collectionId: string | null
@@ -384,6 +398,10 @@ async function bootstrap(): Promise<void> {
     sessions,
     transfer,
     git,
+    answerGitPrompt: (id, value) => {
+      gitPrompts.get(id)?.(value)
+      gitPrompts.delete(id)
+    },
     runtime,
     runner,
     sendHttp,

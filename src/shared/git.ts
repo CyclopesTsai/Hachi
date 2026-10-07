@@ -29,7 +29,27 @@ export interface GitRepoStatus {
   files: GitFileChange[]
   /** No commit yet (fresh `git init`). */
   empty: boolean
+  /** A pull stopped on conflicts (MERGE_HEAD exists, decision 114). */
+  merging: boolean
+  /** At least one remote is set (push / pull possible). */
+  hasRemote: boolean
 }
+
+export interface GitRemote {
+  name: string
+  url: string
+}
+
+/** git asks for a username / password / key passphrase (decision 113). */
+export interface GitPrompt {
+  id: string
+  /** git's own prompt, e.g. "Password for 'https://user@github.com': " */
+  prompt: string
+  kind: 'username' | 'password' | 'passphrase' | 'other'
+}
+
+/** How one conflicted file is settled (decision 114). */
+export type GitResolution = 'ours' | 'theirs' | 'resolved'
 
 export type GitStatus = { state: 'no-git' } | { state: 'not-repo' } | GitRepoStatus
 

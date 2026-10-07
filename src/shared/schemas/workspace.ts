@@ -31,7 +31,9 @@ export const workspaceSettingsSchema = z.object({
   /** Follow HTTP redirects by default. */
   followRedirects: z.boolean().default(true),
   /** Maximum number of redirects to follow. */
-  maxRedirects: z.number().int().min(0).max(MAX_REDIRECTS_LIMIT).default(3)
+  maxRedirects: z.number().int().min(0).max(MAX_REDIRECTS_LIMIT).default(3),
+  /** Git: fetch once each time the Workspace is opened (decision 113). */
+  gitAutoFetch: z.boolean().default(false)
 })
 export type WorkspaceSettings = z.infer<typeof workspaceSettingsSchema>
 

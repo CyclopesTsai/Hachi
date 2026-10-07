@@ -11,11 +11,19 @@ import type {
   GitFileChange,
   GitFileDiff,
   GitIdentity,
+  GitRemote,
   GitRepoStatus,
+  GitResolution,
   GitStatus
 } from '@shared/git'
 import { findGit, runGit, type GitLocator, type GitResult } from './git-exec'
 import { parseBranches, parseStatus } from './parse'
+
+/** Fetch / pull / push may wait for the network and for the user's password. */
+const NETWORK_TIMEOUT_MS = 10 * 60_000
+
+/** Environment that makes git ask for credentials through the app (askpass.ts). */
+export type AskpassEnv = () => Promise<Record<string, string>>
 
 /** Larger files are not compared (decision 119). */
 export const MAX_DIFF_BYTES = 2 * 1024 * 1024
@@ -40,7 +48,8 @@ export class GitService {
 
   constructor(
     private readonly locator: GitLocator,
-    private readonly trash: TrashFile
+    private readonly trash: TrashFile,
+    private readonly askpass: AskpassEnv = async () => ({})
   ) {}
 
   /** Runs operations one at a time (git takes a lock on the index). */
@@ -59,15 +68,20 @@ export class GitService {
     return this.gitPath
   }
 
-  private async exec(cwd: string, args: string[]): Promise<GitResult> {
+  private async exec(cwd: string, args: string[], network = false): Promise<GitResult> {
     const git = await this.findGit()
     if (!git) throw new HachiError('NOT_FOUND', '找不到 git，請先安裝')
-    return runGit(git, ['-c', 'core.quotepath=false', ...args], { cwd })
+    return runGit(git, ['-c', 'core.quotepath=false', ...args], {
+      cwd,
+      // No editor ever opens (merge commits use their default message).
+      env: { GIT_EDITOR: ':', GIT_MERGE_AUTOEDIT: 'no', ...(network ? await this.askpass() : {}) },
+      timeoutMs: network ? NETWORK_TIMEOUT_MS : undefined
+    })
   }
 
   /** Runs git; a failure becomes an error with git's own message. */
-  private async must(cwd: string, args: string[], what: string): Promise<string> {
-    const result = await this.exec(cwd, args)
+  private async must(cwd: string, args: string[], what: string, network = false): Promise<string> {
+    const result = await this.exec(cwd, args, network)
     if (result.code !== 0) throw new HachiError('IO_ERROR', `${what}失敗：${gitMessage(result)}`)
     return result.stdout
   }
@@ -119,7 +133,9 @@ export class GitService {
       ahead: parsed.ahead,
       behind: parsed.behind,
       files: files.sort((a, b) => a.path.localeCompare(b.path)),
-      empty: parsed.oid === null
+      empty: parsed.oid === null,
+      merging: (await this.exec(root, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])).code === 0,
+      hasRemote: (await this.exec(root, ['remote'])).stdout.trim() !== ''
     }
   }
 
@@ -180,6 +196,9 @@ export class GitService {
   commit(workspace: string, paths: readonly string[], message: string): Promise<GitStatus> {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
+      if (repo.merging) {
+        throw new HachiError('INVALID_OPERATION', '合併進行中：解決衝突後請用「完成合併」')
+      }
       const changes = this.pick(repo, paths)
       if (changes.some((c) => c.kind === 'conflicted')) {
         throw new HachiError('INVALID_OPERATION', '有衝突的檔案要先解決才能 commit')
@@ -257,6 +276,165 @@ export class GitService {
         return { path: file, before: null, after: null, unavailable: 'binary' }
       }
       return result
+    })
+  }
+
+  // ---- Remotes (decision 113) ------------------------------------------------
+
+  private async remoteName(root: string): Promise<string | null> {
+    const names = (await this.exec(root, ['remote'])).stdout.split('\n').filter(Boolean)
+    return names.includes('origin') ? 'origin' : (names[0] ?? null)
+  }
+
+  /** The remote push / pull use (origin, or the only one), or null. */
+  remote(workspace: string): Promise<GitRemote | null> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      const name = await this.remoteName(repo.root)
+      if (!name) return null
+      const url = (await this.exec(repo.root, ['remote', 'get-url', name])).stdout.trim()
+      return { name, url }
+    })
+  }
+
+  /** Sets the URL of origin (added when missing). */
+  setRemote(workspace: string, url: string): Promise<GitStatus> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      if (url.startsWith('-') || /\s/.test(url)) {
+        throw new HachiError('VALIDATION_ERROR', '遠端網址不合法')
+      }
+      const exists = (await this.exec(repo.root, ['remote'])).stdout.split('\n').includes('origin')
+      await this.must(
+        repo.root,
+        exists ? ['remote', 'set-url', 'origin', url] : ['remote', 'add', 'origin', url],
+        '設定遠端'
+      )
+      return this.readStatus(workspace)
+    })
+  }
+
+  fetch(workspace: string): Promise<GitStatus> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      if (!repo.hasRemote) throw new HachiError('INVALID_OPERATION', '還沒有設定遠端')
+      await this.must(repo.root, ['fetch', '--all', '--prune'], 'Fetch', true)
+      return this.readStatus(workspace)
+    })
+  }
+
+  /** Pull with merge (decision 113). Conflicts are not an error: the status shows them. */
+  pull(workspace: string): Promise<GitStatus> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      if (repo.merging) throw new HachiError('INVALID_OPERATION', '還有沒完成的合併')
+      if (!repo.upstream) {
+        throw new HachiError(
+          'INVALID_OPERATION',
+          '目前的分支沒有追蹤遠端分支：先 Push 一次（會自動設定）'
+        )
+      }
+      const result = await this.exec(
+        repo.root,
+        ['-c', 'pull.rebase=false', 'pull', '--no-edit'],
+        true
+      )
+      const after = await this.readStatus(workspace)
+      if (result.code !== 0 && !(after.state === 'repo' && after.merging)) {
+        throw new HachiError('IO_ERROR', `Pull 失敗：${gitMessage(result)}`)
+      }
+      return after
+    })
+  }
+
+  /** Push; the first push of a branch sets its upstream (push -u). */
+  push(workspace: string): Promise<GitStatus> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      const remote = await this.remoteName(repo.root)
+      if (!remote) throw new HachiError('INVALID_OPERATION', '還沒有設定遠端')
+      if (repo.empty) throw new HachiError('INVALID_OPERATION', '還沒有任何 commit')
+      if (!repo.branch) throw new HachiError('INVALID_OPERATION', '目前不在任何分支上')
+      const result = await this.exec(
+        repo.root,
+        repo.upstream ? ['push'] : ['push', '-u', remote, 'HEAD'],
+        true
+      )
+      if (result.code !== 0) {
+        const rejected = /\[rejected\]|non-fast-forward|fetch first/i.test(result.stderr)
+        throw new HachiError(
+          'IO_ERROR',
+          rejected
+            ? 'Push 被拒絕：遠端有新的 commit，請先 Pull'
+            : `Push 失敗：${gitMessage(result)}`
+        )
+      }
+      return this.readStatus(workspace)
+    })
+  }
+
+  // ---- Conflicts (decision 114) ----------------------------------------------
+
+  /** Settles one conflicted file: keep ours / theirs, or mark it resolved after editing. */
+  resolve(workspace: string, file: string, how: GitResolution): Promise<GitStatus> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      const [change] = this.pick(repo, [file])
+      if (change?.kind !== 'conflicted')
+        throw new HachiError('VALIDATION_ERROR', '這個檔案沒有衝突')
+      const target = this.repoPath(repo, file)
+      const abs = path.join(repo.root, ...target.split('/'))
+      if (how === 'resolved') {
+        const text = await readFile(abs, 'utf8').catch(() => null)
+        if (text !== null && /^(<{7}|>{7})( |$)/m.test(text)) {
+          throw new HachiError('VALIDATION_ERROR', '檔案中還有衝突標記（<<<<<<< / >>>>>>>）')
+        }
+        await this.must(
+          repo.root,
+          text === null ? ['rm', '-q', '--', target] : ['add', '--', target],
+          '標記已解決'
+        )
+      } else {
+        const side = how === 'ours' ? '--ours' : '--theirs'
+        const checkout = await this.exec(repo.root, ['checkout', side, '--', target])
+        // That side deleted the file: keeping it means deleting it.
+        await this.must(
+          repo.root,
+          checkout.code === 0 ? ['add', '--', target] : ['rm', '-q', '--', target],
+          '解決衝突'
+        )
+      }
+      return this.readStatus(workspace)
+    })
+  }
+
+  abortMerge(workspace: string): Promise<GitStatus> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      await this.must(repo.root, ['merge', '--abort'], '放棄合併')
+      return this.readStatus(workspace)
+    })
+  }
+
+  /** The merge commit, once every conflict is settled (git's default message). */
+  finishMerge(workspace: string): Promise<GitStatus> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      if (!repo.merging) throw new HachiError('INVALID_OPERATION', '目前沒有進行中的合併')
+      if (repo.files.some((f) => f.kind === 'conflicted')) {
+        throw new HachiError('INVALID_OPERATION', '還有衝突的檔案沒有解決')
+      }
+      await this.must(repo.root, ['commit', '--no-edit'], '完成合併')
+      return this.readStatus(workspace)
+    })
+  }
+
+  /** Absolute path of a changed file (to open it in another editor). */
+  filePath(workspace: string, file: string): Promise<string> {
+    return this.run(async () => {
+      const repo = await this.requireRepo(workspace)
+      this.pick(repo, [file])
+      return path.join(repo.root, ...this.repoPath(repo, file).split('/'))
     })
   }
 

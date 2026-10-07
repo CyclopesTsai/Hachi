@@ -86,7 +86,17 @@ const api: HachiApi = {
     diff: (input) => invoke(INVOKE.gitDiff, input),
     branches: () => invoke(INVOKE.gitBranches),
     switch: (input) => invoke(INVOKE.gitSwitch, input),
-    createBranch: (input) => invoke(INVOKE.gitCreateBranch, input)
+    createBranch: (input) => invoke(INVOKE.gitCreateBranch, input),
+    remote: () => invoke(INVOKE.gitRemote),
+    setRemote: (input) => invoke(INVOKE.gitSetRemote, input),
+    fetch: () => invoke(INVOKE.gitFetch),
+    pull: () => invoke(INVOKE.gitPull),
+    push: () => invoke(INVOKE.gitPush),
+    resolve: (input) => invoke(INVOKE.gitResolve, input),
+    abortMerge: () => invoke(INVOKE.gitAbortMerge),
+    finishMerge: () => invoke(INVOKE.gitFinishMerge),
+    openFile: (input) => invoke(INVOKE.gitOpenFile, input),
+    answerPrompt: (input) => invoke(INVOKE.gitAnswerPrompt, input)
   },
   transfer: {
     importFile: () => invoke(INVOKE.transferImportFile),

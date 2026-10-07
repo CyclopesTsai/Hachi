@@ -34,6 +34,8 @@ export interface IpcContext {
   sessions: SessionService
   transfer: TransferService
   git: GitService
+  /** The renderer's answer to a credential prompt (askpass). */
+  answerGitPrompt(id: string, value: string | null): void
   runtime: RuntimeVariables
   runner: RunnerService
   /** Sends a request and records it in the history. */
@@ -231,6 +233,19 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.gitBranches]: () => ctx.git.branches(workspacePath()),
     [INVOKE.gitSwitch]: (input) => ctx.git.switchBranch(workspacePath(), input.name, input.remote),
     [INVOKE.gitCreateBranch]: (input) => ctx.git.createBranch(workspacePath(), input.name),
+    [INVOKE.gitRemote]: () => ctx.git.remote(workspacePath()),
+    [INVOKE.gitSetRemote]: (input) => ctx.git.setRemote(workspacePath(), input.url),
+    [INVOKE.gitFetch]: () => ctx.git.fetch(workspacePath()),
+    [INVOKE.gitPull]: () => ctx.git.pull(workspacePath()),
+    [INVOKE.gitPush]: () => ctx.git.push(workspacePath()),
+    [INVOKE.gitResolve]: (input) => ctx.git.resolve(workspacePath(), input.path, input.how),
+    [INVOKE.gitAbortMerge]: () => ctx.git.abortMerge(workspacePath()),
+    [INVOKE.gitFinishMerge]: () => ctx.git.finishMerge(workspacePath()),
+    [INVOKE.gitOpenFile]: async (input) => {
+      const error = await shell.openPath(await ctx.git.filePath(workspacePath(), input.path))
+      if (error) throw new HachiError('IO_ERROR', error)
+    },
+    [INVOKE.gitAnswerPrompt]: (input) => ctx.answerGitPrompt(input.id, input.value),
     [INVOKE.transferImportText]: (input) => {
       workspacePath()
       return ctx.transfer.importText(input.fileName, input.text)

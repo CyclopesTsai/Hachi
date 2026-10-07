@@ -1676,6 +1676,118 @@ try {
   assert.equal(gitIn('branch', '--show-current'), 'main')
   step('header shows the branch; create and switch branches from its menu')
 
+  // ---- Git remote: push, pull, conflicts (decisions 113 / 114) ----
+  const remoteDir = path.join(tmp, 'remote.git')
+  const otherDir = path.join(tmp, 'other-clone')
+  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', remoteDir])
+  const gitOther = (...a) =>
+    execFileSync('git', a, {
+      cwd: otherDir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Other',
+        GIT_AUTHOR_EMAIL: 'other@example.com',
+        GIT_COMMITTER_NAME: 'Other',
+        GIT_COMMITTER_EMAIL: 'other@example.com'
+      }
+    }).trim()
+  /** Pull asks about the unsaved tabs left by earlier steps: keep them as they are. */
+  const keepUnsaved = async () => {
+    const prompt = page.getByTestId('unsaved-dialog')
+    await prompt.waitFor()
+    await prompt.getByRole('button', { name: '不儲存' }).click()
+  }
+
+  await page.getByTestId('branch-menu').click()
+  await page.getByRole('menuitem', { name: '設定遠端…' }).click()
+  const remoteDialog = page.getByTestId('git-remote-dialog')
+  await remoteDialog.getByLabel('遠端網址').fill(remoteDir)
+  await remoteDialog.getByRole('button', { name: '儲存' }).click()
+  await remoteDialog.waitFor({ state: 'hidden' })
+  await page.getByTestId('branch-menu').click()
+  await page.getByRole('menuitem', { name: /^Push/ }).click()
+  await waitUntil(async () => {
+    try {
+      return gitIn('rev-parse', '--abbrev-ref', '@{u}') === 'origin/main'
+    } catch {
+      return false
+    }
+  }, 'the first push sets origin/main as upstream')
+  step('設定遠端… then Push (the first push sets the upstream)')
+
+  // Someone else pushes a change; Fetch shows it, Pull brings it in.
+  execFileSync('git', ['clone', '-q', remoteDir, otherDir])
+  const otherIgnore = path.join(otherDir, '.gitignore')
+  await writeFile(otherIgnore, `${await readFile(otherIgnore, 'utf8')}# from someone else\n`)
+  gitOther('commit', '-q', '-am', 'their change')
+  gitOther('push', '-q')
+  await page.getByTestId('branch-menu').click()
+  await page.getByRole('menuitem', { name: /^Commit…/ }).click()
+  await page.getByTestId('git-fetch').click()
+  await page.getByTestId('git-pull').getByText('Pull（1）').waitFor()
+  await page.getByTestId('git-pull').click()
+  await keepUnsaved()
+  await waitUntil(
+    async () =>
+      (await readFile(path.join(wsDir, '.gitignore'), 'utf8')).includes('# from someone else'),
+    'pull brought the change in'
+  )
+  step('Fetch shows how far behind; Pull (merge) brings the change in')
+
+  // Both sides change the same line: the pull stops on a conflict.
+  await writeFile(
+    otherIgnore,
+    (await readFile(otherIgnore, 'utf8')).replace('# from someone else', '# theirs')
+  )
+  gitOther('commit', '-q', '-am', 'theirs')
+  gitOther('push', '-q')
+  const localIgnore = path.join(wsDir, '.gitignore')
+  await writeFile(
+    localIgnore,
+    (await readFile(localIgnore, 'utf8')).replace('# from someone else', '# ours')
+  )
+  await page.getByRole('button', { name: '重新整理 Git 狀態' }).click()
+  await page.getByTestId('git-message').fill('our change')
+  await page.getByTestId('git-commit').click()
+  await page.getByTestId('git-clean').waitFor()
+  await page.getByTestId('git-pull').click()
+  await keepUnsaved()
+  await page.getByTestId('git-merge').waitFor()
+  const conflicted = page.locator('[data-testid="git-file"][data-path=".gitignore"]')
+  await conflicted.getByRole('button', { name: '.gitignore' }).click()
+  await page.getByTestId('git-diff').waitFor()
+  await page.screenshot({ path: path.join(shots, '18-git-conflict.png') })
+  await page.getByTestId('git-conflict').getByRole('button', { name: '保留我的' }).click()
+  await page.getByTestId('git-finish-merge').click()
+  await page.getByTestId('git-merge').waitFor({ state: 'hidden' })
+  assert.ok((await readFile(localIgnore, 'utf8')).includes('# ours'))
+  assert.equal(gitIn('log', '-1', '--format=%P').split(' ').length, 2, 'a merge commit')
+  await page.getByTestId('git-push').click()
+  await waitUntil(
+    async () => gitIn('rev-parse', 'HEAD') === gitIn('rev-parse', 'origin/main'),
+    'the merge is pushed'
+  )
+  await page.getByTestId('git-back').click()
+  step('a conflicting Pull: 保留我的 → 完成合併 → Push')
+
+  // Fetch when the Workspace opens (Workspace setting, off by default).
+  await page.getByTestId('workspace-menu').click()
+  await page.getByRole('menuitem', { name: 'Workspace 設定…' }).click()
+  const gitSettings = page.getByTestId('workspace-settings-dialog')
+  assert.equal(await gitSettings.getByTestId('git-auto-fetch').isChecked(), false)
+  await gitSettings.getByTestId('git-auto-fetch').check()
+  await gitSettings.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(wsDir, 'workspace.json'))).settings.gitAutoFetch === true,
+    'auto fetch saved'
+  )
+  // Someone pushes again; the next launch fetches it without a click.
+  gitOther('pull', '-q', '--no-rebase')
+  await writeFile(otherIgnore, `${await readFile(otherIgnore, 'utf8')}# later\n`)
+  gitOther('commit', '-q', '-am', 'later')
+  gitOther('push', '-q')
+
   // Window position / size are remembered (decision 94).
   // Inside the primary screen's work area: CI machines have small screens (1024×768), where
   // larger bounds are fitted to the screen on restore (decision 94).
@@ -1723,6 +1835,8 @@ try {
   // ---- Second launch: last Workspace is restored ----
   ;({ app, page } = await launch())
   await page.getByTestId('workspace-shell').waitFor()
+  // gitAutoFetch: the commit pushed meanwhile shows as 1 behind.
+  await page.getByTestId('branch-menu').getByText('↓1').waitFor()
   assert.equal(await page.getByTestId('current-workspace-name').innerText(), 'Smoke API')
   t = treeHelpers(page)
   await t.row('Users API v2').waitFor()

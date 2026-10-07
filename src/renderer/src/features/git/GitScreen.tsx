@@ -1,4 +1,14 @@
-import { ArrowDown, ArrowLeft, ArrowUp, GitBranch, RefreshCw, Undo2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowDownToLine,
+  ArrowLeft,
+  ArrowUp,
+  ArrowUpFromLine,
+  GitBranch,
+  Loader2,
+  RefreshCw,
+  Undo2
+} from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { GitChangeKind, GitFileChange, GitRepoStatus } from '@shared/git'
 import {
@@ -267,6 +277,7 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
   )
   const index = useMemo(() => fileIndex(tree), [tree])
   const checkedCount = status.files.filter((f) => !unchecked.has(f.path)).length
+  const selectedChange = status.files.find((f) => f.path === selected)
   const allChecked = status.files.length > 0 && checkedCount === status.files.length
 
   return (
@@ -339,26 +350,33 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
             })}
           </ul>
         )}
-        <textarea
-          aria-label="Commit 訊息"
-          data-testid="git-message"
-          placeholder="Commit 訊息"
-          rows={4}
-          value={message}
-          onChange={(e) => useGitStore.getState().setMessage(e.target.value)}
-          className="w-full shrink-0 resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        />
-        <Button
-          size="sm"
-          className="shrink-0"
-          data-testid="git-commit"
-          disabled={busy || checkedCount === 0 || message.trim() === ''}
-          onClick={() => void useGitStore.getState().commit()}
-        >
-          Commit（{checkedCount} 個檔案）
-        </Button>
+        {status.merging ? (
+          <MergeBox conflicts={status.files.filter((f) => f.kind === 'conflicted').length} />
+        ) : (
+          <>
+            <textarea
+              aria-label="Commit 訊息"
+              data-testid="git-message"
+              placeholder="Commit 訊息"
+              rows={4}
+              value={message}
+              onChange={(e) => useGitStore.getState().setMessage(e.target.value)}
+              className="w-full shrink-0 resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            />
+            <Button
+              size="sm"
+              className="shrink-0"
+              data-testid="git-commit"
+              disabled={busy || checkedCount === 0 || message.trim() === ''}
+              onClick={() => void useGitStore.getState().commit()}
+            >
+              Commit（{checkedCount} 個檔案）
+            </Button>
+          </>
+        )}
       </aside>
       <section className="flex min-w-0 flex-1 flex-col">
+        {selectedChange?.kind === 'conflicted' && <ConflictBar path={selectedChange.path} />}
         {diff ? (
           <DiffView diff={diff} />
         ) : (
@@ -368,6 +386,127 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
         )}
       </section>
       <DiscardDialog target={discarding} onClose={() => setDiscarding(null)} />
+    </div>
+  )
+}
+
+/** Pull stopped on conflicts (decision 114): settle each file, then finish or abort. */
+function MergeBox({ conflicts }: { conflicts: number }) {
+  const busy = useGitStore((s) => s.busy)
+  const [aborting, setAborting] = useState(false)
+  return (
+    <div
+      className="flex shrink-0 flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs"
+      data-testid="git-merge"
+    >
+      <p className="font-medium">
+        {conflicts > 0
+          ? `合併中：還有 ${conflicts} 個衝突的檔案（標示 !）。點檔案選擇保留哪一邊。`
+          : '衝突都解決了，可以完成合併。'}
+      </p>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="flex-1"
+          data-testid="git-finish-merge"
+          disabled={busy || conflicts > 0}
+          onClick={() => void useGitStore.getState().finishMerge()}
+        >
+          完成合併
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => setAborting(true)}>
+          放棄合併…
+        </Button>
+      </div>
+      <AlertDialog open={aborting} onOpenChange={setAborting}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>放棄這次合併？</AlertDialogTitle>
+            <AlertDialogDescription>
+              回到 Pull 之前的狀態（git merge --abort），合併中做的選擇都會取消。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => void useGitStore.getState().abortMerge()}
+            >
+              放棄合併
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+/** Choices for the selected conflicted file (decision 114). */
+function ConflictBar({ path }: { path: string }) {
+  const busy = useGitStore((s) => s.busy)
+  const resolve = (how: 'ours' | 'theirs' | 'resolved') =>
+    void useGitStore.getState().resolve(path, how)
+  return (
+    <div
+      className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-amber-500/10 px-3 py-2 text-xs"
+      data-testid="git-conflict"
+    >
+      <span className="font-medium">這個檔案有衝突：</span>
+      <Button size="sm" variant="outline" disabled={busy} onClick={() => resolve('ours')}>
+        保留我的
+      </Button>
+      <Button size="sm" variant="outline" disabled={busy} onClick={() => resolve('theirs')}>
+        使用遠端的
+      </Button>
+      <span className="text-muted-foreground">或</span>
+      <Button size="sm" variant="ghost" onClick={() => void useGitStore.getState().openFile(path)}>
+        用其他程式編輯
+      </Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => resolve('resolved')}>
+        標記已解決
+      </Button>
+    </div>
+  )
+}
+
+/** Fetch / Pull / Push in the Git screen's bar (decision 113). */
+function RemoteButtons() {
+  const status = useGitStore((s) => s.status)
+  const running = useGitStore((s) => s.running)
+  if (status?.state !== 'repo' || !status.hasRemote) return null
+  const spin = (op: string) => (running === op ? <Loader2 className="animate-spin" /> : null)
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        data-testid="git-fetch"
+        disabled={running !== null}
+        onClick={() => void useGitStore.getState().fetch()}
+      >
+        {spin('fetch') ?? <RefreshCw />}
+        Fetch
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        data-testid="git-pull"
+        disabled={running !== null || status.merging}
+        onClick={() => void useGitStore.getState().pull()}
+      >
+        {spin('pull') ?? <ArrowDownToLine />}
+        Pull{status.behind > 0 ? `（${status.behind}）` : ''}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        data-testid="git-push"
+        disabled={running !== null || status.empty}
+        onClick={() => void useGitStore.getState().push()}
+      >
+        {spin('push') ?? <ArrowUpFromLine />}
+        Push{status.ahead > 0 ? `（${status.ahead}）` : ''}
+      </Button>
     </div>
   )
 }
@@ -402,6 +541,8 @@ export function GitScreen() {
           返回
         </Button>
         <span className="text-sm font-medium">Commit</span>
+        <div className="flex-1" />
+        <RemoteButtons />
       </div>
       {status === null ? null : status.state === 'no-git' ? (
         <NoGit />
