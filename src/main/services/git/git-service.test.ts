@@ -167,6 +167,7 @@ describe('GitService', () => {
 
     expect(await service.diff(ws, 'collections/a.json')).toEqual({
       path: 'collections/a.json',
+      conflict: false,
       before: 'v1\n',
       after: 'v2\n',
       unavailable: null
@@ -259,6 +260,14 @@ describe('GitService', () => {
     const merging = (await service.pull(ws)) as GitRepoStatus
     expect(merging.merging).toBe(true)
     expect(merging.files).toEqual([{ path: 'collections/a.json', kind: 'conflicted' }])
+    // The two sides, without conflict markers.
+    expect(await service.diff(ws, 'collections/a.json')).toEqual({
+      path: 'collections/a.json',
+      conflict: true,
+      before: 'line 1 (ours)\nline 2\n',
+      after: 'line 1 (theirs)\nline 2\n',
+      unavailable: null
+    })
     await expect(service.commit(ws, ['collections/a.json'], 'x')).rejects.toThrow(/完成合併/)
     await expect(service.resolve(ws, 'collections/a.json', 'resolved')).rejects.toThrow(/衝突標記/)
     await expect(service.finishMerge(ws)).rejects.toThrow(/還有衝突/)

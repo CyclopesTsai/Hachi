@@ -62,12 +62,16 @@ export interface GitBranch {
   upstream: string | null
 }
 
-/** A file in the last commit and now (decision 119: the Commit screen's diff). */
+/**
+ * A file in the last commit and now (decision 119: the Commit screen's diff). For a
+ * conflicted file (`conflict`): our version and their version, without conflict markers.
+ */
 export interface GitFileDiff {
   path: string
-  /** null: not in the last commit (new file) */
+  conflict: boolean
+  /** null: not in the last commit (new file) / deleted on our side */
   before: string | null
-  /** null: deleted */
+  /** null: deleted (on their side, for a conflict) */
   after: string | null
   /** Too large (over 2 MB) or not text: not shown. */
   unavailable: 'tooLarge' | 'binary' | null

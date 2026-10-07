@@ -257,8 +257,33 @@ export class GitService {
       const repo = await this.requireRepo(workspace)
       const [change] = this.pick(repo, [file])
       if (!change) throw new HachiError('VALIDATION_ERROR', '沒有這個變更')
-      const result: GitFileDiff = { path: file, before: null, after: null, unavailable: null }
+      const conflict = change.kind === 'conflicted'
+      const result: GitFileDiff = {
+        path: file,
+        conflict,
+        before: null,
+        after: null,
+        unavailable: null
+      }
       const tooLarge = (bytes: number) => bytes > MAX_DIFF_BYTES
+      /** A version stored by git (`HEAD:path`, or a merge stage `:2:path`); null if absent. */
+      const blob = async (spec: string): Promise<string | null | 'tooLarge'> => {
+        const size = await this.exec(repo.root, ['cat-file', '-s', spec])
+        if (size.code !== 0) return null
+        if (tooLarge(Number(size.stdout.trim()))) return 'tooLarge'
+        return this.must(repo.root, ['show', spec], '讀取差異')
+      }
+      if (conflict) {
+        // Stage 2 = ours (current branch), stage 3 = theirs (what is being merged in).
+        const target = this.repoPath(repo, change.path)
+        const [ours, theirs] = [await blob(`:2:${target}`), await blob(`:3:${target}`)]
+        if (ours === 'tooLarge' || theirs === 'tooLarge')
+          return { ...result, unavailable: 'tooLarge' }
+        if ([ours, theirs].some((text) => text?.includes('\0'))) {
+          return { ...result, unavailable: 'binary' }
+        }
+        return { ...result, before: ours, after: theirs }
+      }
       if (change.kind !== 'untracked' && change.kind !== 'added' && !repo.empty) {
         const source = this.repoPath(repo, change.oldPath ?? change.path)
         const size = await this.exec(repo.root, ['cat-file', '-s', `HEAD:${source}`])
@@ -273,7 +298,7 @@ export class GitService {
         result.after = await readFile(abs, 'utf8')
       }
       if ([result.before, result.after].some((text) => text?.includes('\0'))) {
-        return { path: file, before: null, after: null, unavailable: 'binary' }
+        return { ...result, before: null, after: null, unavailable: 'binary' }
       }
       return result
     })
