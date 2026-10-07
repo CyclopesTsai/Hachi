@@ -1,4 +1,4 @@
-import { ArrowLeftRight, ChevronDown, Pencil, Settings, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, FolderSearch, Pencil, Settings, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { WorkspaceInfo } from '@shared/ipc/api'
 import { AppLogo } from '@renderer/components/app-logo'
@@ -11,11 +11,14 @@ import {
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
 import { CollectionSidebar } from '@renderer/features/collections/CollectionSidebar'
+import { BranchMenu } from '@renderer/features/git/BranchMenu'
+import { useGitSync } from '@renderer/features/git/use-git-sync'
 import { EnvironmentSelect } from '@renderer/features/environments/EnvironmentSelect'
 import { HistoryUsageIndicator } from '@renderer/features/history/HistoryUsageIndicator'
 import { EditorHost } from '@renderer/features/http/EditorHost'
 import { WorkspaceSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
 import { FileDropZone } from '@renderer/features/transfer/TransferDialogs'
+import { reveal, revealLabel } from '@renderer/lib/reveal'
 import { useAppStore } from '@renderer/stores/app-store'
 import { DeleteWorkspaceDialog, RenameWorkspaceDialog } from './WorkspaceDialogs'
 
@@ -26,6 +29,8 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
   const [deleting, setDeleting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const loadWorkspaceSettings = useAppStore((s) => s.loadWorkspaceSettings)
+  const platform = useAppStore((s) => s.info?.platform)
+  useGitSync(workspace.id)
 
   useEffect(() => {
     void loadWorkspaceSettings()
@@ -43,6 +48,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
               size="sm"
               className="min-w-0 gap-1 px-2"
               data-testid="workspace-menu"
+              title={workspace.path}
             >
               <span className="truncate font-medium" data-testid="current-workspace-name">
                 {workspace.name}
@@ -59,6 +65,10 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
               <Settings />
               Workspace 設定…
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void reveal(null)}>
+              <FolderSearch />
+              {revealLabel(platform)}
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => showWelcome()}>
               <ArrowLeftRight />
               切換 Workspace…
@@ -70,12 +80,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <span
-          className="hidden min-w-0 truncate font-mono text-xs text-muted-foreground lg:inline"
-          title={workspace.path}
-        >
-          {workspace.path}
-        </span>
+        <BranchMenu />
         <div className="flex-1" />
         <EnvironmentSelect />
       </header>

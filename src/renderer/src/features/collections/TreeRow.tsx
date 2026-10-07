@@ -6,6 +6,7 @@ import {
   FilePlus2,
   FileWarning,
   Folder,
+  FolderSearch,
   FolderOpen,
   FolderPlus,
   Layers,
@@ -26,7 +27,9 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
+import { reveal, revealLabel } from '@renderer/lib/reveal'
 import { cn } from '@renderer/lib/utils'
+import { useAppStore } from '@renderer/stores/app-store'
 import { isTabDirty, itemTabKey } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTransferStore } from '@renderer/stores/transfer-store'
@@ -117,6 +120,7 @@ export function TreeRow({
   onRequestDelete: (node: TreeNode) => void
 }) {
   const { node, depth } = row
+  const platform = useAppStore((s) => s.info?.platform)
   const selected = useTreeStore((s) => s.selectedId === node.id)
   const editing = useTreeStore((s) => s.editingId === node.id)
   const expanded = useTreeStore((s) => s.expanded.has(node.id))
@@ -325,6 +329,10 @@ export function TreeRow({
         <ContextMenuItem onSelect={() => void tabs.reload({ scope: 'item', id: node.id })}>
           <RefreshCw />
           重新讀取
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void reveal(node.id)}>
+          <FolderSearch />
+          {revealLabel(platform)}
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={() => onRequestDelete(node)}>

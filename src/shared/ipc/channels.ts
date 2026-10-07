@@ -8,6 +8,7 @@
 /** Renderer → Main request/response channels (ipcRenderer.invoke / ipcMain.handle). */
 export const INVOKE = {
   appGetInfo: 'app:getInfo',
+  appReveal: 'app:reveal',
   appGetDefaultWorkspaceDir: 'app:getDefaultWorkspaceDir',
   appSetCloseGuard: 'app:setCloseGuard',
   appConfirmClose: 'app:confirmClose',
@@ -48,6 +49,15 @@ export const INVOKE = {
   transferImportFile: 'transfer:importFile',
   transferImportText: 'transfer:importText',
   transferImportBrunoFolder: 'transfer:importBrunoFolder',
+  gitStatus: 'git:status',
+  gitInit: 'git:init',
+  gitIdentity: 'git:identity',
+  gitSetIdentity: 'git:setIdentity',
+  gitCommit: 'git:commit',
+  gitDiscard: 'git:discard',
+  gitBranches: 'git:branches',
+  gitSwitch: 'git:switch',
+  gitCreateBranch: 'git:createBranch',
   transferImportBrunoCollections: 'transfer:importBrunoCollections',
   transferExport: 'transfer:export',
   envList: 'env:list',

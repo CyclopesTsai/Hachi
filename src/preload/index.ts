@@ -19,6 +19,7 @@ function invoke<C extends InvokeChannel>(
 const api: HachiApi = {
   app: {
     getInfo: () => invoke(INVOKE.appGetInfo),
+    reveal: (input) => invoke(INVOKE.appReveal, input),
     getDefaultWorkspaceDir: () => invoke(INVOKE.appGetDefaultWorkspaceDir),
     setCloseGuard: (input) => invoke(INVOKE.appSetCloseGuard, input),
     confirmClose: () => invoke(INVOKE.appConfirmClose)
@@ -74,6 +75,17 @@ const api: HachiApi = {
     getBody: (input) => invoke(INVOKE.httpGetBody, input),
     saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input),
     resolve: (input) => invoke(INVOKE.httpResolve, input)
+  },
+  git: {
+    status: () => invoke(INVOKE.gitStatus),
+    init: () => invoke(INVOKE.gitInit),
+    identity: () => invoke(INVOKE.gitIdentity),
+    setIdentity: (input) => invoke(INVOKE.gitSetIdentity, input),
+    commit: (input) => invoke(INVOKE.gitCommit, input),
+    discard: (input) => invoke(INVOKE.gitDiscard, input),
+    branches: () => invoke(INVOKE.gitBranches),
+    switch: (input) => invoke(INVOKE.gitSwitch, input),
+    createBranch: (input) => invoke(INVOKE.gitCreateBranch, input)
   },
   transfer: {
     importFile: () => invoke(INVOKE.transferImportFile),

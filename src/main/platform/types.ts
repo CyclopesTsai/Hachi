@@ -22,6 +22,16 @@ export interface PlatformAdapter {
    * no app menu there).
    */
   helpMenu(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions
+  /**
+   * Where git may be installed besides PATH (decision 111): GUI apps get a short PATH on
+   * macOS, and Git for Windows is often not on it.
+   */
+  gitCandidates(): string[]
+  /**
+   * Whether running this git is safe: macOS's /usr/bin/git is a stub that opens the
+   * "install developer tools" dialog when the tools are missing.
+   */
+  gitUsable(file: string): Promise<boolean>
   /** Called once at startup (About panel, app user model id, …). */
   setup(): void
 }

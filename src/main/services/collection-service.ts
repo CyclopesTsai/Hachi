@@ -618,6 +618,12 @@ export class CollectionService {
     return this.root
   }
 
+  /** Where an item lives on disk: its folder (collections / folders) or file (requests). */
+  locate(id: string): { kind: ItemKind; absPath: string } {
+    const entry = this.requireEntry(id)
+    return { kind: entry.kind, absPath: entry.absPath }
+  }
+
   private requireEntry(id: string): IndexEntry {
     this.requireRoot()
     const entry = this.index.get(id)

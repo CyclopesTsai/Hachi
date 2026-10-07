@@ -127,7 +127,13 @@ interface TabsState {
   downloadResponse(key: TabKey, runId: string): Promise<string | null>
 
   /** Re-reads files from disk, asking first if that replaces unsaved edits. */
-  reload(target: ReloadScope): Promise<void>
+  /**
+   * Re-reads files. `keepUnsaved`: tabs with unsaved edits keep them without asking
+   * (after a Git branch switch, where the user was already asked).
+   */
+  reload(target: ReloadScope, options?: { keepUnsaved?: boolean }): Promise<void>
+  /** Asks to save unsaved tabs first (switching a Git branch). False when cancelled. */
+  askSaveUnsaved(): Promise<boolean>
   /** Before switching / closing the Workspace or the window. Resolves false if cancelled. */
   guardLeave(): Promise<boolean>
   resolvePrompt(choice: 'save' | 'discard' | 'cancel'): Promise<void>
@@ -655,9 +661,10 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       }
     },
 
-    async reload(target) {
+    async reload(target, options) {
       const node = target.scope === 'item' ? findNode(tree(), target.id)?.node : undefined
       const affected = get().tabs.filter((t) => {
+        if (options?.keepUnsaved && isTabDirty(t)) return false
         if (target.scope === 'workspace') return !isDraftTab(t)
         const id = tabItemId(t)
         return id !== null && (node ? isSelfOrDescendant(node, id) : id === target.id)
@@ -682,6 +689,10 @@ export const useTabsStore = create<TabsState>()((set, get) => {
         patch(t.key, (x) => ({ ...x, status: 'idle' }))
         if (get().activeKey === t.key || current.status !== 'idle') await load(t.key)
       }
+    },
+
+    askSaveUnsaved() {
+      return ask(dirtyKeys(get().tabs), 'save')
     },
 
     guardLeave() {

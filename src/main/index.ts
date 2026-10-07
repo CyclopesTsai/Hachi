@@ -29,6 +29,7 @@ import { WsService } from './services/ws/ws-service'
 import { resolveInherited } from './services/http/build-request'
 import { HttpService } from './services/http/http-service'
 import { TransferService } from './services/transfer-service'
+import { GitService } from './services/git/git-service'
 import { RuntimeVariables } from './services/runtime-variables'
 import { ScriptHost } from './services/scripts/script-host'
 import { RequestExecutor } from './services/http/executor'
@@ -127,6 +128,7 @@ async function bootstrap(): Promise<void> {
   }
   const http = new HttpService(requestDeps)
   const transfer = new TransferService(collections, environments, loadRedoc)
+  const git = new GitService(platform, trash)
   const variablesChanged = (change: {
     environmentId: string | null
     collectionId: string | null
@@ -381,6 +383,7 @@ async function bootstrap(): Promise<void> {
     history,
     sessions,
     transfer,
+    git,
     runtime,
     runner,
     sendHttp,

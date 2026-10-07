@@ -21,6 +21,20 @@ export function createDefaultAdapter(id: 'win32' | 'linux'): PlatformAdapter {
   return {
     id,
 
+    gitCandidates() {
+      if (id === 'linux') return ['/usr/bin/git', '/usr/local/bin/git']
+      const local = process.env.LOCALAPPDATA
+      return [
+        'C:\\Program Files\\Git\\cmd\\git.exe',
+        'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+        ...(local ? [`${local}\\Programs\\Git\\cmd\\git.exe`] : [])
+      ]
+    },
+
+    gitUsable() {
+      return Promise.resolve(true)
+    },
+
     setup() {
       // Windows: required for notifications and taskbar grouping.
       if (id === 'win32') app.setAppUserModelId(APP_ID)

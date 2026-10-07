@@ -1,12 +1,25 @@
 /**
  * macOS-specific behavior.
  */
+import { execFile } from 'node:child_process'
 import { BrowserWindow, Menu, app, type MenuItemConstructorOptions } from 'electron'
 import { APP_COPYRIGHT, APP_NAME, LEGAL_NOTICE } from '@shared/app-info'
 import type { PlatformAdapter } from './types'
 
 export const darwinAdapter: PlatformAdapter = {
   id: 'darwin',
+
+  gitCandidates() {
+    return ['/opt/homebrew/bin/git', '/usr/local/bin/git', '/usr/bin/git']
+  },
+
+  gitUsable(file) {
+    if (file !== '/usr/bin/git') return Promise.resolve(true)
+    // `xcode-select -p` fails when the Command Line Tools are not installed.
+    return new Promise((resolve) => {
+      execFile('/usr/bin/xcode-select', ['-p'], { timeout: 5000 }, (error) => resolve(!error))
+    })
+  },
 
   setup() {
     app.setAboutPanelOptions({

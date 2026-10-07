@@ -3,7 +3,7 @@ import type { HistoryUsage } from '@shared/ipc/api'
 import type { HistoryEntry } from '@shared/schemas/history'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 
-export type SidebarMode = 'collections' | 'history'
+export type SidebarMode = 'collections' | 'history' | 'git'
 
 interface HistoryState {
   entries: HistoryEntry[]

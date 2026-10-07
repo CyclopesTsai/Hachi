@@ -18,6 +18,7 @@ import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
 import type { HttpRequest } from '../schemas/http-request'
 import type { WsEventPayload } from '../ws'
+import type { GitBranch, GitIdentity, GitStatus } from '../git'
 import type { CodegenRequest } from '../codegen'
 import type {
   RunnerConfig,
@@ -41,6 +42,11 @@ export interface AppInfo {
   /** `process.platform` of the main process, e.g. "darwin" | "win32" | "linux". */
   platform: string
   isPackaged: boolean
+}
+
+export interface RevealInput {
+  /** Collection / folder / request to show; null = the Workspace folder. */
+  itemId: string | null
 }
 
 export interface WorkspaceInfo {
@@ -414,6 +420,7 @@ export interface ItemMutationResult {
 /** Input / output of every invoke channel. `void` input = no argument. */
 export interface InvokeMap {
   'app:getInfo': { input: void; output: AppInfo }
+  'app:reveal': { input: RevealInput; output: void }
   'app:getDefaultWorkspaceDir': { input: void; output: string }
   'app:setCloseGuard': { input: CloseGuardInput; output: void }
   'app:confirmClose': { input: void; output: void }
@@ -463,6 +470,15 @@ export interface InvokeMap {
   'transfer:importFile': { input: void; output: ImportReport | null }
   'transfer:importText': { input: ImportTextInput; output: ImportReport }
   'transfer:importBrunoFolder': { input: void; output: BrunoFolderResult | null }
+  'git:status': { input: void; output: GitStatus }
+  'git:init': { input: void; output: GitStatus }
+  'git:identity': { input: void; output: GitIdentity | null }
+  'git:setIdentity': { input: GitIdentity & { global: boolean }; output: void }
+  'git:commit': { input: { paths: string[]; message: string }; output: GitStatus }
+  'git:discard': { input: { path: string }; output: GitStatus }
+  'git:branches': { input: void; output: GitBranch[] }
+  'git:switch': { input: { name: string; remote: boolean }; output: GitStatus }
+  'git:createBranch': { input: { name: string }; output: GitStatus }
   'transfer:importBrunoCollections': {
     input: ImportBrunoCollectionsInput
     output: ImportOutcome[]
@@ -518,6 +534,8 @@ export interface EventPayloads {
 export interface HachiApi {
   app: {
     getInfo: InvokeFn<'app:getInfo'>
+    /** Shows the Workspace folder or an item in Finder / Explorer (在 Finder 中顯示). */
+    reveal: InvokeFn<'app:reveal'>
     getDefaultWorkspaceDir: InvokeFn<'app:getDefaultWorkspaceDir'>
     /** Tells main whether closing the window must ask about unsaved tabs first. */
     setCloseGuard: InvokeFn<'app:setCloseGuard'>
@@ -593,6 +611,21 @@ export interface HachiApi {
     saveResponse: InvokeFn<'http:saveResponse'>
     /** The request as it would be sent, for code generation (nothing is sent). */
     resolve: InvokeFn<'http:resolve'>
+  }
+  /** Git of the current Workspace (decisions 111–115); uses the git installed here. */
+  git: {
+    status: InvokeFn<'git:status'>
+    init: InvokeFn<'git:init'>
+    /** user.name / user.email git would use, or null when one is missing. */
+    identity: InvokeFn<'git:identity'>
+    setIdentity: InvokeFn<'git:setIdentity'>
+    /** Commits exactly these files (Workspace-relative paths from the status). */
+    commit: InvokeFn<'git:commit'>
+    /** Restores one file from the last commit; new files go to the trash. */
+    discard: InvokeFn<'git:discard'>
+    branches: InvokeFn<'git:branches'>
+    switch: InvokeFn<'git:switch'>
+    createBranch: InvokeFn<'git:createBranch'>
   }
   transfer: {
     /** Open dialog, then imports a Postman / Bruno JSON file. Null if cancelled. */

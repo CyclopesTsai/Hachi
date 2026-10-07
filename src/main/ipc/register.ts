@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { app, ipcMain, nativeTheme, type BrowserWindow } from 'electron'
+import { app, ipcMain, nativeTheme, shell, type BrowserWindow } from 'electron'
 import { APP_ID, APP_NAME } from '@shared/app-info'
 import { HachiError } from '@shared/errors'
 import type { HttpResult } from '@shared/http'
@@ -16,6 +16,7 @@ import type { WsService } from '../services/ws/ws-service'
 import type { HttpService } from '../services/http/http-service'
 import type { WorkspaceService } from '../services/workspace-service'
 import type { TransferService } from '../services/transfer-service'
+import type { GitService } from '../services/git/git-service'
 import { uniqueFileName } from '../services/fs/unique-name'
 import type { RuntimeVariables } from '../services/runtime-variables'
 import type { RunnerService } from '../services/runner-service'
@@ -32,6 +33,7 @@ export interface IpcContext {
   history: HistoryService
   sessions: SessionService
   transfer: TransferService
+  git: GitService
   runtime: RuntimeVariables
   runner: RunnerService
   /** Sends a request and records it in the history. */
@@ -58,6 +60,16 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   }
 
   const handlers: HandlerMap = {
+    [INVOKE.appReveal]: async (input) => {
+      const target =
+        input.itemId === null
+          ? { kind: 'collection' as const, absPath: workspacePath() }
+          : ctx.collections.locate(input.itemId)
+      // A request is a file: select it in its folder. Folders open directly.
+      if (target.kind === 'request') return shell.showItemInFolder(target.absPath)
+      const error = await shell.openPath(target.absPath)
+      if (error) throw new HachiError('IO_ERROR', error)
+    },
     [INVOKE.appGetInfo]: () => ({
       name: APP_NAME,
       version: app.getVersion(),
@@ -208,6 +220,16 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       })
       return file ? ctx.transfer.importFile(file) : null
     },
+    [INVOKE.gitStatus]: () => ctx.git.status(workspacePath()),
+    [INVOKE.gitInit]: () => ctx.git.init(workspacePath()),
+    [INVOKE.gitIdentity]: () => ctx.git.identity(workspacePath()),
+    [INVOKE.gitSetIdentity]: (input) =>
+      ctx.git.setIdentity(workspacePath(), { name: input.name, email: input.email }, input.global),
+    [INVOKE.gitCommit]: (input) => ctx.git.commit(workspacePath(), input.paths, input.message),
+    [INVOKE.gitDiscard]: (input) => ctx.git.discard(workspacePath(), input.path),
+    [INVOKE.gitBranches]: () => ctx.git.branches(workspacePath()),
+    [INVOKE.gitSwitch]: (input) => ctx.git.switchBranch(workspacePath(), input.name, input.remote),
+    [INVOKE.gitCreateBranch]: (input) => ctx.git.createBranch(workspacePath(), input.name),
     [INVOKE.transferImportText]: (input) => {
       workspacePath()
       return ctx.transfer.importText(input.fileName, input.text)

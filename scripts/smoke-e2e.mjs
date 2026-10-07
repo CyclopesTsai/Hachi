@@ -9,6 +9,7 @@
  *     (runs the checks against a packaged app instead of the dev build)
  */
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import { createRequire } from 'node:module'
@@ -125,7 +126,10 @@ async function launch() {
       HACHI_USER_DATA_DIR: userData,
       ELECTRON_RENDERER_URL: '',
       // The menu of packaged builds (no Reload / Developer Tools).
-      HACHI_PRODUCTION_MENU: '1'
+      HACHI_PRODUCTION_MENU: '1',
+      // Git sees no user.name / email of this computer: the identity dialog is tested.
+      GIT_CONFIG_GLOBAL: path.join(tmp, 'gitconfig'),
+      GIT_CONFIG_NOSYSTEM: '1'
     }
   })
   // Deleted items go to a folder of the test instead of the real Trash of this computer.
@@ -259,6 +263,7 @@ try {
       'container',
       'dialog',
       'env',
+      'git',
       'history',
       'http',
       'item',
@@ -1550,6 +1555,101 @@ try {
   await located.waitFor()
   assert.equal(await located.getAttribute('aria-selected'), 'true')
   step('focus button shows the active tab in the tree')
+
+  // ---- 在 Finder 中顯示 (Workspace menu and the tree's context menu) ----
+  await app.evaluate(({ shell }) => {
+    globalThis.__revealed = []
+    shell.openPath = async (p) => {
+      globalThis.__revealed.push(['open', p])
+      return ''
+    }
+    shell.showItemInFolder = (p) => globalThis.__revealed.push(['select', p])
+  })
+  await page.getByTestId('workspace-menu').click()
+  await page.getByRole('menuitem', { name: /^在.*中顯示$/ }).click()
+  await page
+    .locator('[data-testid="tree-row"][title="collections/shop/ping.json"]')
+    .click({ button: 'right' })
+  await page.getByRole('menuitem', { name: /^在.*中顯示$/ }).click()
+  const revealed = await app.evaluate(() => globalThis.__revealed)
+  assert.deepEqual(
+    revealed.map(([how, p]) => [how, path.basename(p)]),
+    [
+      ['open', path.basename(wsDir)],
+      ['select', 'ping.json']
+    ]
+  )
+  step('在 Finder 中顯示: the Workspace folder, or an item in its folder')
+
+  // ---- Git (decisions 111–115) ----
+  await page.getByTestId('sidebar-git').click()
+  await page.getByTestId('git-not-repo').waitFor()
+  assert.equal(await page.getByTestId('branch-menu').count(), 0, 'no branch outside a repo')
+  await page.getByRole('button', { name: /git init/ }).click()
+  await page.getByTestId('git-panel').waitFor()
+  assert.equal(await page.getByTestId('current-branch').innerText(), 'main')
+  assert.ok((await page.getByTestId('git-file').count()) > 5, 'every Workspace file is new')
+  assert.equal(
+    await page.locator('[data-testid="git-file"][data-path=".hachi-secrets.json"]').count(),
+    0,
+    'secrets are ignored'
+  )
+  await page.getByTestId('git-message').fill('第一個 commit')
+  await page.getByTestId('git-commit').click()
+  const identity = page.getByTestId('git-identity-dialog')
+  await identity.waitFor()
+  await identity.getByLabel('名稱').fill('Hachi Tester')
+  await identity.getByLabel('Email').fill('tester@example.com')
+  await identity.getByRole('button', { name: '儲存並 Commit' }).click()
+  await page.getByTestId('git-clean').waitFor()
+  const gitIn = (...a) =>
+    execFileSync('git', a, {
+      cwd: wsDir,
+      encoding: 'utf8',
+      env: { ...process.env, LC_ALL: 'C' }
+    }).trim()
+  assert.equal(gitIn('log', '--format=%an|%s'), 'Hachi Tester|第一個 commit')
+  step('Git tab: git init, commit the Workspace (asks for user.name / email first)')
+
+  await writeFile(path.join(wsDir, 'scratch.json'), '{}\n')
+  await page.getByRole('button', { name: '重新整理 Git 狀態' }).click()
+  const scratch = page.locator('[data-testid="git-file"][data-path="scratch.json"]')
+  await scratch.hover()
+  await scratch.getByRole('button', { name: /捨棄/ }).click()
+  await page.getByTestId('git-discard-dialog').getByRole('button', { name: '捨棄變更' }).click()
+  await page.getByTestId('git-clean').waitFor()
+  assert.ok(
+    (await readdir(trashDir)).some((f) => f.endsWith('scratch.json')),
+    'new file trashed'
+  )
+  step('discard a file: confirmed, new files go to the trash')
+
+  await page.getByTestId('branch-menu').click()
+  await page.getByRole('menuitem', { name: '建立分支…' }).click()
+  const createBranch = page.getByTestId('git-create-branch-dialog')
+  await createBranch.getByLabel('分支名稱').fill('feature/e2e')
+  await createBranch.getByRole('button', { name: '建立' }).click()
+  await waitUntil(
+    async () => (await page.getByTestId('current-branch').innerText()) === 'feature/e2e',
+    'switched to the new branch'
+  )
+  await page.getByTestId('branch-menu').click()
+  await page
+    .getByTestId('branch-item')
+    .filter({ hasText: /^main$/ })
+    .click()
+  // Unsaved tabs (from earlier steps) are asked about first; they keep their edits.
+  const unsavedPrompt = page.getByTestId('unsaved-dialog')
+  await unsavedPrompt.waitFor()
+  await unsavedPrompt.getByRole('button', { name: '不儲存' }).click()
+  await waitUntil(
+    async () => (await page.getByTestId('current-branch').innerText()) === 'main',
+    'switched back to main'
+  )
+  assert.equal(gitIn('branch', '--show-current'), 'main')
+  await page.screenshot({ path: path.join(shots, '17-git.png') })
+  await page.getByTestId('sidebar-collections').click()
+  step('header shows the branch; create and switch branches from its menu')
 
   // Window position / size are remembered (decision 94).
   // Inside the primary screen's work area: CI machines have small screens (1024×768), where

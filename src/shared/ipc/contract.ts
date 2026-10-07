@@ -72,6 +72,7 @@ const itemCreateSchema = z
 
 export const inputSchemas = {
   [INVOKE.appGetInfo]: noInput,
+  [INVOKE.appReveal]: z.strictObject({ itemId: itemIdSchema.nullable() }),
   [INVOKE.appGetDefaultWorkspaceDir]: noInput,
   [INVOKE.appSetCloseGuard]: z.strictObject({ dirty: z.boolean() }),
   [INVOKE.appConfirmClose]: noInput,
@@ -202,6 +203,22 @@ export const inputSchemas = {
     text: z.string().max(MAX_IMPORT_TEXT)
   }),
   [INVOKE.transferImportBrunoFolder]: noInput,
+  [INVOKE.gitStatus]: noInput,
+  [INVOKE.gitInit]: noInput,
+  [INVOKE.gitIdentity]: noInput,
+  [INVOKE.gitSetIdentity]: z.strictObject({
+    name: z.string().trim().min(1).max(200),
+    email: z.string().trim().min(1).max(200),
+    global: z.boolean()
+  }),
+  [INVOKE.gitCommit]: z.strictObject({
+    paths: z.array(z.string().min(1).max(4096)).min(1).max(10_000),
+    message: z.string().trim().min(1).max(10_000)
+  }),
+  [INVOKE.gitDiscard]: z.strictObject({ path: z.string().min(1).max(4096) }),
+  [INVOKE.gitBranches]: noInput,
+  [INVOKE.gitSwitch]: z.strictObject({ name: z.string().min(1).max(255), remote: z.boolean() }),
+  [INVOKE.gitCreateBranch]: z.strictObject({ name: z.string().trim().min(1).max(255) }),
   [INVOKE.transferImportBrunoCollections]: z.strictObject({
     scanId: z.string().min(1).max(100),
     paths: z.array(z.string().max(4096)).min(1).max(200)
