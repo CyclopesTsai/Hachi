@@ -275,6 +275,14 @@
 - Phase 6 等使用者確認
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
+## 待辦（使用者排定，2026-10-07）
+
+開始任何一項前先說明規劃、確認設計決策。
+
+1. **Git 管理**：在 App 內 commit、pull、push（fetch 待定），加上圖形化的 history（分支 / commit 圖）。待決定：用系統安裝的 git 還是內建實作、遠端驗證方式（HTTPS token / SSH）、衝突處理、介面位置
+2. **Windows 版**：見下方「發佈與平台」的 Windows 版一列（nsis / msi、`src/main/platform/`、CI 加 `windows-latest`）
+3. **既有功能的調整**：項目待使用者列出
+
 ## 之後可以做的事（Roadmap，尚未排程）
 
 原規格（CLAUDE.md）的 Phase 0–6 已全部完成。以下是之後可以做的事，依類別列出，順序不代表優先順序。
