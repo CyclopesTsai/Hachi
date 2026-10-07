@@ -412,9 +412,9 @@ if (!app.requestSingleInstanceLock()) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   })
-  app.on('window-all-closed', () => {
-    if (platform.quitWhenAllWindowsClosed) app.quit()
-  })
+  // Closing the window quits on every platform, macOS too (decision 110: the user expects
+  // the red close button to end the app, not to keep it running in the Dock).
+  app.on('window-all-closed', () => app.quit())
   bootstrap().catch((error: unknown) => {
     dialog.showErrorBox(`${APP_NAME} failed to start`, String(error))
     app.exit(1)

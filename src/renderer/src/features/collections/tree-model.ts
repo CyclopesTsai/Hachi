@@ -17,10 +17,18 @@ export interface FlatRow {
   parentId: string | null
 }
 
-/** Visible rows in display order (children of collapsed containers are skipped). */
-export function flattenTree(tree: WorkspaceTree, expanded: ReadonlySet<string>): FlatRow[] {
+/**
+ * Visible rows in display order (children of collapsed containers are skipped). With
+ * `visible` (a search), only those ids are shown.
+ */
+export function flattenTree(
+  tree: WorkspaceTree,
+  expanded: ReadonlySet<string>,
+  visible?: ReadonlySet<string> | null
+): FlatRow[] {
   const rows: FlatRow[] = []
   const visit = (node: TreeNode, depth: number, parentId: string | null): void => {
+    if (visible && !visible.has(node.id)) return
     rows.push({ node, depth, parentId })
     if (isContainer(node) && expanded.has(node.id)) {
       for (const child of node.children) visit(child, depth + 1, node.id)
@@ -35,12 +43,68 @@ export function neighborRow(
   tree: WorkspaceTree,
   expanded: ReadonlySet<string>,
   id: string,
-  delta: 1 | -1
+  delta: 1 | -1,
+  visible?: ReadonlySet<string> | null
 ): TreeNode | null {
-  const rows = flattenTree(tree, expanded)
+  const rows = flattenTree(tree, expanded, visible)
   const index = rows.findIndex((r) => r.node.id === id)
   if (index < 0) return null
   return rows[index + delta]?.node ?? null
+}
+
+/** Ids of every collection and folder (全部展開). */
+export function allContainerIds(tree: WorkspaceTree): string[] {
+  const ids: string[] = []
+  const visit = (node: TreeNode): void => {
+    if (!isContainer(node)) return
+    ids.push(node.id)
+    node.children.forEach(visit)
+  }
+  tree.collections.forEach(visit)
+  return ids
+}
+
+/** Name search (decision 108): case-insensitive, part of the name. */
+export const nameMatches = (name: string, query: string): boolean =>
+  name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+
+export interface TreeSearch {
+  /** Ids to show: matches, their ancestors, and everything inside a matching container. */
+  visible: Set<string>
+  /** Containers to open so every match can be seen. */
+  expand: string[]
+  matches: number
+}
+
+/** Filters the tree by name; null for an empty query. */
+export function searchTree(tree: WorkspaceTree, query: string): TreeSearch | null {
+  if (query.trim() === '') return null
+  const visible = new Set<string>()
+  const expand = new Set<string>()
+  let matches = 0
+  const addAll = (node: TreeNode): void => {
+    visible.add(node.id)
+    if (isContainer(node)) node.children.forEach(addAll)
+  }
+  /** True when the node or something inside it matches. */
+  const visit = (node: TreeNode, ancestors: string[]): boolean => {
+    let found = false
+    if (nameMatches(node.name, query)) {
+      matches++
+      found = true
+      addAll(node)
+      ancestors.forEach((id) => expand.add(id))
+    }
+    if (isContainer(node)) {
+      for (const child of node.children) {
+        if (visit(child, [...ancestors, node.id])) found = true
+      }
+    }
+    if (found) visible.add(node.id)
+    return found
+  }
+  tree.collections.forEach((c) => visit(c, []))
+  return { visible, expand: [...expand], matches }
 }
 
 /** Number of items below a container (for delete confirmations). */

@@ -20,7 +20,6 @@ function showAboutDialog(): void {
 export function createDefaultAdapter(id: 'win32' | 'linux'): PlatformAdapter {
   return {
     id,
-    quitWhenAllWindowsClosed: true,
 
     setup() {
       // Windows: required for notifications and taskbar grouping.

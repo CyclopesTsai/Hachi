@@ -7,7 +7,6 @@ import type { PlatformAdapter } from './types'
 
 export const darwinAdapter: PlatformAdapter = {
   id: 'darwin',
-  quitWhenAllWindowsClosed: false,
 
   setup() {
     app.setAboutPanelOptions({

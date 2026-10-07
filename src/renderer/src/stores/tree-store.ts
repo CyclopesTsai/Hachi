@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { RequestType } from '@shared/schemas/collection'
 import { findNode, type ItemKind, type WorkspaceTree } from '@shared/tree'
-import { ancestorIds } from '@renderer/features/collections/tree-model'
+import { allContainerIds, ancestorIds, searchTree } from '@renderer/features/collections/tree-model'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 
 const EMPTY: WorkspaceTree = { workspaceId: null, collections: [] }
@@ -24,6 +24,10 @@ interface TreeState {
   editingId: string | null
   /** Last failed operation, shown in the sidebar until dismissed. */
   error: string | null
+  /** Name search of the sidebar (decision 108); '' = no search. */
+  query: string
+  /** What was expanded before the search started, restored when it is cleared. */
+  expandedBeforeSearch: ReadonlySet<string> | null
 
   load(): Promise<void>
   /** Applies a tree pushed by main (`tree:changed`) or returned by an operation. */
@@ -35,6 +39,10 @@ interface TreeState {
   toggle(id: string): void
   /** Expands a collection / folder (no-op if already expanded). */
   expand(id: string): void
+  /** 全部展開 / 全部收合 (decision 109). */
+  expandAllContainers(): void
+  collapseAll(): void
+  setQuery(query: string): void
   setEditing(id: string | null): void
   dismissError(): void
 
@@ -70,6 +78,8 @@ export const useTreeStore = create<TreeState>()((set, get) => {
     expanded: new Set(),
     editingId: null,
     error: null,
+    query: '',
+    expandedBeforeSearch: null,
 
     async load() {
       await attempt(async () => {
@@ -87,7 +97,8 @@ export const useTreeStore = create<TreeState>()((set, get) => {
           loaded: true,
           selectedId: keep(s.selectedId),
           editingId: keep(s.editingId),
-          expanded: workspaceChanged ? new Set() : s.expanded
+          expanded: workspaceChanged ? new Set() : s.expanded,
+          ...(workspaceChanged ? { query: '', expandedBeforeSearch: null } : {})
         }
       })
     },
@@ -99,7 +110,9 @@ export const useTreeStore = create<TreeState>()((set, get) => {
         selectedId: null,
         editingId: null,
         expanded: new Set(),
-        error: null
+        error: null,
+        query: '',
+        expandedBeforeSearch: null
       })
     },
 
@@ -122,6 +135,34 @@ export const useTreeStore = create<TreeState>()((set, get) => {
         if (expanded.has(id)) expanded.delete(id)
         else expanded.add(id)
         return { expanded }
+      })
+    },
+
+    expandAllContainers() {
+      set((s) => ({ expanded: new Set(allContainerIds(s.tree)) }))
+    },
+
+    collapseAll() {
+      set({ expanded: new Set() })
+    },
+
+    setQuery(query) {
+      set((s) => {
+        if (query.trim() === '') {
+          return {
+            query: '',
+            expanded: s.expandedBeforeSearch ?? s.expanded,
+            expandedBeforeSearch: null
+          }
+        }
+        // Open the way to every match, on top of what was open before the search.
+        const before = s.expandedBeforeSearch ?? s.expanded
+        const found = searchTree(s.tree, query)
+        return {
+          query,
+          expandedBeforeSearch: before,
+          expanded: new Set([...before, ...(found?.expand ?? [])])
+        }
       })
     },
 

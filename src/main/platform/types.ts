@@ -22,8 +22,6 @@ export interface PlatformAdapter {
    * no app menu there).
    */
   helpMenu(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions
-  /** macOS convention: apps stay alive with no windows open. */
-  readonly quitWhenAllWindowsClosed: boolean
   /** Called once at startup (About panel, app user model id, …). */
   setup(): void
 }

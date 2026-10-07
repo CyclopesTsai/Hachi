@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { ChildNode, CollectionNode, WorkspaceTree } from '@shared/tree'
 import {
+  allContainerIds,
   ancestorIds,
   countDescendants,
   dropPositionFor,
   flattenTree,
   isNoopMove,
   neighborRow,
-  resolveDrop
+  resolveDrop,
+  searchTree
 } from './tree-model'
 
 const req = (id: string): ChildNode => ({
@@ -135,5 +137,61 @@ describe('isNoopMove', () => {
     expect(isNoopMove(tree, 'r3', { parentId: 'C1', index: 1 })).toBe(true)
     expect(isNoopMove(tree, 'r3', { parentId: 'C1', index: 0 })).toBe(false)
     expect(isNoopMove(tree, 'C1', { parentId: null, index: 0 })).toBe(true)
+  })
+})
+
+describe('search and expand all (decisions 108 / 109)', () => {
+  const ids = (rows: { node: { id: string } }[]) => rows.map((r) => r.node.id)
+
+  it('lists every collection and folder for 全部展開', () => {
+    expect(allContainerIds(tree)).toEqual(['C1', 'F1', 'F2', 'Bad', 'C2'])
+    expect(ids(flattenTree(tree, new Set(allContainerIds(tree))))).toEqual([
+      'C1',
+      'F1',
+      'r1',
+      'F2',
+      'r2',
+      'r3',
+      'Bad',
+      'C2',
+      'r4'
+    ])
+  })
+
+  it('shows matches with their ancestors, case-insensitively', () => {
+    const found = searchTree(tree, ' R2 ')
+    expect(found?.matches).toBe(1)
+    expect(found?.expand).toEqual(['C1', 'F1', 'F2'])
+    expect(ids(flattenTree(tree, new Set(found?.expand), found?.visible))).toEqual([
+      'C1',
+      'F1',
+      'F2',
+      'r2'
+    ])
+  })
+
+  it('keeps everything inside a matching folder or collection', () => {
+    const found = searchTree(tree, 'f1')
+    expect(found?.expand).toEqual(['C1'])
+    // F1 itself stays as it was (collapsed here); its contents are still searchable rows.
+    expect(ids(flattenTree(tree, new Set(['C1', 'F1', 'F2']), found?.visible))).toEqual([
+      'C1',
+      'F1',
+      'r1',
+      'F2',
+      'r2'
+    ])
+    expect(searchTree(tree, 'C2')?.visible).toEqual(new Set(['C2', 'r4']))
+  })
+
+  it('returns null for an empty query and nothing for no match', () => {
+    expect(searchTree(tree, '  ')).toBeNull()
+    expect(searchTree(tree, 'zzz')).toMatchObject({ matches: 0, expand: [] })
+    expect(flattenTree(tree, new Set(), searchTree(tree, 'zzz')?.visible)).toEqual([])
+  })
+
+  it('moves ↑ / ↓ among the search results only', () => {
+    const found = searchTree(tree, 'r')
+    expect(neighborRow(tree, new Set(found?.expand), 'r3', 1, found?.visible)?.id).toBe('C2')
   })
 })

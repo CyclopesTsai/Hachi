@@ -1249,8 +1249,7 @@ try {
     'runtime variables listed / cleared in the environment manager; untrusting asks again and "這次不執行腳本" runs only assertions'
   )
 
-  // ---- Phase 5c: Collection Runner, global search placeholder ----
-  assert.ok(await page.getByTestId('global-search').isDisabled(), 'search reserved but disabled')
+  // ---- Phase 5c: Collection Runner ----
   await t.contextAction('Shop', '執行…')
   const runnerView = page.getByTestId('runner-view')
   await runnerView.waitFor()
@@ -1307,7 +1306,7 @@ try {
   )
   assert.ok(runnerJson.rows[0].body.includes('"ok":true'), 'bodies kept')
   step(
-    'Collection Runner: 3 rounds × 2 workers with a CSV data file, statistics, charts, row details with kept bodies, JSON export; search box reserved'
+    'Collection Runner: 3 rounds × 2 workers with a CSV data file, statistics, charts, row details with kept bodies, JSON export'
   )
 
   await runnerView.getByLabel('執行次數').fill('10000')
@@ -1497,6 +1496,58 @@ try {
   await transferResult.getByRole('button', { name: '確定' }).click()
   step('"+" → 匯入 Bruno 資料夾… on a folder with several collections lists them to pick from')
 
+  // ---- Sidebar search, expand / collapse all, locate (decisions 108 / 109) ----
+  const treeSearch = page.getByTestId('global-search')
+  const visibleRows = page.locator('[data-testid="tree-row"]')
+  await page.getByTestId('tree-collapse-all').click()
+  await waitUntil(
+    async () =>
+      (await visibleRows.evaluateAll((rows) => rows.map((r) => r.dataset.kind))).every(
+        (kind) => kind === 'collection'
+      ),
+    'collapse all leaves only collections'
+  )
+  const collapsedCount = await visibleRows.count()
+  await page.getByTestId('tree-expand-all').click()
+  await page.locator('[data-testid="tree-row"][data-name="Get Users"]').waitFor()
+  assert.ok((await visibleRows.count()) > collapsedCount, 'expand all opens every folder')
+  step('全部收合 / 全部展開 buttons above the tree')
+
+  await page.getByTestId('tree-collapse-all').click()
+  await treeSearch.fill('PING')
+  await page.getByTestId('tree-match').first().waitFor()
+  const found = await visibleRows.evaluateAll((rows) =>
+    rows.map((r) => [r.dataset.kind, r.dataset.name])
+  )
+  assert.ok(
+    found.every(([kind, name]) => kind !== 'request' || /ping/i.test(name)),
+    JSON.stringify(found)
+  )
+  assert.ok(
+    found.some(([kind]) => kind === 'request'),
+    'matching requests are revealed'
+  )
+  await treeSearch.fill('Folder A')
+  await page.locator('[data-testid="tree-row"][data-name="Folder A"]').first().waitFor()
+  await treeSearch.fill('no-such-name')
+  await page.getByTestId('tree-no-match').waitFor()
+  await treeSearch.fill('')
+  await waitUntil(
+    async () => (await visibleRows.count()) === collapsedCount,
+    'clearing the search restores the tree as it was'
+  )
+  step('search filters the tree by collection / folder / request name and restores it after')
+
+  await page.locator('[data-testid="tree-row"][title="collections/shop"]').click()
+  await page.locator('[data-testid="tree-row"][title="collections/shop/ping.json"]').click()
+  await page.getByTestId('request-editor').waitFor()
+  await page.getByTestId('tree-collapse-all').click()
+  await page.getByTestId('tree-focus').click()
+  const located = page.locator('[data-testid="tree-row"][title="collections/shop/ping.json"]')
+  await located.waitFor()
+  assert.equal(await located.getAttribute('aria-selected'), 'true')
+  step('focus button shows the active tab in the tree')
+
   // Window position / size are remembered (decision 94).
   // Inside the primary screen's work area: CI machines have small screens (1024×768), where
   // larger bounds are fitted to the screen on restore (decision 94).
@@ -1587,7 +1638,14 @@ try {
   assert.deepEqual(config2.recentWorkspaces, [])
   assert.equal(config2.lastWorkspacePath, null)
   step('delete Workspace: folder moved to trash, removed from recent list, back to welcome')
-  await app.close()
+
+  // Closing the window quits the app on every platform, macOS too (decision 110).
+  const exited = app.waitForEvent('close')
+  void app
+    .evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
+    .catch(() => undefined)
+  await exited
+  step('closing the window quits the app (macOS too)')
 
   console.log(`\nAll smoke checks passed. Screenshots: ${shots}`)
 } catch (error) {

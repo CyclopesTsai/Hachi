@@ -489,6 +489,7 @@ interface CodegenRequest {
 - 分頁狀態只在 renderer；每個 Workspace 開了哪些分頁與目前環境，透過 `session:*` 存在 `<userData>/sessions/`（見 docs/schema.md）。
 - 關閉分頁、切換 / 開啟 / 刪除目前 Workspace、重新讀取時，renderer 先詢問未儲存的分頁；關閉分頁、切換 Workspace、關閉視窗時，**仍在連線中的 WebSocket 分頁**也會一起列出（決策 60）。
 - 關閉視窗 / 結束 App：renderer 以 `app:setCloseGuard` 告知是否有未儲存或連線中的分頁。有的話 main 取消這次關閉並送出 `app:closeRequested`；使用者選擇儲存或不儲存後，renderer 呼叫 `app:confirmClose`，main 才關閉（或結束）。renderer 重新載入或當掉時 main 會自動解除保護。
+- 關閉最後一個視窗就結束 App，**macOS 也一樣**（決策 110；不留在 Dock 背景）。
 - 選單的 Open Workspace / Open Recent 改由 renderer 執行（`menu:command`），以便先詢問未儲存的分頁。
 
 ## Event channels（Main → Renderer）

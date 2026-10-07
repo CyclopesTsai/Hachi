@@ -10,14 +10,18 @@ import {
   type DragStartEvent
 } from '@dnd-kit/core'
 import {
+  ChevronsDownUp,
+  ChevronsUpDown,
   FileDown,
   FilePlus2,
   FolderInput,
   FolderPlus,
   Layers,
+  LocateFixed,
   Plus,
   Radio,
   RefreshCw,
+  Search,
   Terminal,
   X
 } from 'lucide-react'
@@ -54,6 +58,7 @@ import { useTransferStore } from '@renderer/stores/transfer-store'
 import { HistoryPanel } from '@renderer/features/history/HistoryPanel'
 import { cn } from '@renderer/lib/utils'
 import { useHistoryStore, type SidebarMode } from '@renderer/stores/history-store'
+import { tabItemId } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
@@ -62,7 +67,8 @@ import {
   dropPositionFor,
   flattenTree,
   isNoopMove,
-  resolveDrop
+  resolveDrop,
+  searchTree
 } from './tree-model'
 import { TreeRow, type DropIndicator } from './TreeRow'
 
@@ -152,20 +158,93 @@ export function CollectionSidebar() {
         <div className="flex-1" />
         {mode === 'collections' && <CollectionActions />}
       </div>
-      {/* Global search: space reserved only, not implemented and no shortcut (decisions 51, 80). */}
-      <div className="shrink-0 px-2 pb-2">
-        <input
-          type="search"
-          disabled
-          aria-label="搜尋（尚未提供）"
-          data-testid="global-search"
-          placeholder="搜尋（尚未提供）"
-          title="全域搜尋尚未提供"
-          className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs placeholder:text-muted-foreground/70 disabled:cursor-not-allowed disabled:opacity-60"
-        />
-      </div>
+      {mode === 'collections' && <TreeToolbar />}
       {mode === 'collections' ? <CollectionTree /> : <HistoryPanel />}
     </aside>
+  )
+}
+
+/** Item of the active tab (for the focus button), or null. */
+function useActiveItemId(): string | null {
+  return useTabsStore((s) => {
+    const tab = s.tabs.find((t) => t.key === s.activeKey)
+    return tab ? tabItemId(tab) : null
+  })
+}
+
+/** Shows the active tab's item in the tree: open its folders, select it, scroll to it. */
+function focusActiveItem(itemId: string): void {
+  const store = useTreeStore.getState()
+  const search = searchTree(store.tree, store.query)
+  if (search && !search.visible.has(itemId)) store.setQuery('')
+  useTreeStore.getState().reveal(itemId)
+  requestAnimationFrame(() => {
+    const row = document.querySelector<HTMLElement>(
+      `[data-testid="tree-row"][data-id="${CSS.escape(itemId)}"]`
+    )
+    row?.scrollIntoView({ block: 'nearest' })
+    row?.focus()
+  })
+}
+
+/**
+ * Name search (decision 108: collections, folders and requests; no shortcut) and the
+ * locate / expand all / collapse all buttons (decision 109).
+ */
+function TreeToolbar() {
+  const query = useTreeStore((s) => s.query)
+  const activeItemId = useActiveItemId()
+  const iconButton = 'size-7 shrink-0 text-muted-foreground hover:text-foreground'
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 pr-1 pb-2 pl-2">
+      <div className="relative min-w-0 flex-1">
+        <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          aria-label="搜尋名稱"
+          data-testid="global-search"
+          placeholder="搜尋名稱"
+          title="搜尋 Collection、資料夾與請求的名稱"
+          value={query}
+          onChange={(e) => useTreeStore.getState().setQuery(e.target.value)}
+          className="h-7 w-full rounded-md border border-input bg-background pr-2 pl-7 text-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        />
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={iconButton}
+        title="在樹狀選單中找到目前分頁"
+        aria-label="定位目前分頁"
+        data-testid="tree-focus"
+        disabled={!activeItemId}
+        onClick={() => activeItemId && focusActiveItem(activeItemId)}
+      >
+        <LocateFixed />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={iconButton}
+        title="全部展開"
+        aria-label="全部展開"
+        data-testid="tree-expand-all"
+        onClick={() => useTreeStore.getState().expandAllContainers()}
+      >
+        <ChevronsUpDown />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={iconButton}
+        title="全部收合"
+        aria-label="全部收合"
+        data-testid="tree-collapse-all"
+        onClick={() => useTreeStore.getState().collapseAll()}
+      >
+        <ChevronsDownUp />
+      </Button>
+    </div>
   )
 }
 
@@ -352,9 +431,11 @@ function CollectionTree() {
   const expanded = useTreeStore((s) => s.expanded)
   const error = useTreeStore((s) => s.error)
   const loaded = useTreeStore((s) => s.loaded)
+  const query = useTreeStore((s) => s.query)
   const { move, toggle, dismissError } = useTreeStore.getState()
 
-  const rows = useMemo(() => flattenTree(tree, expanded), [tree, expanded])
+  const search = useMemo(() => searchTree(tree, query), [tree, query])
+  const rows = useMemo(() => flattenTree(tree, expanded, search?.visible), [tree, expanded, search])
   const [pendingDelete, setPendingDelete] = useState<TreeNode | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [drop, setDrop] = useState<DropIndicator | null>(null)
@@ -427,7 +508,12 @@ function CollectionTree() {
   return (
     <>
       <div className="min-h-0 flex-1 overflow-auto px-1 pb-4" role="tree" aria-label="Collections">
-        {loaded && rows.length === 0 && (
+        {search && rows.length === 0 && (
+          <p className="px-2 py-3 text-sm text-muted-foreground" data-testid="tree-no-match">
+            找不到名稱含有「{query.trim()}」的項目。
+          </p>
+        )}
+        {loaded && !search && rows.length === 0 && (
           <div className="flex flex-col items-start gap-2 px-2 py-3 text-sm text-muted-foreground">
             <p>還沒有任何 Collection。</p>
             <Button variant="outline" size="sm" onClick={() => void createCollection()}>

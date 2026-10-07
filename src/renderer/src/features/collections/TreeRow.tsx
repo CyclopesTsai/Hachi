@@ -32,7 +32,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTransferStore } from '@renderer/stores/transfer-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
-import { neighborRow, type DropPosition, type FlatRow } from './tree-model'
+import { neighborRow, searchTree, type DropPosition, type FlatRow } from './tree-model'
 
 export interface DropIndicator {
   targetId: string
@@ -72,6 +72,22 @@ function InlineRename({
       onBlur={() => finish(value)}
       onPointerDown={(e) => e.stopPropagation()}
     />
+  )
+}
+
+/** The name with the search text marked (decision 108). */
+function HighlightedName({ name }: { name: string }) {
+  const query = useTreeStore((s) => s.query.trim())
+  const at = query === '' ? -1 : name.toLocaleLowerCase().indexOf(query.toLocaleLowerCase())
+  if (at < 0) return <>{name}</>
+  return (
+    <>
+      {name.slice(0, at)}
+      <mark className="rounded-sm bg-primary/25 text-foreground" data-testid="tree-match">
+        {name.slice(at, at + query.length)}
+      </mark>
+      {name.slice(at + query.length)}
+    </>
   )
 }
 
@@ -152,8 +168,14 @@ export function TreeRow({
       open(false)
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
-      const { tree, expanded } = useTreeStore.getState()
-      const next = neighborRow(tree, expanded, node.id, e.key === 'ArrowDown' ? 1 : -1)
+      const { tree, expanded, query } = useTreeStore.getState()
+      const next = neighborRow(
+        tree,
+        expanded,
+        node.id,
+        e.key === 'ArrowDown' ? 1 : -1,
+        searchTree(tree, query)?.visible
+      )
       if (!next) return
       select(next.id)
       const row = document.querySelector<HTMLElement>(
@@ -236,7 +258,7 @@ export function TreeRow({
             <span
               className={cn('min-w-0 flex-1 truncate', broken && 'text-muted-foreground italic')}
             >
-              {node.name}
+              <HighlightedName name={node.name} />
             </span>
           )}
           {unsaved && (
