@@ -12,6 +12,8 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     // CI machines are slower (local servers, the script sandbox); 5 s is too tight there.
-    testTimeout: process.env.CI ? 15_000 : 5_000
+    // Windows runners start processes (git, the sandbox) and touch files much more slowly.
+    testTimeout: !process.env.CI ? 5_000 : process.platform === 'win32' ? 60_000 : 15_000,
+    hookTimeout: !process.env.CI ? 10_000 : process.platform === 'win32' ? 60_000 : 10_000
   }
 })

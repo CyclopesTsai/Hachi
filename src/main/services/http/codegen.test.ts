@@ -172,7 +172,8 @@ describe('generated code runs', () => {
       body: string
     }
 
-  it('cURL command sends what Hachi would send', async () => {
+  // The command uses POSIX shell quoting (sh, Git Bash, WSL); cmd.exe is not a target.
+  it.skipIf(process.platform === 'win32')('cURL command sends what Hachi would send', async () => {
     const file = path.join(tmp, "up 'load'.txt")
     await writeFile(file, 'file-content')
     const json = generateCode('curl', jsonPost(`${server.url}/echo?x=1`))
