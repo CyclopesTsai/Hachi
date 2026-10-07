@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GitRepoStatus } from '@shared/git'
 import { GitService } from './git-service'
 import { parseBranches, parseLog, parseNameStatus, parseRefs, parseStatus } from './parse'
@@ -105,6 +105,20 @@ describe('parseRefs / parseLog / parseNameStatus', () => {
 })
 
 const locator = { gitCandidates: () => [], gitUsable: async () => true }
+
+// Only the test repositories' own config counts: e.g. Git for Windows sets core.autocrlf
+// in its system config, which would check files out with CRLF.
+let isolatedConfig: string
+beforeAll(async () => {
+  isolatedConfig = await mkdtemp(path.join(os.tmpdir(), 'hachi-gitconfig-'))
+  await writeFile(path.join(isolatedConfig, 'gitconfig'), '')
+  vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1')
+  vi.stubEnv('GIT_CONFIG_GLOBAL', path.join(isolatedConfig, 'gitconfig'))
+})
+afterAll(async () => {
+  vi.unstubAllEnvs()
+  await rm(isolatedConfig, { recursive: true, force: true })
+})
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } }).trim()
 
