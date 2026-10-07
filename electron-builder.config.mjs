@@ -57,6 +57,14 @@ function unusedPackages() {
     .filter((name) => !keep.has(name))
 }
 
+/**
+ * macOS signing (decision 124): with a Developer ID certificate (CSC_LINK, e.g. a repository
+ * secret in GitHub Actions) the app is signed with the hardened runtime and notarized when
+ * Apple credentials are set (APPLE_API_KEY + APPLE_API_KEY_ID + APPLE_API_ISSUER, or
+ * APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID). Without a certificate: ad-hoc.
+ */
+const developerId = Boolean(process.env.CSC_LINK || process.env.CSC_NAME)
+
 export default {
   appId: info.appId,
   productName: info.appName,
@@ -83,14 +91,23 @@ export default {
     icon: 'build/icon.png',
     target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
     artifactName: '${productName}-${version}-${arch}.${ext}',
-    // Ad-hoc signature ("-"): no Apple Developer certificate yet, but the whole bundle is
-    // re-signed consistently. With `null` the app kept Electron's own (now invalid)
-    // signature and macOS reported downloaded copies as "damaged" on Apple Silicon.
-    // Real signing / notarization: see README.
-    identity: '-',
-    // Hardened runtime is only needed for notarization; with an ad-hoc signature it makes
-    // library validation reject Electron's frameworks. Turn on together with real signing.
-    hardenedRuntime: false
+    ...(developerId
+      ? {
+          // Developer ID: electron-builder picks the certificate from CSC_LINK, signs with
+          // the hardened runtime (required for notarization) and notarizes.
+          hardenedRuntime: true,
+          entitlements: 'build/entitlements.mac.plist',
+          entitlementsInherit: 'build/entitlements.mac.plist'
+        }
+      : {
+          // Ad-hoc signature ("-"): the whole bundle is re-signed consistently. With `null`
+          // the app kept Electron's own (now invalid) signature and macOS reported
+          // downloaded copies as "damaged" on Apple Silicon.
+          identity: '-',
+          // With an ad-hoc signature the hardened runtime's library validation would reject
+          // Electron's frameworks.
+          hardenedRuntime: false
+        })
   },
   // Windows (decision 123): x64 installer + portable exe, unsigned for now (SmartScreen
   // asks "More info → Run anyway"). The .ico is made from build/icon.png.

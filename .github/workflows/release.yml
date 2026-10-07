@@ -37,15 +37,43 @@ jobs:
         run: npm ci
       - name: Type check, lint, format, unit tests, licenses
         run: npm run verify
+      - name: Signing credentials (when the repository secrets exist)
+        # Developer ID signing + notarization (decision 124, see README). Without the
+        # secrets nothing is exported and the dmgs get the ad-hoc signature as before.
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            echo "CSC_LINK=$CSC_LINK" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "Developer ID signing: on"
+          else
+            echo "Developer ID signing: off (ad-hoc)"
+          fi
+          if [ -n "$CSC_LINK" ] && [ -n "$APPLE_API_KEY_P8" ]; then
+            key="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+            printf '%s' "$APPLE_API_KEY_P8" > "$key"
+            echo "APPLE_API_KEY=$key" >> "$GITHUB_ENV"
+            echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
+            echo "Notarization: on"
+          fi
       - name: Build dmgs (arm64 + x64)
         run: npm run dist:mac
-        # Add these secrets to sign and notarize (see README), nothing else changes:
-        # env:
-        #   CSC_LINK: ${{ secrets.CSC_LINK }}
-        #   CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        #   APPLE_ID: ${{ secrets.APPLE_ID }}
-        #   APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        #   APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Check the signature (Developer ID builds)
+        if: env.CSC_LINK != ''
+        run: |
+          app="$(ls -d release/*/mac-arm64/Hachi.app)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          if [ -n "${APPLE_API_KEY:-}" ]; then
+            # Notarized: Gatekeeper accepts it and the ticket is stapled to the app.
+            spctl --assess --type execute --verbose=4 "$app"
+            xcrun stapler validate "$app"
+          fi
       - name: Smoke test the packaged app
         run: |
           app="$(ls -d release/*/mac-arm64/Hachi.app)"

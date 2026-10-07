@@ -115,19 +115,24 @@ git push origin main --tags
 
 公開 repo 使用 GitHub Actions 的標準機器（含 macOS、Windows）免費。
 
-### 之後加入 Apple Developer 簽章與公證（Notarization）
+### macOS 簽章與公證（Developer ID）
 
-1. 加入 Apple Developer Program，在 Xcode 或 developer.apple.com 建立 **Developer ID Application** 憑證並安裝到 Keychain（CI 上則匯出成 `.p12`）。
-2. 在 `electron-builder.config.mjs` 的 `mac` 區塊：
-   - 移除 `identity: null`（讓 electron-builder 自動尋找憑證，或填入憑證名稱）
-   - 加上 `hardenedRuntime: true`、`gatekeeperAssess: false`
-   - 加上 `entitlements` / `entitlementsInherit`（例如 `build/entitlements.mac.plist`，Electron 需要 `com.apple.security.cs.allow-jit` 等項目）
-   - 加上 `notarize: true`
-3. 提供公證用的憑證（擇一），以環境變數傳入：
-   - App 專用密碼：`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`
-   - App Store Connect API Key：`APPLE_API_KEY`（.p8 路徑）、`APPLE_API_KEY_ID`、`APPLE_API_ISSUER`
-4. 憑證：本機放在 Keychain；GitHub Actions 則把 `.p12` 轉成 base64 存成 repository secret `CSC_LINK`，密碼存成 `CSC_KEY_PASSWORD`，再把第 3 步的值也存成 secrets，並取消 `release.yml`「Build dmgs」步驟中 `env:` 的註解。
-5. 執行 `npm run dist:mac`（或推 tag），完成後可用 `spctl -a -vv /Applications/Hachi.app` 與 `xcrun stapler validate Hachi-x.y.z-arm64.dmg` 驗證。
+設定好下列 GitHub repository secrets 後，推 tag 時 macOS 版會用 Developer ID 簽章（hardened runtime）並送 Apple 公證；沒有設定時照舊用 ad-hoc 簽章（使用者需在「隱私權與安全性」按「強制打開」）。設定在 `electron-builder.config.mjs`（依有沒有 `CSC_LINK` 切換）與 `.github/workflows/release.yml`。
+
+| Secret             | 內容                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `CSC_LINK`         | Developer ID Application 憑證（含私鑰）匯出的 `.p12`，轉成 base64：`base64 -i DeveloperID.p12 \| pbcopy` |
+| `CSC_KEY_PASSWORD` | 匯出 `.p12` 時設定的密碼                                                                                 |
+| `APPLE_API_KEY_P8` | App Store Connect API 金鑰檔 `AuthKey_XXXXXXXXXX.p8` 的**完整內容**（含 BEGIN / END 那兩行）             |
+| `APPLE_API_KEY_ID` | 該金鑰的 Key ID（10 碼）                                                                                 |
+| `APPLE_API_ISSUER` | App Store Connect API 頁面上的 Issuer ID（UUID）                                                         |
+
+1. **憑證**：Xcode → Settings → Accounts → 選開發者帳號 → Manage Certificates → 「+」→ **Developer ID Application**（需要帳號持有人 Account Holder 權限）。完成後在「鑰匙圈存取」的「我的憑證」找到「Developer ID Application: …」，展開確認有私鑰，對憑證按右鍵 → 輸出 → `.p12`，設定密碼。
+2. **公證用的 API 金鑰**：[App Store Connect](https://appstoreconnect.apple.com) → 使用者與存取權限 → 整合 → App Store Connect API → 團隊金鑰 → 「+」產生金鑰（存取權限選 Developer）。`.p8` 只能下載一次，記下 Key ID 與 Issuer ID。
+3. **GitHub**：repo → Settings → Secrets and variables → Actions → New repository secret，逐一加入上表 5 個值。
+4. 推下一個 tag。Release workflow 的「Check the signature」步驟會用 `codesign`、`spctl`、`stapler` 確認簽章與公證。
+
+本機也可以簽：憑證在鑰匙圈時執行 `CSC_NAME="Developer ID Application: 名字 (TEAMID)" npm run dist:mac`，並設定上面三個 `APPLE_API_*` 環境變數（`APPLE_API_KEY` 為 `.p8` 檔的路徑）。
 
 ## Windows
 
