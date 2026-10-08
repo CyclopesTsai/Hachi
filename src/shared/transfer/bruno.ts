@@ -565,7 +565,7 @@ export function unsupportedBrunoApis(code: string): string[] {
   return [...new Set(found)]
 }
 
-function containerScripts(part: Partial<BrunoRequestPart> | null, where: string, ctx: Ctx) {
+function containerScripts(part: Partial<BrunoRequestPart> | null) {
   const req = part?.script?.req ?? ''
   const res = [part?.script?.res ?? '', part?.tests ?? '']
     .filter((s) => s.trim() !== '')
@@ -598,7 +598,7 @@ function mapItems(items: BrunoItem[], path: string[], ctx: Ctx): PortableItem[] 
                   ctx
                 )
               : { type: 'inherit' },
-            scripts: containerScripts(folder.root, where, ctx),
+            scripts: containerScripts(folder.root),
             children: mapItems(folder.items, [...path, name], ctx)
           }
         ]
@@ -630,7 +630,7 @@ function mapCollection(data: BrunoCollectionData, newId: () => string): BrunoImp
     variables,
     // Bruno's default flow is sandwich (decision 126).
     scriptFlow: data.scriptFlow ?? 'sandwich',
-    scripts: containerScripts(root, '', ctx),
+    scripts: containerScripts(root),
     children: mapItems(data.items, [], ctx)
   }
   // Hachi environments are shared by the Workspace: name them after the collection.
