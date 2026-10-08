@@ -307,7 +307,14 @@
    - **Git-b ✅（等使用者確認）**：Fetch / Pull（merge）/ Push、設定遠端、帳密 / SSH 密語輸入框（askpass）、衝突逐檔處理（保留我的 / 使用遠端的 / 外部編輯後標記已解決、完成 / 放棄合併）、Workspace 設定「開啟時自動 Fetch」（決策 113、114、120）。驗證：單元測試 447 個（askpass 用真的 helper、Fetch / Pull / Push / 衝突用本機 bare repo），E2E 新增設定遠端 → Push、別人 push → Fetch / Pull、衝突 → 保留我的 → 完成合併 → Push、重新啟動時自動 Fetch（淺色、深色）
    - **Git-c ✅（等使用者確認）**：Git 畫面的 History 分頁（所有分支的線圖、標籤、commit 詳情、檔案差異，決策 116、121）。驗證：單元測試 453 個（`graph.test.ts` 線圖演算法、History 用真的 git：分支、合併、tag、Workspace 外的檔案），E2E 新增 History（commit 數、標籤、詳情、檔案差異；淺色、深色）
 2. **Windows 版**（決策 123，**v0.4.0** 第一個含 Windows 的版本）：**CI 已在 Windows 上通過 verify＋E2E**（2026-10-07；修正：測試隔離機器的 git 設定以免 autocrlf 影響、Windows CI 測試逾時 60 秒、POSIX 的 cURL 執行測試在 Windows 略過）；**v0.4.0 的發版流程一次成功**：macOS、Windows 各自打包並對打包後的 App 跑 E2E，publish job 發佈 4 個檔案（arm64 / x64 dmg、setup / portable exe）。尚未在真的 Windows 電腦上實測安裝、SmartScreen 與 Git 帳密輸入框。原規劃：打包（nsis＋portable、.ico）→ CI（Windows 的 verify / E2E、發版打包）→ 修正 Windows 上測試失敗的地方 → Git 細節（`.gitattributes`、`core.longpaths`、askpass `.cmd` / named pipe 由單元測試在 Windows CI 驗證）→ 文件
-3. **進行中（2026-10-09，使用者選「一次做完再確認」）**：決策 126–130（容器腳本、await / sendRequest / runRequest / setNextRequest / sleep、OAuth2 / Digest / AWS、Cookie Jar、Runner 持續時間與 HTML 報告）
+3. **決策 125–130 ✅（2026-10-09，等使用者確認；使用者選「一次做完再確認」）**：
+   - 125：改名時輸入法選字的 Enter 不會結束改名；回應等唯讀編輯器可全選 / 複製 / 搜尋
+   - 126：Collection / 資料夾腳本會執行（`executor.ts` 的腳本鏈、Collection 設定「腳本順序」、Postman / Bruno 匯入匯出 `scriptFlow`）
+   - 127：腳本可 `await`；`sendRequest` / `runRequest` / `setNextRequest` / `sleep` / `setTimeout`（QuickJS deferred promise ↔ utilityProcess ↔ main 的 host call）；Runner 依 `setNextRequest` 跳轉（一輪最多 1000 個）；Workspace 設定「腳本總時間」
+   - 128：OAuth 2.0（`src/main/services/http/auth/oauth2.ts`，三種 grant、PKCE、本機 Callback、記憶體 Token 與自動更新、Auth 分頁「取得 Token」）、Digest（`digest.ts`，401 後重送）、AWS Signature v4（`aws-sigv4.ts`）；Postman / Bruno（`.bru`、YAML、JSON）/ OpenAPI 對應；程式碼產生的提示；新增錯誤碼 `AUTH`
+   - 129：Cookie Jar（`cookie-jar.ts`、`cookie-service.ts`，`<userData>/cookies/<id>.json`）；使用 Jar 時重新導向由 Hachi 跟隨；WebSocket 交握也帶上；Workspace 選單「Cookies…」；請求 Settings 可關閉；Runner 並行時每個 worker 一份副本
+   - 130：Runner「結束條件：持續時間」、匯出 HTML 報告（`runner-report.ts`）
+   - 驗證：`npm run verify`（單元測試 509 個；Digest 用 RFC 2617 / 7616 範例、AWS 用官方 test suite 向量、OAuth2 用本機 Callback 的完整流程、Cookie Jar、Runner 持續時間 / 報告 / setNextRequest）；E2E 新增 Collection 腳本＋await sendRequest、OAuth 2.0 取得 Token 並送出、Cookies 對話框、Runner HTML 報告與持續時間模式、腳本總時間設定（淺色、深色都通過）
 4. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）
@@ -327,12 +334,11 @@
 
 ### 功能
 
-| 項目                        | 說明                                                                                     | 相關決策 |
-| --------------------------- | ---------------------------------------------------------------------------------------- | -------- |
-| Cookie Jar                  | 自動保存並送出回應設定的 Cookie                                                          | 28、79   |
-| Collection / 資料夾層級腳本 | 匯入時已保留在 `collection.json` / `folder.json`，目前不執行                             | 70       |
-| 腳本進階 API                | `pm.sendRequest`、`async` / `await`、`setNextRequest`（Runner 流程控制）目前不支援       | 72       |
-| Runner 擴充                 | 固定時間模式、逐步增加並行數（決策 86 不做）、吞吐量表格（決策 87 未選）、匯出 HTML 報告 | 86、87   |
+| 項目            | 說明                                                       | 相關決策 |
+| --------------- | ---------------------------------------------------------- | -------- |
+| 腳本 Cookie API | `pm.cookies` / `bru.cookies`（Cookie Jar 已有，決策 129）  | 129      |
+| Runner 擴充     | 逐步增加並行數（決策 86 不做）、吞吐量表格（決策 87 未選） | 86、87   |
+| 更多驗證方式    | OAuth 2.0 Implicit、NTLM、Hawk（決策 128 不做）            | 128      |
 
 ### 維護
 

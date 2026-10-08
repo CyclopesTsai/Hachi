@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
@@ -14,6 +15,7 @@ import { formatBytes, formatDuration, type HttpErrorCode } from '@shared/http'
 import {
   RUNNER_MAX_CONCURRENCY,
   RUNNER_MAX_DELAY_MS,
+  RUNNER_MAX_DURATION_SEC,
   RUNNER_MAX_ITERATIONS,
   type LatencyStats,
   type RunnerRowDetail,
@@ -24,6 +26,12 @@ import { findNode, type TreeNode } from '@shared/tree'
 import { CodeEditor } from '@renderer/components/code-editor'
 import { Button } from '@renderer/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
 import { Input } from '@renderer/components/ui/input'
 import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
@@ -119,6 +127,7 @@ function Settings({
   }
   const unsaved = requests.some((r) => !excluded.has(r.id) && dirtyIds.has(itemTabKey(r.id)))
   const [iterText, setIterText] = useState(String(f.iterations))
+  const [durationText, setDurationText] = useState(String(f.durationSec))
   const [concText, setConcText] = useState(String(f.concurrency))
   const [delayText, setDelayText] = useState(String(f.delayMs))
 
@@ -199,20 +208,47 @@ function Settings({
         </NativeSelect>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="執行次數（每個 worker）">
-          <Input
-            aria-label="執行次數"
-            type="number"
-            min={1}
-            max={RUNNER_MAX_ITERATIONS}
-            className="h-8"
-            value={iterText}
-            onChange={(e) => {
-              setIterText(e.target.value)
-              update({ iterations: clampInt(e.target.value, 1, RUNNER_MAX_ITERATIONS) })
-            }}
-          />
+        <Field label="結束條件">
+          <NativeSelect
+            aria-label="結束條件"
+            value={f.endMode}
+            onChange={(e) => update({ endMode: e.target.value as 'iterations' | 'duration' })}
+          >
+            <option value="iterations">執行次數</option>
+            <option value="duration">持續時間</option>
+          </NativeSelect>
         </Field>
+        {f.endMode === 'iterations' ? (
+          <Field label="執行次數（每個 worker）">
+            <Input
+              aria-label="執行次數"
+              type="number"
+              min={1}
+              max={RUNNER_MAX_ITERATIONS}
+              className="h-8"
+              value={iterText}
+              onChange={(e) => {
+                setIterText(e.target.value)
+                update({ iterations: clampInt(e.target.value, 1, RUNNER_MAX_ITERATIONS) })
+              }}
+            />
+          </Field>
+        ) : (
+          <Field label="持續時間（秒）">
+            <Input
+              aria-label="持續時間"
+              type="number"
+              min={1}
+              max={RUNNER_MAX_DURATION_SEC}
+              className="h-8"
+              value={durationText}
+              onChange={(e) => {
+                setDurationText(e.target.value)
+                update({ durationSec: clampInt(e.target.value, 1, RUNNER_MAX_DURATION_SEC) })
+              }}
+            />
+          </Field>
+        )}
         <Field label="並行數">
           <Input
             aria-label="並行數"
@@ -229,8 +265,9 @@ function Settings({
         </Field>
       </div>
       <p className="-mt-2 text-xs text-muted-foreground">
-        總輪數 = {f.iterations} × {f.concurrency} ={' '}
-        {(f.iterations * f.concurrency).toLocaleString()}
+        {f.endMode === 'iterations'
+          ? `總輪數 = ${f.iterations} × ${f.concurrency} = ${(f.iterations * f.concurrency).toLocaleString()}`
+          : `${f.concurrency} 個 worker 各自一直執行到 ${f.durationSec.toLocaleString()} 秒；時間到後不再開始新的一輪，已開始的一輪會跑完`}
         {f.concurrency > 1 &&
           '。並行時每個 worker 的變數各自獨立，環境 / Collection 變更不會寫入檔案'}
       </p>
@@ -570,7 +607,14 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
     )
   }
   const p = run.progress
-  const pct = p.totalRequests === 0 ? 0 : (p.completedRequests / p.totalRequests) * 100
+  const pct =
+    p.durationMs !== null
+      ? p.status === 'running'
+        ? Math.min(100, (p.elapsedMs / p.durationMs) * 100)
+        : 100
+      : p.totalRequests === 0
+        ? 0
+        : (p.completedRequests / p.totalRequests) * 100
   const timeline = p.stats.timeline
   const seconds = timeline.map((t) => t.second)
   const page = session.page
@@ -597,8 +641,9 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
             {STATUS_LABEL[p.status]}
           </span>
           <span className="tabular-nums" data-testid="runner-counts">
-            {p.completedRequests.toLocaleString()} / {p.totalRequests.toLocaleString()} 個請求 ·{' '}
-            {p.completedRounds} / {p.totalRounds} 輪 · {formatDuration(p.elapsedMs)}
+            {p.durationMs !== null
+              ? `${p.completedRequests.toLocaleString()} 個請求 · ${p.completedRounds} 輪 · ${formatDuration(p.elapsedMs)} / ${formatDuration(p.durationMs)}`
+              : `${p.completedRequests.toLocaleString()} / ${p.totalRequests.toLocaleString()} 個請求 · ${p.completedRounds} / ${p.totalRounds} 輪 · ${formatDuration(p.elapsedMs)}`}
           </span>
           {p.message && p.status !== 'cancelled' && (
             <span className="text-xs text-muted-foreground">{p.message}</span>
@@ -801,19 +846,30 @@ export function RunnerView({ tab }: { tab: RunnerTab }) {
           </span>
         )}
         {session.run && !running && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              void store.exportResults(tab.uid).then(
-                () => setExportError(null),
-                (e: unknown) => setExportError(errorMessage(e))
-              )
-            }
-          >
-            <Download />
-            匯出結果
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="runner-export">
+                <Download />
+                匯出結果
+                <ChevronDown />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {(['html', 'json'] as const).map((format) => (
+                <DropdownMenuItem
+                  key={format}
+                  onSelect={() =>
+                    void store.exportResults(tab.uid, format).then(
+                      () => setExportError(null),
+                      (e: unknown) => setExportError(errorMessage(e))
+                    )
+                  }
+                >
+                  {format === 'html' ? 'HTML 報告…' : 'JSON（完整資料）…'}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
         {running ? (
           <Button variant="outline" size="sm" onClick={() => void store.cancel(tab.uid)}>

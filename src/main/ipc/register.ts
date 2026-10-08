@@ -125,9 +125,12 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.runnerRows]: (input) => ctx.runner.rows(input.runId, input),
     [INVOKE.runnerRow]: (input) => ctx.runner.row(input.runId, input.index),
     [INVOKE.runnerExport]: async (input) => {
-      const exported = ctx.runner.exportJson(input.runId)
+      const exported =
+        input.format === 'html'
+          ? ctx.runner.exportHtml(input.runId)
+          : ctx.runner.exportJson(input.runId)
       const target = await selectSavePath(ctx.getWindow(), {
-        title: 'Export Runner Results',
+        title: input.format === 'html' ? 'Export Runner Report' : 'Export Runner Results',
         defaultPath: path.join(app.getPath('downloads'), exported.fileName)
       })
       if (!target) return null

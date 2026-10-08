@@ -31,6 +31,7 @@ import {
   RUNNER_MAX_CONCURRENCY,
   RUNNER_MAX_DATA_ROWS,
   RUNNER_MAX_DELAY_MS,
+  RUNNER_MAX_DURATION_SEC,
   RUNNER_MAX_ITERATIONS
 } from '../runner'
 import type { ExportFormat, InvokeMap } from './api'
@@ -122,6 +123,7 @@ export const inputSchemas = {
       itemIds: z.array(itemIdSchema).min(1).max(10_000),
       environmentId: itemIdSchema.nullable(),
       iterations: z.number().int().min(1).max(RUNNER_MAX_ITERATIONS),
+      durationSec: z.number().int().min(1).max(RUNNER_MAX_DURATION_SEC).nullable(),
       concurrency: z.number().int().min(1).max(RUNNER_MAX_CONCURRENCY),
       delayMs: z.number().int().min(0).max(RUNNER_MAX_DELAY_MS),
       stopOnFailure: z.boolean(),
@@ -146,7 +148,7 @@ export const inputSchemas = {
     failedOnly: z.boolean()
   }),
   [INVOKE.runnerRow]: z.strictObject({ runId: runIdSchema, index: z.number().int().min(0) }),
-  [INVOKE.runnerExport]: z.strictObject({ runId: runIdSchema }),
+  [INVOKE.runnerExport]: z.strictObject({ runId: runIdSchema, format: z.enum(['json', 'html']) }),
   [INVOKE.runnerDiscard]: z.strictObject({ runId: runIdSchema }),
   [INVOKE.runnerPickDataFile]: noInput,
   [INVOKE.runtimeList]: noInput,

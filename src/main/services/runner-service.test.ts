@@ -12,6 +12,7 @@ import { HttpService } from './http/http-service'
 import { startHttpServer, type TestServer } from './http/test-servers'
 import { RunnerService } from './runner-service'
 import { CookieJar } from './http/cookie-jar'
+import { escapeHtml } from './runner-report'
 import { RuntimeVariables } from './runtime-variables'
 import { runScript } from './scripts/engine'
 
@@ -113,6 +114,7 @@ const config = (over: Partial<RunnerConfig> = {}): RunnerConfig => ({
   itemIds: ['login', 'list', 'live'],
   environmentId: 'env',
   iterations: 1,
+  durationSec: null,
   concurrency: 1,
   delayMs: 0,
   stopOnFailure: false,
@@ -285,6 +287,42 @@ describe('RunnerService', () => {
     expect(json.rows[0]?.body).toContain('"method":"GET"')
     svc.discard(runId)
     expect(() => svc.progress(runId)).toThrow(/不在記憶體/)
+  })
+
+  it('runs until the time is up in duration mode (decision 130)', async () => {
+    requests.list = req('list', { url: '{{host}}/slow?ms=40' })
+    const svc = service()
+    const { runId, progress } = await run(
+      svc,
+      config({ itemIds: ['list'], durationSec: 1, concurrency: 2, iterations: 1 })
+    )
+    expect(progress).toMatchObject({ status: 'done', totalRounds: 0, durationMs: 1000 })
+    expect(progress.elapsedMs).toBeGreaterThanOrEqual(1000)
+    // Far more than 1 round per worker; both workers ran.
+    expect(progress.completedRounds).toBeGreaterThan(4)
+    const { rows } = svc.rows(runId, { offset: 0, limit: 1000, failedOnly: false })
+    expect(new Set(rows.map((r) => r.worker))).toEqual(new Set([0, 1]))
+    expect(JSON.parse(svc.exportJson(runId).content)).toMatchObject({
+      settings: { iterations: null, durationSec: 1 }
+    })
+  })
+
+  it('exports an offline HTML report with the failed rows (decision 130)', async () => {
+    requests.list = req('list', {
+      url: '{{host}}/echo',
+      assertions: [{ id: 'a', target: 'status', operator: 'eq', expected: '404' }]
+    })
+    const svc = service()
+    const { runId } = await run(svc, config({ iterations: 2 }))
+    const report = svc.exportHtml(runId)
+    expect(report.fileName).toMatch(/^runner-.*\.html$/)
+    const html = report.content
+    expect(html).toMatch(/^<!doctype html>/)
+    expect(html).toContain('<title>Runner 報告：API</title>')
+    expect(html).toContain('失敗的請求（2）')
+    expect(html).toContain('狀態碼 等於 404')
+    expect(escapeHtml(`<b a="1">&'`)).toBe('&lt;b a=&quot;1&quot;&gt;&amp;&#39;')
+    expect(html).not.toMatch(/<script|https?:\/\/(?!127\.0\.0\.1)/)
   })
 
   it('rejects a target without HTTP requests', async () => {

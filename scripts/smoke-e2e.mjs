@@ -57,6 +57,16 @@ const testServer = await new Promise((resolve) => {
     } else if (url.pathname === '/html') {
       res.setHeader('content-type', 'text/html')
       res.end('<h1>Hello Hachi</h1><script>document.title = "ran"</script>')
+    } else if (url.pathname === '/oauth/token') {
+      // Decision 128: client credentials with Basic client auth.
+      const ok = req.headers.authorization === `Basic ${Buffer.from('e2e:shh').toString('base64')}`
+      res.statusCode = ok ? 200 : 401
+      res.setHeader('content-type', 'application/json')
+      res.end(
+        ok
+          ? '{"access_token":"e2e-token","token_type":"Bearer","expires_in":3600}'
+          : '{"error":"invalid_client"}'
+      )
     } else if (url.pathname === '/redirect') {
       const n = Number(url.searchParams.get('n') ?? '1')
       res.writeHead(302, { location: n > 1 ? `/redirect?n=${n - 1}` : '/json' })
@@ -1076,7 +1086,7 @@ try {
             request: {
               method: 'POST',
               url: '{{shopBase}}/echo',
-              auth: { type: 'oauth2' },
+              auth: { type: 'ntlm' },
               body: { mode: 'raw', raw: '{"a":1}', options: { raw: { language: 'json' } } }
             }
           }
@@ -1109,7 +1119,7 @@ try {
   const importText = await transferResult.innerText()
   assert.ok(importText.includes('已建立 Collection「Shop」'), importText)
   assert.ok(importText.includes('已建立環境「Shop Prod」'), importText)
-  assert.ok(importText.includes('oauth2'), 'unsupported auth reported')
+  assert.ok(importText.includes('ntlm'), 'unsupported auth reported')
   await page.screenshot({ path: path.join(shots, '11-import.png') })
   await transferResult.getByRole('button', { name: '確定' }).click()
   await t.row('Shop').waitFor()
@@ -1225,6 +1235,94 @@ try {
     'scripts run in the sandbox after trusting the Workspace: pre-request header + runtime variable, extraction, assertions 3/4, console, CryptoJS, pm.environment.set'
   )
 
+  // ---- Decisions 126 / 127: Collection scripts run first; await + sendRequest ----
+  await t.row('Shop').click() // opens the collection settings (and collapses it)
+  const shopEditor = page.getByTestId('container-editor')
+  await shopEditor.getByRole('tab', { name: /^Scripts/ }).click()
+  const shopScript = shopEditor.locator('[data-testid="script-editor"] .cm-content')
+  await shopScript.click()
+  await page.keyboard.insertText(
+    "const r = await hachi.sendRequest(hachi.collectionVariables.get('shopBase') + '/json'); await hachi.sleep(10); console.log('collection got ' + r.status + ' ' + r.json().ok)"
+  )
+  await shopEditor.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () =>
+      (await readJson(path.join(shopDir, 'collection.json'))).scripts?.preRequest.includes(
+        'sendRequest'
+      ),
+    'collection script saved'
+  )
+  await t.row('Shop').click() // expand again
+  await tabByTitle('Ping').click()
+  await page.getByTestId('request-editor').getByRole('button', { name: '發送' }).click()
+  await page.getByRole('tab', { name: /^Console/ }).click()
+  await waitUntil(
+    async () =>
+      (await page.getByTestId('console-panel').innerText()).includes('collection got 200 true'),
+    'collection script ran before the request script'
+  )
+  const ordered = await page.getByTestId('console-panel').innerText()
+  assert.ok(
+    ordered.indexOf('Collection「Shop」的腳本') < ordered.indexOf('pre ran'),
+    'collection script first'
+  )
+  // Remove it again: the Runner below counts requests.
+  await t.row('Shop').click()
+  await shopEditor.getByRole('tab', { name: /^Scripts/ }).click()
+  await shopScript.click()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.press('Backspace')
+  await shopEditor.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(shopDir, 'collection.json'))).scripts?.preRequest === '',
+    'collection script removed'
+  )
+  await t.row('Shop').click()
+  await tabByTitle('Ping').click()
+  step('Collection scripts run before the request script; await, sendRequest and sleep work')
+
+  // ---- Decisions 128 / 129: OAuth 2.0 token, cookie jar ----
+  const pingEditor2 = page.getByTestId('request-editor')
+  await pingEditor2.getByRole('tab', { name: 'Auth' }).click()
+  await page.getByLabel('驗證類型').selectOption('oauth2')
+  await page.getByLabel('Access Token URL').fill('{{shopBase}}/oauth/token')
+  await page.getByLabel('Client ID').fill('e2e')
+  await page.getByLabel('Client Secret').fill('shh')
+  await page.getByTestId('oauth2-token').getByRole('button', { name: '取得 Token' }).click()
+  await waitUntil(
+    async () =>
+      (await page.getByTestId('oauth2-token-status').innerText()).startsWith('已取得 Token'),
+    'OAuth 2.0 token obtained'
+  )
+  await page.screenshot({ path: path.join(shots, '20-oauth2.png') })
+  await pingEditor2.getByRole('button', { name: '發送' }).click()
+  await page.getByRole('tab', { name: /^Body/ }).last().click()
+  await waitUntil(
+    async () =>
+      (await page.getByTestId('response-viewer').innerText()).includes('Bearer e2e-token'),
+    'token sent as a bearer'
+  )
+  // The jar keeps the cookies /json set earlier and sends them along.
+  assert.ok(
+    (await page.getByTestId('response-viewer').innerText()).includes('session=abc; theme=dark'),
+    'cookie jar sends stored cookies'
+  )
+  await pingEditor2.getByRole('tab', { name: 'Auth' }).click()
+  await page.getByLabel('驗證類型').selectOption('inherit')
+  await page.getByTestId('workspace-menu').click()
+  await page.getByTestId('open-cookies').click()
+  const cookiesDialog = page.getByTestId('cookies-dialog')
+  await waitUntil(
+    async () => (await cookiesDialog.getByTestId('cookie-row').count()) === 2,
+    'cookies listed'
+  )
+  assert.equal(await cookiesDialog.getByTestId('cookie-domain').innerText(), '127.0.0.1')
+  await page.screenshot({ path: path.join(shots, '21-cookies.png') })
+  await cookiesDialog.getByTestId('cookies-clear-all').click()
+  await cookiesDialog.getByText('還沒有 Cookie。').waitFor()
+  await page.keyboard.press('Escape')
+  step('OAuth 2.0 client credentials: 取得 Token, sent as a bearer; cookie jar listed and cleared')
+
   await page.getByTestId('environment-select').click()
   await page.getByRole('menuitem', { name: '管理環境…' }).click()
   const runtimeSection = page.getByTestId('runtime-variables')
@@ -1244,7 +1342,13 @@ try {
   await page.getByRole('menuitem', { name: 'Workspace 設定…' }).click()
   const wsSettings = page.getByTestId('workspace-settings-dialog')
   await wsSettings.getByTestId('trust-scripts').uncheck()
+  await wsSettings.getByTestId('script-timeout').fill('45')
   await wsSettings.getByRole('button', { name: '儲存' }).click()
+  await waitUntil(
+    async () =>
+      (await readJson(path.join(wsDir, 'workspace.json'))).settings.scriptTimeoutMs === 45_000,
+    'script time limit saved'
+  )
   await waitUntil(
     async () =>
       (await readJson(path.join(userData, 'app-config.json'))).scripts.trustedWorkspaces.length ===
@@ -1316,6 +1420,7 @@ try {
     dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
   }, runnerExport)
   await runnerView.getByRole('button', { name: '匯出結果' }).click()
+  await page.getByRole('menuitem', { name: 'JSON（完整資料）…' }).click()
   await waitUntil(() => exists(runnerExport), 'runner export written')
   const runnerJson = await readJson(runnerExport)
   assert.equal(runnerJson.rows.length, 12)
@@ -1324,8 +1429,22 @@ try {
     [3, 2, 'users.csv']
   )
   assert.ok(runnerJson.rows[0].body.includes('"ok":true'), 'bodies kept')
+  // Decision 130: single-file HTML report.
+  const runnerReport = path.join(tmp, 'runner.html')
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: file })
+  }, runnerReport)
+  await runnerView.getByRole('button', { name: '匯出結果' }).click()
+  await page.getByRole('menuitem', { name: 'HTML 報告…' }).click()
+  await waitUntil(() => exists(runnerReport), 'runner report written')
+  const reportHtml = await readFile(runnerReport, 'utf8')
+  assert.ok(reportHtml.startsWith('<!doctype html>'), 'HTML report')
+  assert.ok(
+    reportHtml.includes('每個請求的統計') && !reportHtml.includes('<script'),
+    'offline report'
+  )
   step(
-    'Collection Runner: 3 rounds × 2 workers with a CSV data file, statistics, charts, row details with kept bodies, JSON export'
+    'Collection Runner: 3 rounds × 2 workers with a CSV data file, statistics, charts, row details with kept bodies, JSON export, HTML report'
   )
 
   await runnerView.getByLabel('執行次數').fill('10000')
@@ -1343,6 +1462,21 @@ try {
     'runner cancelled'
   )
   step('a long run can be stopped')
+
+  // Decision 130: duration mode — each worker runs until the time is up.
+  await runnerView.getByLabel('結束條件').selectOption('duration')
+  await runnerView.getByLabel('持續時間').fill('2')
+  await runnerView.getByLabel('請求間隔').fill('0')
+  await runnerView.getByRole('button', { name: '開始執行' }).click()
+  await waitUntil(
+    async () => (await page.getByTestId('runner-status').getAttribute('data-status')) === 'done',
+    'duration run finished',
+    20_000
+  )
+  const durationCounts = await page.getByTestId('runner-counts').innerText()
+  assert.match(durationCounts, /\/ 2\.00 s/, durationCounts)
+  await runnerView.getByLabel('結束條件').selectOption('iterations')
+  step('Runner duration mode runs until the time is up')
   await tabByTitle('Cookies').click()
   await page.getByTestId('request-editor').locator('h2').getByText('Cookies').waitFor()
 

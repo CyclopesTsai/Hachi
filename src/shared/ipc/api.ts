@@ -480,7 +480,7 @@ export interface InvokeMap {
   'runner:cancel': { input: { runId: string }; output: boolean }
   'runner:rows': { input: RunnerRowsInput; output: { total: number; rows: RunnerRow[] } }
   'runner:row': { input: { runId: string; index: number }; output: RunnerRowDetail | null }
-  'runner:export': { input: { runId: string }; output: string | null }
+  'runner:export': { input: { runId: string; format: 'json' | 'html' }; output: string | null }
   'runner:discard': { input: { runId: string }; output: void }
   'runner:pickDataFile': { input: void; output: RunnerDataFile | null }
   'dialog:selectDirectory': { input: SelectDirectoryInput; output: string | null }

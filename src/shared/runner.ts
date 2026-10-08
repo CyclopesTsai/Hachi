@@ -6,6 +6,8 @@ import type { HttpErrorCode } from './http'
 import type { ScriptReport } from './scripts'
 
 export const RUNNER_MAX_ITERATIONS = 10_000
+/** Longest run in duration mode (decision 130). */
+export const RUNNER_MAX_DURATION_SEC = 86_400
 export const RUNNER_MAX_CONCURRENCY = 20
 export const RUNNER_MAX_DELAY_MS = 60_000
 export const RUNNER_MAX_DATA_ROWS = 10_000
@@ -32,8 +34,13 @@ export interface RunnerConfig {
   /** Request ids in run order (only the checked ones). */
   itemIds: string[]
   environmentId: string | null
-  /** Rounds per worker (decision 88). */
+  /** Rounds per worker (decision 88); ignored when `durationSec` is set. */
   iterations: number
+  /**
+   * Duration mode (decision 130): every worker starts new rounds until this many
+   * seconds have passed; a started round runs to its end. null = `iterations` mode.
+   */
+  durationSec: number | null
   /** Number of workers running rounds at the same time (decision 75). */
   concurrency: number
   /** Pause between two requests of a round. */
@@ -131,10 +138,14 @@ export interface RunnerProgress {
   status: RunnerStatus
   /** Why it stopped / failed (stop on failure, script trust, …). */
   message: string | null
+  /** 0 in duration mode (not known in advance). */
   totalRounds: number
   completedRounds: number
   completedRequests: number
+  /** 0 in duration mode. */
   totalRequests: number
+  /** Duration mode: the planned length; null = iterations mode. */
+  durationMs: number | null
   elapsedMs: number
   stats: RunnerStats
   /** Requests skipped because they are WebSocket items. */

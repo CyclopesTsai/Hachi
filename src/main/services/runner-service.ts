@@ -27,6 +27,7 @@ import { hasScripts, testSummary, type VariableChange } from '@shared/scripts'
 import { findNode, isContainer, type TreeNode, type WorkspaceTree } from '@shared/tree'
 import { applyVariableChanges, type VariableLayer } from '@shared/variables'
 import type { CookieJar } from './http/cookie-jar'
+import { buildRunnerReport, type RunnerResultData } from './runner-report'
 import { dataLayer, type ExecutionScope, type RequestExecutor } from './http/executor'
 
 export interface RunnerDeps {
@@ -224,7 +225,7 @@ export class RunnerService {
     }
 
     const environment = await this.deps.getEnvironment(config.environmentId)
-    const totalRounds = config.iterations * config.concurrency
+    const totalRounds = config.durationSec === null ? config.iterations * config.concurrency : 0
     const run: Run = {
       id: runId,
       config,
@@ -301,10 +302,10 @@ export class RunnerService {
   }
 
   /** Everything as JSON (decision 74): settings, statistics and rows (with kept details). */
-  exportJson(runId: string): { fileName: string; content: string } {
-    const run = this.require(runId)
+  /** Everything about a run, as exported (JSON / HTML report). */
+  private resultData(run: Run): RunnerResultData {
     const progress = this.progressOf(run)
-    const data = {
+    return {
       hachi: 'runner-result',
       version: 1,
       target: run.targetName,
@@ -314,7 +315,8 @@ export class RunnerService {
       status: run.status,
       message: run.message,
       settings: {
-        iterations: run.config.iterations,
+        iterations: run.config.durationSec === null ? run.config.iterations : null,
+        durationSec: run.config.durationSec,
         concurrency: run.config.concurrency,
         delayMs: run.config.delayMs,
         stopOnFailure: run.config.stopOnFailure,
@@ -327,10 +329,26 @@ export class RunnerService {
       stats: progress.stats,
       rows: run.rows.map((r) => run.details.get(r.index) ?? r)
     }
-    const stamp = run.startedAtIso.replace(/[:.]/g, '-')
+  }
+
+  private fileStamp(run: Run): string {
+    return run.startedAtIso.replace(/[:.]/g, '-')
+  }
+
+  exportJson(runId: string): { fileName: string; content: string } {
+    const run = this.require(runId)
     return {
-      fileName: `runner-${stamp}.json`,
-      content: `${JSON.stringify(data, null, 2)}\n`
+      fileName: `runner-${this.fileStamp(run)}.json`,
+      content: `${JSON.stringify(this.resultData(run), null, 2)}\n`
+    }
+  }
+
+  /** Single offline HTML file (decision 130). */
+  exportHtml(runId: string): { fileName: string; content: string } {
+    const run = this.require(runId)
+    return {
+      fileName: `runner-${this.fileStamp(run)}.html`,
+      content: buildRunnerReport(this.resultData(run))
     }
   }
 
@@ -398,7 +416,11 @@ export class RunnerService {
   private async worker(run: Run, worker: number, state: WorkerState | null): Promise<void> {
     const { config } = run
     const rows = config.data?.rows ?? null
-    for (let k = 0; k < config.iterations && run.status === 'running'; k++) {
+    // Duration mode (decision 130): start rounds until the time is up.
+    const deadline = config.durationSec === null ? null : run.startedAt + config.durationSec * 1000
+    const more = (k: number) =>
+      deadline === null ? k < config.iterations : performance.now() < deadline
+    for (let k = 0; more(k) && run.status === 'running'; k++) {
       const round = run.nextRound++
       const data = rows ? (rows[round % rows.length] ?? null) : null
       const iteration = { index: round, count: run.totalRounds }
@@ -458,7 +480,8 @@ export class RunnerService {
           const target = run.items.findIndex((x) => x.name === next || x.id === next)
           i = target < 0 ? run.items.length : target
         }
-        const last = k === config.iterations - 1 && i >= run.items.length
+        const last =
+          (deadline === null ? k === config.iterations - 1 : !more(k + 1)) && i >= run.items.length
         if (config.delayMs > 0 && !last && run.status === 'running') {
           await new Promise((r) => setTimeout(r, config.delayMs))
         }
@@ -545,6 +568,7 @@ export class RunnerService {
       completedRounds: run.completedRounds,
       completedRequests: run.rows.length,
       totalRequests: run.totalRounds * run.items.length,
+      durationMs: run.config.durationSec === null ? null : run.config.durationSec * 1000,
       elapsedMs: end - run.startedAt,
       stats: run.stats.snapshot(),
       skipped: run.skipped

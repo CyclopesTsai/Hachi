@@ -22,7 +22,10 @@ export interface RunnerForm {
   /** Unchecked request ids (everything else below the target runs). */
   excluded: string[]
   environmentId: string | null
+  /** Decision 130: stop after N rounds per worker, or after a duration. */
+  endMode: 'iterations' | 'duration'
   iterations: number
+  durationSec: number
   concurrency: number
   delayMs: number
   stopOnFailure: boolean
@@ -62,7 +65,7 @@ interface RunnerState {
   cancel(uid: string): Promise<void>
   loadPage(uid: string, page?: { offset?: number; failedOnly?: boolean }): Promise<void>
   showDetail(uid: string, index: number | null): Promise<void>
-  exportResults(uid: string): Promise<string | null>
+  exportResults(uid: string, format: 'json' | 'html'): Promise<string | null>
   pickDataFile(uid: string): Promise<void>
   handleEvent(event: RunnerEvent): void
   /** Tab closed: stop and forget the run. */
@@ -96,7 +99,9 @@ export const useRunnerStore = create<RunnerState>()((set, get) => {
             form: {
               excluded: [],
               environmentId: useEnvStore.getState().activeId,
+              endMode: 'iterations',
               iterations: 1,
+              durationSec: 60,
               concurrency: 1,
               delayMs: 0,
               stopOnFailure: false,
@@ -160,6 +165,7 @@ export const useRunnerStore = create<RunnerState>()((set, get) => {
           itemIds,
           environmentId: f.environmentId,
           iterations: f.iterations,
+          durationSec: f.endMode === 'duration' ? f.durationSec : null,
           concurrency: f.concurrency,
           delayMs: f.delayMs,
           stopOnFailure: f.stopOnFailure,
@@ -218,10 +224,10 @@ export const useRunnerStore = create<RunnerState>()((set, get) => {
       patch(uid, () => ({ detail }))
     },
 
-    async exportResults(uid) {
+    async exportResults(uid, format) {
       const runId = get().sessions[uid]?.run?.runId
       if (!runId) return null
-      return unwrap(window.hachi.runner.export({ runId }))
+      return unwrap(window.hachi.runner.export({ runId, format }))
     },
 
     async pickDataFile(uid) {
