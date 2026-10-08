@@ -307,7 +307,7 @@
    - **Git-b ✅（等使用者確認）**：Fetch / Pull（merge）/ Push、設定遠端、帳密 / SSH 密語輸入框（askpass）、衝突逐檔處理（保留我的 / 使用遠端的 / 外部編輯後標記已解決、完成 / 放棄合併）、Workspace 設定「開啟時自動 Fetch」（決策 113、114、120）。驗證：單元測試 447 個（askpass 用真的 helper、Fetch / Pull / Push / 衝突用本機 bare repo），E2E 新增設定遠端 → Push、別人 push → Fetch / Pull、衝突 → 保留我的 → 完成合併 → Push、重新啟動時自動 Fetch（淺色、深色）
    - **Git-c ✅（等使用者確認）**：Git 畫面的 History 分頁（所有分支的線圖、標籤、commit 詳情、檔案差異，決策 116、121）。驗證：單元測試 453 個（`graph.test.ts` 線圖演算法、History 用真的 git：分支、合併、tag、Workspace 外的檔案），E2E 新增 History（commit 數、標籤、詳情、檔案差異；淺色、深色）
 2. **Windows 版**（決策 123，**v0.4.0** 第一個含 Windows 的版本）：**CI 已在 Windows 上通過 verify＋E2E**（2026-10-07；修正：測試隔離機器的 git 設定以免 autocrlf 影響、Windows CI 測試逾時 60 秒、POSIX 的 cURL 執行測試在 Windows 略過）；**v0.4.0 的發版流程一次成功**：macOS、Windows 各自打包並對打包後的 App 跑 E2E，publish job 發佈 4 個檔案（arm64 / x64 dmg、setup / portable exe）。尚未在真的 Windows 電腦上實測安裝、SmartScreen 與 Git 帳密輸入框。原規劃：打包（nsis＋portable、.ico）→ CI（Windows 的 verify / E2E、發版打包）→ 修正 Windows 上測試失敗的地方 → Git 細節（`.gitattributes`、`core.longpaths`、askpass `.cmd` / named pipe 由單元測試在 Windows CI 驗證）→ 文件
-3. **決策 125–130 ✅（2026-10-09，等使用者確認；使用者選「一次做完再確認」）**：
+3. **決策 125–130 ✅（2026-10-09，**v0.5.0 發佈**；使用者選「一次做完再確認」）**：
    - 125：改名時輸入法選字的 Enter 不會結束改名；回應等唯讀編輯器可全選 / 複製 / 搜尋
    - 126：Collection / 資料夾腳本會執行（`executor.ts` 的腳本鏈、Collection 設定「腳本順序」、Postman / Bruno 匯入匯出 `scriptFlow`）
    - 127：腳本可 `await`；`sendRequest` / `runRequest` / `setNextRequest` / `sleep` / `setTimeout`（QuickJS deferred promise ↔ utilityProcess ↔ main 的 host call）；Runner 依 `setNextRequest` 跳轉（一輪最多 1000 個）；Workspace 設定「腳本總時間」
