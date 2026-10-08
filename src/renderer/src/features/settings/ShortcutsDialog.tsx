@@ -54,7 +54,10 @@ function sections(mac: boolean, packaged: boolean): Section[] {
     },
     {
       title: 'Body、腳本與回應編輯器',
-      rows: [[`${mod}F`, '搜尋（CodeMirror 標準按鍵，另有復原、多重選取等）']]
+      rows: [
+        [`${mod}F`, '搜尋（CodeMirror 標準按鍵，另有復原、多重選取等）'],
+        [`${mod}A / ${mod}C`, '全選 / 複製（唯讀的回應也可以）']
+      ]
     }
   ]
 }

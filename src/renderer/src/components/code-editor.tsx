@@ -120,6 +120,15 @@ function variableExtension(map: VariableMap | undefined): Extension {
   return [plugin, tooltip]
 }
 
+/**
+ * Read-only keeps the editor focusable (contents can't change): selecting with the mouse,
+ * ⌘A / Ctrl+A, copying and ⌘F / Ctrl+F search work in the response viewer too.
+ */
+const readOnlyExtension = (readOnly: boolean) => [
+  EditorState.readOnly.of(readOnly),
+  EditorView.editable.of(true)
+]
+
 export interface CodeEditorProps {
   value: string
   onChange?: (value: string) => void
@@ -172,7 +181,7 @@ export function CodeEditor({
           c.language.of(languageExtension(language)),
           c.wrap.of(wrap ? EditorView.lineWrapping : []),
           c.variables.of(variableExtension(variables)),
-          c.readOnly.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
+          c.readOnly.of(readOnlyExtension(readOnly)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current?.(update.state.doc.toString())
           }),
@@ -215,10 +224,7 @@ export function CodeEditor({
 
   useEffect(() => {
     view.current?.dispatch({
-      effects: compartments.current.readOnly.reconfigure([
-        EditorState.readOnly.of(readOnly),
-        EditorView.editable.of(!readOnly)
-      ])
+      effects: compartments.current.readOnly.reconfigure(readOnlyExtension(readOnly))
     })
   }, [readOnly])
 

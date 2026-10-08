@@ -465,6 +465,10 @@ try {
   await t.row('Get Users copy').waitFor()
   assert.ok(await exists(path.join(usersDir, 'get-users-copy.json')))
   await t.contextAction('Get Users copy', '重新命名')
+  // Enter while an input method is composing picks a candidate, it does not finish the rename.
+  const renameField = page.getByTestId('tree-rename-input')
+  await renameField.dispatchEvent('keydown', { key: 'Enter', isComposing: true, keyCode: 229 })
+  assert.ok(await renameField.isVisible(), 'rename still open while composing')
   await t.typeName('List Users')
   assert.ok(await exists(path.join(usersDir, 'list-users.json')))
   assert.ok(!(await exists(path.join(usersDir, 'get-users-copy.json'))))
@@ -590,6 +594,11 @@ try {
   await page.getByTestId('response-status').waitFor()
   assert.match(await page.getByTestId('response-status').innerText(), /^200/)
   const echo = await page.getByTestId('response-body').innerText()
+  // The read-only response can take focus: select all / copy / search work there.
+  await page.getByTestId('response-body').locator('.cm-content').click()
+  await page.keyboard.press('ControlOrMeta+f')
+  await page.getByTestId('response-body').locator('.cm-search').waitFor()
+  await page.keyboard.press('Escape')
   for (const expected of [
     '"method": "POST"',
     '/echo?q=1',

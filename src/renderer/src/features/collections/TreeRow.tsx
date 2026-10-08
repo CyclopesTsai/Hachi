@@ -69,6 +69,9 @@ function InlineRename({
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
         e.stopPropagation()
+        // Enter / Esc while an input method is composing (e.g. picking 注音 / 拼音
+        // candidates) belong to the input method, not to the rename.
+        if (e.nativeEvent.isComposing || e.keyCode === 229) return
         if (e.key === 'Enter') finish(value)
         if (e.key === 'Escape') finish(null)
       }}

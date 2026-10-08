@@ -47,7 +47,7 @@ export function DiffView({
       syntaxHighlighting(highlightStyle, { fallback: true }),
       languageExtension(diff.path.endsWith('.json') ? 'json' : 'text'),
       EditorState.readOnly.of(true),
-      EditorView.editable.of(false)
+      EditorView.editable.of(true)
     ]
     const view = new MergeView({
       a: { doc: diff.before ?? '', extensions },
