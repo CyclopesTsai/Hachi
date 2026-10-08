@@ -5,8 +5,9 @@
 
 ## 目前狀態
 
-- **目前階段**：Phase 5 規劃已確認（決策 64–80），分 5a / 5b / 5c 實作；Phase 5 已確認；**Phase 6 完成，等使用者確認**（決策 93–99）。已改由本機（macOS）的 Claude Code 桌面版接手
-- **最後更新**：2026-10-03
+- **目前階段**：原規格的 Phase 0–6 全部完成；之後依下方「待辦」逐項進行（每項先規劃、確認決策再實作）。由本機（macOS）的 Claude Code 桌面版開發
+- **目前版本**：**v0.5.0**（2026-10-09，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
+- **最後更新**：2026-10-09
 
 ## Phase 進度
 
@@ -17,8 +18,8 @@
 | 2     | HTTP 編輯器與回應檢視器                                                                             | ✅ 完成                                                   |
 | 3     | 環境變數、多分頁、歷史紀錄                                                                          | ✅ 完成                                                   |
 | 4     | WebSocket 完整功能                                                                                  | ✅ 完成                                                   |
-| 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | 🚧 5a ✅；5b 進行中；5c 未開始（決策 64）                 |
-| 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | 🚧 完成待確認                                             |
+| 5     | 匯入匯出、程式碼產生、腳本與斷言、Collection Runner、全域搜尋                                       | ✅ 完成（5a / 5b / 5c，決策 64）                          |
+| 6     | 視窗狀態記憶、深色模式、快捷鍵整理、打包 macOS dmg                                                  | ✅ 完成                                                   |
 
 ### Phase 0 完成內容
 
@@ -295,7 +296,7 @@
   - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
   - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
 - **v0.2.1 發佈**（2026-10-07）：Bruno YAML 與多個 Collection 匯入（決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
-- Phase 6 等使用者確認
+- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）：見下方「待辦」各項
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
 ## 待辦（使用者排定，2026-10-07）
@@ -323,14 +324,14 @@
 
 ### 發佈與平台
 
-| 項目                 | 說明                                                                                                             | 相關決策   |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------- |
-| 正式 Logo / App 圖示 | 覆蓋 `build/icon.png`（1024×1024）並更新 `src/renderer/src/components/app-logo.tsx`；顏色目前是 Nord 藍          | 95、100    |
-| Apple 簽章與公證     | 需要 Apple Developer Program；步驟見 README，GitHub 上只需設定 Secrets 並取消 `release.yml` 的註解               | 37         |
-| 自動更新             | 簽章後可用 electron-updater（打包已產生 `latest-mac.yml`）；未簽章的 macOS App 無法自動更新                      | —          |
-| Windows 版           | `.exe`（nsis）/ `.msi`；檢查 `src/main/platform/default.ts`、路徑與快捷鍵；`release.yml` 加 `windows-latest` job | CLAUDE.md  |
-| Mac App Store 版     | App Sandbox、Workspace 與 Form-data 檔案改用 security-scoped bookmarks、`mas` target、不放外部贊助連結           | 34、36、37 |
-| CLA 法律審閱         | `CLA.md` 目前是草稿，開始收外部貢獻前請律師審閱                                                                  | 34         |
+| 項目                 | 說明                                                                                                                     | 相關決策   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| 正式 Logo / App 圖示 | 覆蓋 `build/icon.png`（1024×1024）並更新 `src/renderer/src/components/app-logo.tsx`；顏色目前是 Nord 藍                  | 95、100    |
+| Apple 簽章與公證     | 使用者已有開發者帳號，暫時擱置（決策 124）；設定流程已就緒：依 README 建立憑證與 API 金鑰、加入 5 個 GitHub Secrets 即可 | 37、124    |
+| 自動更新             | 簽章後可用 electron-updater（打包已產生 `latest-mac.yml`）；未簽章的 macOS App 無法自動更新                              | —          |
+| Windows 程式碼簽章   | 避免 SmartScreen「Windows 已保護您的電腦」（需要 OV / EV 憑證或 Azure Trusted Signing）；尚未在真的 Windows 電腦實測     | 123        |
+| Mac App Store 版     | App Sandbox、Workspace 與 Form-data 檔案改用 security-scoped bookmarks、`mas` target、不放外部贊助連結                   | 34、36、37 |
+| CLA 法律審閱         | `CLA.md` 目前是草稿，開始收外部貢獻前請律師審閱                                                                          | 34         |
 
 ### 功能
 

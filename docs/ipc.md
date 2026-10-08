@@ -551,8 +551,8 @@ interface CodegenRequest {
 
 ### 變數替換（`src/shared/variables.ts`）
 
-- 語法 `{{name}}`（大括號內前後空白會忽略）。可用在 URL、Params、Headers、Body（目前模式）、Auth、Form-data 的文字值與檔案路徑；請求名稱不替換。
-- 來源與優先順序：**暫存變數（Phase 5b）> 目前環境 > Collection 變數**（`parentId` 所屬的 Collection）。停用或名稱空白的變數忽略。
+- 語法 `{{name}}`（大括號內前後空白會忽略）。可用在 URL、Params、Headers、Body（目前模式）、Auth（含 OAuth 2.0 / Digest / AWS 的所有欄位）、Form-data 的文字值與檔案路徑；請求名稱不替換。
+- 來源與優先順序：**暫存變數（Phase 5b）>（Runner 的資料列）> 目前環境 > Collection 變數**（`parentId` 所屬的 Collection）。停用或名稱空白的變數忽略。
 - 變數值可再引用其他變數，最多 10 層；循環引用停止替換並視為找不到。
 - 動態變數（沒有同名的使用者變數時）：`{{$guid}}` / `{{$randomUUID}}`、`{{$timestamp}}`（Unix 秒）、`{{$isoTimestamp}}`、`{{$randomInt}}`（0–1000）、`{{$randomString}}`（16 個英數字）、`{{$randomAlphaNumeric}}`（1 個英數字）、`{{$randomEmail}}`（`user_xxxxxxxx@example.com`）、`{{$randomBoolean}}`，每次出現都重新產生。
 - 找不到的變數照原樣送出，名稱列在回應的 `unresolvedVariables`。

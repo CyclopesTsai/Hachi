@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前版本：**v0.4.0**（macOS、Windows）（[Releases](https://github.com/CyclopesTsai/Hachi/releases)）。HTTP / WebSocket、環境變數、腳本與斷言、Collection Runner、Postman / Bruno / cURL 匯入匯出、OpenAPI 文件（HTML / JSON）匯出、程式碼產生、Git（commit、Pull / Push、衝突處理、History）。開發進度與設計決策見 [docs/progress.md](docs/progress.md)。
+> 目前版本：**v0.5.0**（macOS、Windows）（[Releases](https://github.com/CyclopesTsai/Hachi/releases)）。HTTP / WebSocket、環境變數、腳本與斷言（含 Collection / 資料夾腳本、`await`、`sendRequest`）、驗證（Bearer / Basic / API Key / OAuth 2.0 / Digest / AWS Signature）、Cookie Jar、Collection Runner（持續時間模式、HTML 報告）、Postman / Bruno / cURL 匯入匯出、OpenAPI 文件（HTML / JSON）匯出、程式碼產生、Git（commit、Pull / Push、衝突處理、History）。開發進度與設計決策見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
@@ -44,6 +44,7 @@ npm run dev          # 啟動開發模式（renderer 支援 HMR）
 | `npm run check:licenses`          | 檢查所有隨 App 發佈的套件授權（只允許寬鬆授權，見 CONTRIBUTING.md）                                               |
 | `npm run verify`                  | 以上檢查一次跑完                                                                                                  |
 | `npm run dist:mac`                | 打包 macOS `.dmg`（arm64 與 x64）                                                                                 |
+| `npm run dist:win`                | 打包 Windows 安裝程式與免安裝版（x64，需在 Windows 上執行）                                                       |
 
 開發用環境變數：
 
@@ -57,10 +58,13 @@ src/
 ├─ main/          Electron main process
 │  ├─ platform/   ★ 平台專屬程式碼（darwin.ts / default.ts），其他地方不判斷 process.platform
 │  ├─ ipc/        IPC 註冊、輸入驗證、sender 驗證
-│  └─ services/   設定檔、Workspace、Collection、環境 / 機密值、歷史紀錄、分頁記憶、HTTP 引擎、WebSocket 連線
+│  ├─ services/   設定檔、Workspace、Collection、環境 / 機密值、歷史紀錄、分頁記憶、HTTP 引擎（含驗證、Cookie Jar）、
+│  │              WebSocket、腳本沙箱、Collection Runner、匯入匯出、Git
+│  └─ script-process.ts  執行腳本的 utilityProcess（QuickJS）
 ├─ preload/       暴露 window.hachi 白名單 API
 └─ renderer/      React UI（features/、components/ui/、stores/）
 docs/
+├─ progress.md    開發進度、設計決策（程式註解中的「決策 N」）、待辦
 ├─ ipc.md         IPC 介面文件
 └─ schema.md      JSON 檔案格式與資料夾結構
 ```
@@ -71,8 +75,9 @@ App 名稱、Bundle ID（`tw.com.cyclopes.hachi`）、版權字串集中在 **`s
 
 ## 資料存放位置
 
-- App 設定：`app.getPath('userData')/app-config.json`（macOS：`~/Library/Application Support/Hachi/`；Windows：`%APPDATA%\Hachi\`）；同一目錄另有 `history-index.json`（歷史紀錄共用上限的索引）與 `sessions/`（各 Workspace 開啟的分頁與目前環境）
+- App 設定：`app.getPath('userData')/app-config.json`（macOS：`~/Library/Application Support/Hachi/`；Windows：`%APPDATA%\Hachi\`）；同一目錄另有 `history-index.json`（歷史紀錄共用上限的索引）、`sessions/`（各 Workspace 開啟的分頁與目前環境）與 `cookies/`（各 Workspace 的 Cookie Jar，只存在這台電腦）
 - Workspace：預設 `~/Documents/Hachi/<名稱>/`，可自選。詳細格式請見 [docs/schema.md](docs/schema.md)。
+- **OAuth 2.0 Token** 只存在記憶體，關閉 App 就清除。
 - **機密變數**：環境 / Collection 變數勾選「機密」後，值只存在 `<workspace>/.hachi-secrets.json`（已列入 Workspace 的 `.gitignore`），環境檔與 `collection.json` 裡留空，可以放心提交到 git。`history.json` 也在 `.gitignore` 中。
 
 ## 打包（macOS）

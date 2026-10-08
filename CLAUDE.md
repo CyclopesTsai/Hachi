@@ -1,6 +1,6 @@
 # Hachi — 給 Claude Code 的工作說明
 
-Hachi 是類似 Postman / Bruno 的桌面 API 測試工具（HTTP + WebSocket），Electron + electron-vite + React + TypeScript（strict）+ Tailwind + shadcn/ui + Zustand。原規格的 Phase 0–6 已完成，v0.1.0 已發佈。原始規格全文在 git 歷史中（`git show 1c7c257:CLAUDE.md`），之後的設計決策優先於原規格。
+Hachi 是類似 Postman / Bruno 的桌面 API 測試工具（HTTP + WebSocket），Electron + electron-vite + React + TypeScript（strict）+ Tailwind + shadcn/ui + Zustand。原規格的 Phase 0–6 已完成，目前版本見 `README.md` / `docs/progress.md`（macOS、Windows）。原始規格全文在 git 歷史中（`git show 1c7c257:CLAUDE.md`），之後的設計決策優先於原規格。
 
 ## 開始工作前
 
@@ -36,6 +36,7 @@ npm run dev          # 開發模式
 npm run verify       # 型別檢查、ESLint、Prettier、單元測試、授權檢查
 npm run test:e2e     # 建置後以 Playwright 跑冒煙測試（SMOKE_APP_PATH=打包後的 App、SMOKE_COLOR_SCHEME=dark）
 npm run dist:mac     # 打包 arm64 與 x64 dmg（未簽章）
+npm run dist:win     # 打包 Windows 安裝程式與免安裝版（x64，在 Windows 上；平常交給 GitHub Actions）
 ```
 
 發佈：改 `package.json` 版本 → commit → 推 `v<版本>` tag，GitHub Actions（`.github/workflows/release.yml`）會打包、測試並發佈 Release。

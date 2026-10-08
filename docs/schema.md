@@ -28,7 +28,8 @@
 <userData>/                          # macOS: ~/Library/Application Support/Hachi
 ├─ app-config.json                   ✅ App 設定
 ├─ history-index.json                ✅ Phase 3：所有 Workspace 歷史紀錄的索引（共用筆數上限用）
-└─ sessions/<sha1(workspacePath)>.json  ✅ Phase 3：各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
+├─ sessions/<sha1(workspacePath)>.json  ✅ Phase 3：各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
+└─ cookies/<workspace id>.json       ✅ 決策 129：各 Workspace 的 Cookie Jar（只存在這台電腦，不進 git）
 
 <workspace>/                         # 預設 ~/Documents/Hachi/<名稱>/，可自選
 ├─ workspace.json                    ✅（settings 於 Phase 2 擴充）
