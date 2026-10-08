@@ -44,6 +44,8 @@ export interface RunnerDeps {
   emit(event: RunnerEvent): void
   /** How often progress is pushed while running. */
   progressIntervalMs?: number
+  /** setNextRequest loop guard (tests use a small one). */
+  maxStepsPerRound?: number
 }
 
 interface PlannedItem extends RunnerItem {
@@ -393,13 +395,14 @@ export class RunnerService {
       const data = rows ? (rows[round % rows.length] ?? null) : null
       const iteration = { index: round, count: run.totalRounds }
       // setNextRequest (decision 127) jumps within the round; null ends it.
+      const maxSteps = this.deps.maxStepsPerRound ?? RUNNER_MAX_STEPS_PER_ROUND
       let steps = 0
       for (let i = 0; i < run.items.length && run.status === 'running';) {
-        if (++steps > RUNNER_MAX_STEPS_PER_ROUND) {
+        if (++steps > maxSteps) {
           this.halt(
             run,
             'stopped',
-            `第 ${round + 1} 輪已執行 ${RUNNER_MAX_STEPS_PER_ROUND} 個請求（setNextRequest 可能形成無窮迴圈），已停止`
+            `第 ${round + 1} 輪已執行 ${maxSteps} 個請求（setNextRequest 可能形成無窮迴圈），已停止`
           )
           return
         }

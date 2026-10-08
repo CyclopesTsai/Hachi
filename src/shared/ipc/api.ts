@@ -3,7 +3,12 @@
  * Types only — safe to import anywhere. Keep docs/ipc.md in sync.
  */
 import type { SerializedError } from '../errors'
-import type { ContainerSettingsData, HttpResult, InheritedSettings } from '../http'
+import type {
+  ContainerSettingsData,
+  HttpResult,
+  InheritedSettings,
+  OAuth2TokenStatus
+} from '../http'
 import type {
   AppConfig,
   HistorySettings,
@@ -15,6 +20,7 @@ import type {
 import type {
   Auth,
   KeyValue,
+  OAuth2Auth,
   RequestScripts,
   RequestType,
   ScriptFlow,
@@ -330,11 +336,20 @@ export interface HttpResolveInput {
   revealSecrets: boolean
 }
 
+export interface OAuth2Input {
+  /** Item whose variables resolve the settings (the request's parent, or the container). */
+  parentId: string | null
+  environmentId: string | null
+  auth: OAuth2Auth
+}
+
 export interface HttpResolveResult {
   request: CodegenRequest
   /** Set when the URL is invalid; `request.url` is then the URL field as typed. */
   urlError: string | null
   unresolvedVariables: string[]
+  /** Auth the code can't carry (OAuth 2.0 without a token, Digest, AWS Signature). */
+  authNote: string | null
 }
 
 export interface ImportTextInput {
@@ -487,6 +502,10 @@ export interface InvokeMap {
   'http:getBody': { input: RunIdInput; output: string }
   'http:saveResponse': { input: RunIdInput; output: string | null }
   'http:resolve': { input: HttpResolveInput; output: HttpResolveResult }
+  'auth:oauth2Status': { input: OAuth2Input; output: OAuth2TokenStatus }
+  'auth:oauth2Obtain': { input: OAuth2Input; output: OAuth2TokenStatus }
+  'auth:oauth2Cancel': { input: OAuth2Input; output: boolean }
+  'auth:oauth2Clear': { input: OAuth2Input; output: void }
   'transfer:importFile': { input: void; output: ImportReport | null }
   'transfer:importText': { input: ImportTextInput; output: ImportReport }
   'transfer:importBrunoFolder': { input: void; output: BrunoFolderResult | null }
@@ -646,6 +665,15 @@ export interface HachiApi {
     saveResponse: InvokeFn<'http:saveResponse'>
     /** The request as it would be sent, for code generation (nothing is sent). */
     resolve: InvokeFn<'http:resolve'>
+  }
+  /** OAuth 2.0 tokens, kept in memory only (decision 128). */
+  auth: {
+    oauth2Status: InvokeFn<'auth:oauth2Status'>
+    /** "取得 Token": Authorization Code opens the system browser and waits (≤ 5 min). */
+    oauth2Obtain: InvokeFn<'auth:oauth2Obtain'>
+    /** Stops waiting for the browser. */
+    oauth2Cancel: InvokeFn<'auth:oauth2Cancel'>
+    oauth2Clear: InvokeFn<'auth:oauth2Clear'>
   }
   /** Git of the current Workspace (decisions 111–115); uses the git installed here. */
   git: {

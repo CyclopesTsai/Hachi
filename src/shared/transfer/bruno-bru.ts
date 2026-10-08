@@ -6,7 +6,11 @@ import { avoidWindowsReserved } from '../file-names'
 import { HTTP_METHODS, type HttpMethod } from '../schemas/collection'
 import { parseBru, serializeBru, type BruBlock, type BruEntry } from './bru-lang'
 import {
+  awsV4Entries,
   emptyPart,
+  oauth2Entries,
+  readAwsV4,
+  readOAuth2,
   type BrunoCollectionData,
   type BrunoEnvironment,
   type BrunoFile,
@@ -75,6 +79,15 @@ function partFromBru(blocks: BruBlock[]): {
     } else if (name === 'auth:apikey') {
       const get = (k: string) => dict(block).find((e) => e.key === k)?.value ?? ''
       part.auth.apikey = { key: get('key'), value: get('value'), placement: get('placement') }
+    } else if (name === 'auth:digest') {
+      const get = (k: string) => dict(block).find((e) => e.key === k)?.value ?? ''
+      part.auth.digest = { username: get('username'), password: get('password') }
+    } else if (name === 'auth:awsv4') {
+      const get = (k: string) => dict(block).find((e) => e.key === k)?.value ?? ''
+      part.auth.awsv4 = readAwsV4(get)
+    } else if (name === 'auth:oauth2') {
+      const get = (k: string) => dict(block).find((e) => e.key === k)?.value
+      part.auth.oauth2 = readOAuth2(get)
     } else if (name in BODY_BLOCK_MODES) {
       const mode = BODY_BLOCK_MODES[name] as string
       if (mode === 'formUrlEncoded') part.body.formUrlEncoded = entryPairs(dict(block))
@@ -210,6 +223,15 @@ function authBlocks(auth: BrunoRequestPart['auth']): BruBlock[] {
         ['value', auth.apikey?.value ?? ''],
         ['placement', auth.apikey?.placement ?? 'header']
       ])
+    case 'digest':
+      return dict('auth:digest', [
+        ['username', auth.digest?.username ?? ''],
+        ['password', auth.digest?.password ?? '']
+      ])
+    case 'awsv4':
+      return dict('auth:awsv4', awsV4Entries(auth.awsv4))
+    case 'oauth2':
+      return dict('auth:oauth2', oauth2Entries(auth.oauth2))
     default:
       return []
   }

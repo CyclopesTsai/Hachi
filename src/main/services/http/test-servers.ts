@@ -1,6 +1,7 @@
 /**
  * Local servers for HTTP client tests (imported by *.test.ts only).
  */
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
 import https from 'node:https'
@@ -19,6 +20,8 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
   for await (const chunk of req) chunks.push(chunk as Buffer)
   return Buffer.concat(chunks)
 }
+
+let tokenCount = 0
 
 /** Routes shared by the HTTP and HTTPS test servers. */
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -59,6 +62,51 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       const size = Number(url.searchParams.get('size') ?? '0')
       res.setHeader('content-type', url.searchParams.get('type') ?? 'text/plain')
       res.end(Buffer.alloc(size, url.searchParams.get('type')?.startsWith('image') ? 0 : 97))
+      return
+    }
+    case '/digest': {
+      // user / pass, realm "test", MD5, qop auth (decision 128).
+      const auth = req.headers.authorization ?? ''
+      const params = new Map(
+        [...auth.matchAll(/(\w+)=(?:"([^"]*)"|([^\s,]*))/g)].map((m) => [m[1], m[2] ?? m[3]])
+      )
+      const md5 = (t: string) => createHash('md5').update(t).digest('hex')
+      const ha1 = md5('user:test:pass')
+      const ha2 = md5(`${req.method}:${params.get('uri')}`)
+      const expected = md5(`${ha1}:abc:${params.get('nc')}:${params.get('cnonce')}:auth:${ha2}`)
+      if (auth.startsWith('Digest ') && params.get('response') === expected) {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ ok: true, uri: params.get('uri') }))
+        return
+      }
+      res.writeHead(401, {
+        'www-authenticate':
+          'Basic realm="x", Digest realm="test", qop="auth", nonce="abc", opaque="op"'
+      })
+      res.end('unauthorized')
+      return
+    }
+    case '/oauth/token': {
+      // Client "cid" / "secret" (Basic header or body); answers with a counter token.
+      const form = new URLSearchParams(body.toString('utf8'))
+      const basic = Buffer.from('cid:secret').toString('base64')
+      const client =
+        req.headers.authorization === `Basic ${basic}` ||
+        (form.get('client_id') === 'cid' && form.get('client_secret') === 'secret')
+      res.setHeader('content-type', 'application/json')
+      if (!client) {
+        res.statusCode = 401
+        res.end(JSON.stringify({ error: 'invalid_client', error_description: 'bad client' }))
+        return
+      }
+      tokenCount++
+      res.end(
+        JSON.stringify({
+          access_token: `tok-${tokenCount}-${form.get('grant_type')}`,
+          token_type: 'Bearer',
+          expires_in: 3600
+        })
+      )
       return
     }
     case '/html':

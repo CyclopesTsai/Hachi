@@ -180,6 +180,55 @@ function parseAuth(raw: unknown, fallback: Auth, where: string, warnings: Transf
         value: authAttr(raw.apikey, 'value'),
         in: authAttr(raw.apikey, 'in') === 'query' ? 'query' : 'header'
       }
+    case 'digest':
+      return {
+        type: 'digest',
+        username: authAttr(raw.digest, 'username'),
+        password: authAttr(raw.digest, 'password')
+      }
+    case 'awsv4':
+      return {
+        type: 'awsSigV4',
+        accessKeyId: authAttr(raw.awsv4, 'accessKey'),
+        secretAccessKey: authAttr(raw.awsv4, 'secretKey'),
+        sessionToken: authAttr(raw.awsv4, 'sessionToken'),
+        region: authAttr(raw.awsv4, 'region'),
+        service: authAttr(raw.awsv4, 'service')
+      }
+    case 'oauth2': {
+      const get = (name: string) => authAttr(raw.oauth2, name)
+      const grant = get('grant_type') || 'authorization_code'
+      const grantType = (
+        {
+          client_credentials: 'client_credentials',
+          password_credentials: 'password',
+          authorization_code: 'authorization_code',
+          authorization_code_with_pkce: 'authorization_code'
+        } as const
+      )[grant]
+      if (!grantType) {
+        warnings.add(`不支援的 OAuth 2.0 Grant Type「${grant}」，已改為 None`, where)
+        return { type: 'none' }
+      }
+      if (get('addTokenTo') === 'queryParams') {
+        warnings.add('OAuth 2.0 Token 加在 Query 的設定不支援，改用 Header', where)
+      }
+      return {
+        type: 'oauth2',
+        grantType,
+        accessTokenUrl: get('accessTokenUrl'),
+        authUrl: get('authUrl'),
+        callbackUrl: get('redirect_uri'),
+        clientId: get('clientId'),
+        clientSecret: get('clientSecret'),
+        scope: get('scope'),
+        username: get('username'),
+        password: get('password'),
+        pkce: grant === 'authorization_code_with_pkce',
+        clientAuth: get('client_authentication') === 'body' ? 'body' : 'header',
+        headerPrefix: get('headerPrefix') || 'Bearer'
+      }
+    }
     default:
       warnings.add(`不支援的 Auth 類型「${type || '未知'}」，已改為 None`, where)
       return { type: 'none' }
@@ -551,6 +600,42 @@ function exportAuth(auth: Auth, level: 'collection' | 'item'): Json | undefined 
       return { type: 'basic', basic: attrs({ username: auth.username, password: auth.password }) }
     case 'apiKey':
       return { type: 'apikey', apikey: attrs({ key: auth.key, value: auth.value, in: auth.in }) }
+    case 'digest':
+      return { type: 'digest', digest: attrs({ username: auth.username, password: auth.password }) }
+    case 'awsSigV4':
+      return {
+        type: 'awsv4',
+        awsv4: attrs({
+          accessKey: auth.accessKeyId,
+          secretKey: auth.secretAccessKey,
+          sessionToken: auth.sessionToken,
+          region: auth.region,
+          service: auth.service
+        })
+      }
+    case 'oauth2':
+      return {
+        type: 'oauth2',
+        oauth2: attrs({
+          grant_type:
+            auth.grantType === 'password'
+              ? 'password_credentials'
+              : auth.grantType === 'authorization_code' && auth.pkce
+                ? 'authorization_code_with_pkce'
+                : auth.grantType,
+          accessTokenUrl: auth.accessTokenUrl,
+          authUrl: auth.authUrl,
+          redirect_uri: auth.callbackUrl,
+          clientId: auth.clientId,
+          clientSecret: auth.clientSecret,
+          scope: auth.scope,
+          username: auth.username,
+          password: auth.password,
+          client_authentication: auth.clientAuth,
+          headerPrefix: auth.headerPrefix,
+          addTokenTo: 'header'
+        })
+      }
   }
 }
 

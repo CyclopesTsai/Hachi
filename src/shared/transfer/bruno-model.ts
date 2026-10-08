@@ -30,6 +30,9 @@ export interface BrunoRequestPart {
     bearer?: { token: string }
     basic?: { username: string; password: string }
     apikey?: { key: string; value: string; placement: string } // placement: header | queryparams
+    digest?: { username: string; password: string }
+    awsv4?: BrunoAwsV4
+    oauth2?: BrunoOAuth2
   }
   script: { req: string; res: string }
   /** `req`: set before the request; `res`: name = response expression (e.g. res.body.id). */
@@ -40,6 +43,96 @@ export interface BrunoRequestPart {
   docs: string
   /** Only in OpenCollection YAML. */
   settings?: { timeout?: number; followRedirects?: boolean }
+}
+
+export interface BrunoAwsV4 {
+  accessKeyId: string
+  secretAccessKey: string
+  sessionToken: string
+  service: string
+  region: string
+  profileName: string
+}
+
+export interface BrunoOAuth2 {
+  grantType: string // client_credentials | password | authorization_code | implicit
+  accessTokenUrl: string
+  authorizationUrl: string
+  callbackUrl: string
+  clientId: string
+  clientSecret: string
+  scope: string
+  username: string
+  password: string
+  pkce: boolean
+  credentialsPlacement: string // basic_auth_header | body
+  tokenHeaderPrefix: string
+}
+
+const AWS_KEYS = [
+  'accessKeyId',
+  'secretAccessKey',
+  'sessionToken',
+  'service',
+  'region',
+  'profileName'
+] as const
+
+/** Reads the AWS fields from any object with Bruno's (camelCase) names. */
+export function readAwsV4(get: (key: string) => string): BrunoAwsV4 {
+  return Object.fromEntries(AWS_KEYS.map((k) => [k, get(k)])) as unknown as BrunoAwsV4
+}
+
+export const awsV4Entries = (a: BrunoAwsV4 | undefined): [string, string][] =>
+  AWS_KEYS.map((k) => [k, a?.[k] ?? ''])
+
+/**
+ * Reads the OAuth 2.0 fields; `get` is tried with the camelCase name (JSON / YAML)
+ * and the snake_case one (.bru).
+ */
+export function readOAuth2(get: (key: string) => unknown): BrunoOAuth2 {
+  const snake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+  const text = (k: string) => {
+    const v = get(k) ?? get(snake(k))
+    return asString(v)
+  }
+  return {
+    grantType: text('grantType') || text('flow') || 'authorization_code',
+    accessTokenUrl: text('accessTokenUrl'),
+    authorizationUrl: text('authorizationUrl'),
+    callbackUrl: text('callbackUrl'),
+    clientId: text('clientId'),
+    clientSecret: text('clientSecret'),
+    scope: text('scope'),
+    username: text('username'),
+    password: text('password'),
+    pkce: ['true', '1'].includes(text('pkce').toLowerCase()),
+    credentialsPlacement: text('credentialsPlacement') || 'basic_auth_header',
+    tokenHeaderPrefix: text('tokenHeaderPrefix') || 'Bearer'
+  }
+}
+
+/** .bru `auth:oauth2` entries (snake_case, as Bruno writes them). */
+export function oauth2Entries(o: BrunoOAuth2 | undefined): [string, string][] {
+  if (!o) return []
+  const entries: [string, string][] = [['grant_type', o.grantType]]
+  if (o.grantType === 'authorization_code') {
+    entries.push(['callback_url', o.callbackUrl], ['authorization_url', o.authorizationUrl])
+  }
+  entries.push(
+    ['access_token_url', o.accessTokenUrl],
+    ['client_id', o.clientId],
+    ['client_secret', o.clientSecret],
+    ['scope', o.scope]
+  )
+  if (o.grantType === 'password') entries.push(['username', o.username], ['password', o.password])
+  if (o.grantType === 'authorization_code') entries.push(['pkce', String(o.pkce)])
+  entries.push(
+    ['credentials_placement', o.credentialsPlacement],
+    ['token_placement', 'header'],
+    ['token_header_prefix', o.tokenHeaderPrefix]
+  )
+  return entries
 }
 
 export interface BrunoRequestItem {

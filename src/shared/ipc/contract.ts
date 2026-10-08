@@ -10,6 +10,7 @@ import {
   VARIABLES_MAX,
   authSchema,
   itemNameSchema,
+  oauth2AuthSchema,
   keyValueSchema,
   requestScriptsSchema,
   variableSchema
@@ -57,6 +58,13 @@ const MAX_IMPORT_TEXT = 50 * 1024 * 1024
 const itemIdSchema = z.string().min(1).max(1024)
 
 const runIdSchema = z.string().min(1).max(100)
+
+/** OAuth 2.0 settings as edited, resolved with the variables of `parentId` (decision 128). */
+const oauth2Input = z.strictObject({
+  parentId: itemIdSchema.nullable(),
+  environmentId: itemIdSchema.nullable(),
+  auth: oauth2AuthSchema
+})
 
 const variablesSchema = z.array(variableSchema).max(VARIABLES_MAX)
 
@@ -202,6 +210,10 @@ export const inputSchemas = {
     request: httpRequestSchema,
     revealSecrets: z.boolean()
   }),
+  [INVOKE.authOAuth2Status]: oauth2Input,
+  [INVOKE.authOAuth2Obtain]: oauth2Input,
+  [INVOKE.authOAuth2Cancel]: oauth2Input,
+  [INVOKE.authOAuth2Clear]: oauth2Input,
   [INVOKE.transferImportFile]: noInput,
   [INVOKE.transferImportText]: z.strictObject({
     fileName: z.string().max(1000),

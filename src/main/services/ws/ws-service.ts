@@ -3,6 +3,7 @@ import WebSocket from 'ws'
 import { HachiError } from '@shared/errors'
 import { MAX_RESPONSE_BYTES, type InheritedSettings } from '@shared/http'
 import type { ProxySettings } from '@shared/schemas/app-config'
+import type { OAuth2Auth } from '@shared/schemas/collection'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import type { WsMessageFormat, WsRequest } from '@shared/schemas/ws-request'
 import { VariableResolver, buildVariableMap, type VariableLayer } from '@shared/variables'
@@ -43,6 +44,8 @@ export interface WsServiceDeps {
   now?: () => number
   /** Log entries are batched for this long before being emitted. */
   flushIntervalMs?: number
+  /** Authorization header value for OAuth 2.0 auth (decision 128). */
+  oauth2Header?: (auth: OAuth2Auth) => Promise<string>
 }
 
 export interface WsConnectInput {
@@ -223,6 +226,10 @@ export class WsService {
       default: 'ws',
       allowed: ['ws:', 'wss:']
     })
+    // OAuth 2.0: the token goes in the handshake (Digest / AWS are HTTP only).
+    if (auth.type === 'oauth2' && this.deps.oauth2Header && !hasHeader(headers, 'authorization')) {
+      headers.push(['Authorization', await this.deps.oauth2Header(auth)])
+    }
     if (!hasHeader(headers, 'user-agent')) headers.push(['User-Agent', this.deps.userAgent])
     const headerObject: Record<string, string> = {}
     for (const [key, value] of headers) {

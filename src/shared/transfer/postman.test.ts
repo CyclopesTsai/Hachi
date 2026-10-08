@@ -82,7 +82,7 @@ const sample = {
       request: {
         method: 'PUT',
         url: 'https://shop.test/files',
-        auth: { type: 'oauth2', oauth2: [] },
+        auth: { type: 'ntlm', ntlm: [] },
         body: {
           mode: 'formdata',
           formdata: [
@@ -201,7 +201,7 @@ describe('importPostmanCollection', () => {
 
     expect(warnings).toEqual(
       expect.arrayContaining([
-        '不支援的 Auth 類型「oauth2」，已改為 None（Upload）',
+        '不支援的 Auth 類型「ntlm」，已改為 None（Upload）',
         'Form-data 欄位有多個檔案，只匯入第一個（Upload）',
         'GraphQL Body 已轉成 JSON Body（GraphQL）',
         '不支援的 HTTP 方法「PURGE」，已改為 GET（Form）'
@@ -260,13 +260,13 @@ describe('importPostmanCollection', () => {
   it('reports one warning with examples for many items', () => {
     const item = Array.from({ length: 5 }, (_, i) => ({
       name: `R${i}`,
-      request: { url: 'https://a.test', auth: { type: 'digest' } }
+      request: { url: 'https://a.test', auth: { type: 'hawk' } }
     }))
     const { warnings: w } = importPostmanCollection(
       { info: { name: 'A', schema: POSTMAN_SCHEMA_V21 }, item },
       ctx
     )
-    expect(w).toEqual(['不支援的 Auth 類型「digest」，已改為 None（R0、R1、R2 等 5 項）'])
+    expect(w).toEqual(['不支援的 Auth 類型「hawk」，已改為 None（R0、R1、R2 等 5 項）'])
   })
 })
 

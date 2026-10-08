@@ -259,6 +259,7 @@ try {
     ipcRenderer: 'undefined',
     apiKeys: [
       'app',
+      'auth',
       'config',
       'container',
       'dialog',

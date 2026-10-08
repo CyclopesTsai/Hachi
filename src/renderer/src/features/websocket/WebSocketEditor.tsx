@@ -80,6 +80,7 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
   const draft = tab.draft as WsRequest
   const set = (patch: Partial<WsRequest>) => store.updateWs(tab.key, (d) => ({ ...d, ...patch }))
   const collectionId = useTreeStore((s) => collectionIdOf(s.tree, contextParentId(tab, s.tree)))
+  const parentId = useTreeStore((s) => contextParentId(tab, s.tree))
   const variables = useVariableMap(collectionId)
 
   /** Where `{{variables}}` come from, read when connecting / sending. */
@@ -220,6 +221,8 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
                   auth={draft.auth}
                   onChange={(auth) => set({ auth })}
                   inherited={tab.inherited}
+                  scopeId={parentId}
+                  websocket
                 />
               </TabsContent>
               <TabsContent value="settings" className="overflow-auto">

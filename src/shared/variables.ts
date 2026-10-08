@@ -192,6 +192,34 @@ export class VariableResolver {
         }
       case 'apiKey':
         return { ...auth, key: this.resolve(auth.key), value: this.resolve(auth.value) }
+      case 'digest':
+        return {
+          ...auth,
+          username: this.resolve(auth.username),
+          password: this.resolve(auth.password)
+        }
+      case 'awsSigV4':
+        return {
+          ...auth,
+          accessKeyId: this.resolve(auth.accessKeyId),
+          secretAccessKey: this.resolve(auth.secretAccessKey),
+          sessionToken: this.resolve(auth.sessionToken),
+          region: this.resolve(auth.region),
+          service: this.resolve(auth.service)
+        }
+      case 'oauth2':
+        return {
+          ...auth,
+          accessTokenUrl: this.resolve(auth.accessTokenUrl),
+          authUrl: this.resolve(auth.authUrl),
+          callbackUrl: this.resolve(auth.callbackUrl),
+          clientId: this.resolve(auth.clientId),
+          clientSecret: this.resolve(auth.clientSecret),
+          scope: this.resolve(auth.scope),
+          username: this.resolve(auth.username),
+          password: this.resolve(auth.password),
+          headerPrefix: this.resolve(auth.headerPrefix)
+        }
       default:
         return auth
     }

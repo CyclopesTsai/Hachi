@@ -43,6 +43,7 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
   const set = (patch: Partial<HttpRequest>) =>
     store.updateRequest(tab.key, (d) => ({ ...d, ...patch }))
   const collectionId = useTreeStore((s) => collectionIdOf(s.tree, contextParentId(tab, s.tree)))
+  const parentId = useTreeStore((s) => contextParentId(tab, s.tree))
   const variables = useVariableMap(collectionId)
   const isDraft = tab.itemId === null
   const [codeOpen, setCodeOpen] = useState(false)
@@ -182,6 +183,7 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
                   auth={draft.auth}
                   onChange={(auth) => set({ auth })}
                   inherited={tab.inherited}
+                  scopeId={parentId}
                 />
               </TabsContent>
               <TabsContent value="scripts" className="flex min-h-0 flex-col">

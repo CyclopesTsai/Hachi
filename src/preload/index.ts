@@ -76,6 +76,12 @@ const api: HachiApi = {
     saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input),
     resolve: (input) => invoke(INVOKE.httpResolve, input)
   },
+  auth: {
+    oauth2Status: (input) => invoke(INVOKE.authOAuth2Status, input),
+    oauth2Obtain: (input) => invoke(INVOKE.authOAuth2Obtain, input),
+    oauth2Cancel: (input) => invoke(INVOKE.authOAuth2Cancel, input),
+    oauth2Clear: (input) => invoke(INVOKE.authOAuth2Clear, input)
+  },
   git: {
     status: () => invoke(INVOKE.gitStatus),
     init: () => invoke(INVOKE.gitInit),

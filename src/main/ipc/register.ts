@@ -213,6 +213,13 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       return target
     },
     [INVOKE.httpResolve]: (input) => ctx.http.resolveForCode(input),
+    [INVOKE.authOAuth2Status]: (input) => ctx.http.oauth2Status(input),
+    [INVOKE.authOAuth2Obtain]: (input) => ctx.http.oauth2Obtain(input),
+    [INVOKE.authOAuth2Cancel]: async (input) =>
+      ctx.http.oauth2.cancel(await ctx.http.resolveOAuth2(input)),
+    [INVOKE.authOAuth2Clear]: async (input) => {
+      ctx.http.oauth2.clear(await ctx.http.resolveOAuth2(input))
+    },
     [INVOKE.transferImportFile]: async () => {
       workspacePath()
       const file = await selectFile(ctx.getWindow(), {

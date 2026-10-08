@@ -70,6 +70,8 @@ export const HTTP_ERROR_CODES = [
   'TOO_MANY_REDIRECTS',
   /** The Pre-request script failed, or scripts of this Workspace are not trusted. */
   'SCRIPT',
+  /** OAuth 2.0 token / AWS signing failed (decision 128). */
+  'AUTH',
   'UNKNOWN'
 ] as const
 export type HttpErrorCode = (typeof HTTP_ERROR_CODES)[number]
@@ -127,4 +129,14 @@ export interface ContainerSettingsData {
   scriptFlow: ScriptFlow
   /** What this container inherits from the ones above it (empty for collections). */
   inherited: InheritedSettings
+}
+
+/** An OAuth 2.0 token kept in memory (decision 128), as the Auth tab shows it. */
+export interface OAuth2TokenStatus {
+  state: 'none' | 'valid' | 'expired'
+  /** ms since epoch; null = unknown (the server did not say). */
+  expiresAt: number | null
+  /** Has a refresh token: renewed automatically when it expires. */
+  refreshable: boolean
+  scope: string | null
 }

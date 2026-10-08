@@ -124,6 +124,24 @@ function securityOf(auth: Auth, ctx: Ctx): Json[] | null {
       }
       return [{ [name]: [] }]
     }
+    case 'digest':
+      ctx.schemes.digestAuth = { type: 'http', scheme: 'digest' }
+      return [{ digestAuth: [] }]
+    case 'oauth2': {
+      const url = (text: string) => resolve(text, ctx.values)
+      const scopes = auth.scope.split(/\s+/).filter((x) => x !== '')
+      const flow: Json = { tokenUrl: url(auth.accessTokenUrl), scopes: {} }
+      for (const scope of scopes) (flow.scopes as Json)[scope] = ''
+      const key = {
+        client_credentials: 'clientCredentials',
+        password: 'password',
+        authorization_code: 'authorizationCode'
+      }[auth.grantType]
+      if (auth.grantType === 'authorization_code') flow.authorizationUrl = url(auth.authUrl)
+      const name = `oauth2_${key}`
+      ctx.schemes[name] = { type: 'oauth2', flows: { [key]: flow } }
+      return [{ [name]: scopes }]
+    }
     default:
       return null
   }

@@ -7,8 +7,11 @@ import { parse, stringify } from 'yaml'
 import {
   asArray,
   asString,
+  awsV4Entries,
   emptyPart,
   isObject,
+  readAwsV4,
+  readOAuth2,
   type BrunoCollectionData,
   type BrunoEnvironment,
   type BrunoFile,
@@ -65,6 +68,15 @@ function readAuth(raw: unknown, missing: string): BrunoRequestPart['auth'] {
           placement: asString(raw.placement) === 'query' ? 'queryparams' : 'header'
         }
       }
+    case 'digest':
+      return {
+        mode: 'digest',
+        digest: { username: asString(raw.username), password: asString(raw.password) }
+      }
+    case 'awsv4':
+      return { mode: 'awsv4', awsv4: readAwsV4((k) => asString(raw[k])) }
+    case 'oauth2':
+      return { mode: 'oauth2', oauth2: readOAuth2((k) => raw[k]) }
     default:
       return { mode: type || 'none' }
   }
@@ -325,6 +337,16 @@ function authOut(auth: BrunoRequestPart['auth']): unknown {
         value: auth.apikey?.value ?? '',
         placement: auth.apikey?.placement === 'queryparams' ? 'query' : 'header'
       }
+    case 'digest':
+      return {
+        type: 'digest',
+        username: auth.digest?.username ?? '',
+        password: auth.digest?.password ?? ''
+      }
+    case 'awsv4':
+      return { type: 'awsv4', ...Object.fromEntries(awsV4Entries(auth.awsv4)) }
+    case 'oauth2':
+      return auth.oauth2 ? { type: 'oauth2', ...auth.oauth2 } : undefined
     default:
       return undefined
   }

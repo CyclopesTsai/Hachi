@@ -92,6 +92,7 @@ export function ContainerEditor({ tab, title }: { tab: ContainerTab; title: stri
               onChange={(auth) => update({ auth })}
               inherited={tab.inherited}
               allowInherit={!isCollection}
+              scopeId={tab.itemId}
             />
           </TabsContent>
           <TabsContent value="scripts" className="min-h-0 flex-1">

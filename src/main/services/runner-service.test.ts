@@ -99,7 +99,8 @@ function service() {
     scriptsTrusted: () => true,
     hasContainerScripts: async () => false,
     emit: (e) => events.push(e),
-    progressIntervalMs: 20
+    progressIntervalMs: 20,
+    maxStepsPerRound: 50
   })
 }
 
@@ -239,7 +240,7 @@ describe('RunnerService', () => {
     const { progress } = await run(svc, config({ itemIds: ['login'] }))
     expect(progress.status).toBe('stopped')
     expect(progress.message).toContain('setNextRequest 可能形成無窮迴圈')
-    expect(progress.completedRequests).toBe(1000)
+    expect(progress.completedRequests).toBe(50)
   })
 
   it('can be cancelled while requests are running', async () => {

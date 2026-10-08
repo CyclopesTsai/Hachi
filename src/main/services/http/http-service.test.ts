@@ -236,3 +236,83 @@ describe('HttpService.resolveForCode', () => {
     expect(bad.request.headers).toContainEqual(['Authorization', 'Bearer tok'])
   })
 })
+
+describe('HttpService auth (decision 128)', () => {
+  const send = (http: HttpService, url: string, auth: object, extra: object = {}) =>
+    http.send({
+      runId: crypto.randomUUID(),
+      parentId: 'c',
+      environmentId: null,
+      request: request(url, { auth, ...extra })
+    })
+  const echoOf = (r: Awaited<ReturnType<HttpService['send']>>) => {
+    if (r.kind !== 'response' || r.body.kind !== 'text') throw new Error(JSON.stringify(r))
+    return JSON.parse(r.body.text) as { headers: Record<string, string>; uri?: string }
+  }
+
+  it('answers a Digest challenge', async () => {
+    const ok = await send(service(), `${server.url}/digest?x=1`, {
+      type: 'digest',
+      username: 'user',
+      password: 'pass'
+    })
+    expect(ok).toMatchObject({ kind: 'response', status: 200 })
+    expect(echoOf(ok).uri).toBe('/digest?x=1')
+    const wrong = await send(service(), `${server.url}/digest`, {
+      type: 'digest',
+      username: 'user',
+      password: 'nope'
+    })
+    expect(wrong).toMatchObject({ kind: 'response', status: 401 })
+  })
+
+  it('gets an OAuth 2.0 client credentials token and sends it as a bearer', async () => {
+    const http = service()
+    const auth = {
+      type: 'oauth2',
+      accessTokenUrl: `${server.url}/oauth/token`,
+      clientId: 'cid',
+      clientSecret: 'secret'
+    }
+    const first = echoOf(await send(http, `${server.url}/echo`, auth)).headers.authorization
+    expect(first).toMatch(/^Bearer tok-\d+-client_credentials$/)
+    // Kept in memory: the next request reuses it.
+    expect(echoOf(await send(http, `${server.url}/echo`, auth)).headers.authorization).toBe(first)
+    // An explicit Authorization header wins.
+    const explicit = await send(http, `${server.url}/echo`, auth, {
+      headers: [{ id: 'h', key: 'Authorization', value: 'Mine', enabled: true }]
+    })
+    expect(echoOf(explicit).headers.authorization).toBe('Mine')
+
+    const failed = await send(http, `${server.url}/echo`, { ...auth, clientSecret: 'bad' })
+    expect(failed).toMatchObject({ kind: 'error', code: 'AUTH' })
+    expect(failed.kind === 'error' && failed.message).toContain('invalid_client')
+  })
+
+  it('signs with AWS Signature V4', async () => {
+    const auth = {
+      type: 'awsSigV4',
+      accessKeyId: 'AKID',
+      secretAccessKey: 'secret',
+      region: 'us-east-1',
+      service: 'execute-api'
+    }
+    const headers = echoOf(await send(service(), `${server.url}/echo`, auth)).headers
+    expect(headers.authorization).toMatch(
+      /^AWS4-HMAC-SHA256 Credential=AKID\/\d{8}\/us-east-1\/execute-api\/aws4_request, SignedHeaders=host;x-amz-date, Signature=[0-9a-f]{64}$/
+    )
+    expect(headers['x-amz-date']).toMatch(/^\d{8}T\d{6}Z$/)
+    const missing = await send(service(), `${server.url}/echo`, { ...auth, region: '' })
+    expect(missing).toMatchObject({ kind: 'error', code: 'AUTH' })
+  })
+
+  it('notes auth that generated code cannot carry', async () => {
+    const resolved = await service().resolveForCode({
+      parentId: 'c',
+      environmentId: null,
+      request: request(`${server.url}/echo`, { auth: { type: 'digest' } }),
+      revealSecrets: false
+    })
+    expect(resolved.authNote).toContain('Digest')
+  })
+})

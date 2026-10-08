@@ -29,6 +29,7 @@ const ERROR_TITLES: Record<HttpErrorCode, string> = {
   FILE_NOT_FOUND: 'Form-data 指定的檔案不存在',
   TOO_MANY_REDIRECTS: '重新導向次數超過上限（可在 Workspace 設定調整）',
   SCRIPT: '腳本錯誤，請求沒有發送',
+  AUTH: '驗證失敗，請求沒有發送',
   UNKNOWN: '發送失敗'
 }
 

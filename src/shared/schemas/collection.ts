@@ -41,7 +41,32 @@ export type Variable = z.infer<typeof variableSchema>
 
 export const VARIABLES_MAX = 1000
 
-/** Auth settings. Editing UI arrives in Phase 2; `inherit` uses the parent folder / collection. */
+export const OAUTH2_GRANTS = ['client_credentials', 'password', 'authorization_code'] as const
+export type OAuth2Grant = (typeof OAUTH2_GRANTS)[number]
+
+export const oauth2AuthSchema = z.looseObject({
+  type: z.literal('oauth2'),
+  grantType: z.enum(OAUTH2_GRANTS).default('client_credentials'),
+  accessTokenUrl: z.string().default(''),
+  /** Authorization code only. */
+  authUrl: z.string().default(''),
+  /** Authorization code only; empty = http://127.0.0.1:<free port>/callback. */
+  callbackUrl: z.string().default(''),
+  clientId: z.string().default(''),
+  clientSecret: z.string().default(''),
+  scope: z.string().default(''),
+  /** Password grant only. */
+  username: z.string().default(''),
+  password: z.string().default(''),
+  /** Authorization code only (decision 128: on by default). */
+  pkce: z.boolean().default(true),
+  /** How the client id / secret go to the token URL. */
+  clientAuth: z.enum(['header', 'body']).default('header'),
+  /** Prefix of the Authorization header ("Bearer"). */
+  headerPrefix: z.string().default('Bearer')
+})
+
+/** Auth settings; `inherit` uses the parent folder / collection. */
 export const authSchema = z.discriminatedUnion('type', [
   z.looseObject({ type: z.literal('inherit') }),
   z.looseObject({ type: z.literal('none') }),
@@ -56,9 +81,27 @@ export const authSchema = z.discriminatedUnion('type', [
     key: z.string().default(''),
     value: z.string().default(''),
     in: z.enum(['header', 'query']).default('header')
-  })
+  }),
+  // Decision 128.
+  z.looseObject({
+    type: z.literal('digest'),
+    username: z.string().default(''),
+    password: z.string().default('')
+  }),
+  z.looseObject({
+    type: z.literal('awsSigV4'),
+    accessKeyId: z.string().default(''),
+    secretAccessKey: z.string().default(''),
+    /** Temporary credentials only. */
+    sessionToken: z.string().default(''),
+    region: z.string().default(''),
+    service: z.string().default('')
+  }),
+  oauth2AuthSchema
 ])
 export type Auth = z.infer<typeof authSchema>
+export type OAuth2Auth = z.infer<typeof oauth2AuthSchema>
+export type AwsSigV4Auth = Extract<Auth, { type: 'awsSigV4' }>
 
 /** Upper bound for one script (bytes of UTF-16 text, roughly). */
 export const MAX_SCRIPT_TEXT = 1024 * 1024

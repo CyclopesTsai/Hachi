@@ -105,6 +105,12 @@ function CodeView({ tab }: { tab: RequestTab }) {
           {resolved.urlError}（程式碼使用輸入的網址）
         </p>
       )}
+      {resolved?.authNote && (
+        <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          {resolved.authNote}
+        </p>
+      )}
       {resolved && resolved.unresolvedVariables.length > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
           <AlertTriangle className="size-3.5 shrink-0" />

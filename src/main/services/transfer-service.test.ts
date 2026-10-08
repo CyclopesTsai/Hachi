@@ -31,7 +31,7 @@ const postman = {
       request: {
         method: 'POST',
         url: '{{base}}/login',
-        auth: { type: 'oauth2' },
+        auth: { type: 'ntlm' },
         body: { mode: 'raw', raw: '{"u":1}', options: { raw: { language: 'json' } } }
       },
       event: [{ listen: 'test', script: { exec: ['pm.environment.set("t", 1)'] } }]
@@ -73,7 +73,7 @@ describe('TransferService import', () => {
       requests: 2,
       variables: 1
     })
-    expect(report.warnings).toContain('不支援的 Auth 類型「oauth2」，已改為 None（Login）')
+    expect(report.warnings).toContain('不支援的 Auth 類型「ntlm」，已改為 None（Login）')
 
     const tree = await collections.getTree()
     expect(tree.collections.map((c) => c.name)).toEqual(['Shop'])

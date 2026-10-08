@@ -129,7 +129,8 @@ async function bootstrap(): Promise<void> {
     resolveSystemProxy: (url: string) => session.defaultSession.resolveProxy(url),
     userAgent: `${APP_NAME}/${app.getVersion()}`
   }
-  const http = new HttpService(requestDeps)
+  // OAuth 2.0 authorization code opens the system browser (decision 128).
+  const http = new HttpService({ ...requestDeps, openBrowser: (url) => shell.openExternal(url) })
   const transfer = new TransferService(collections, environments, loadRedoc)
   // git asks for credentials through a dialog (decision 113). The helper runs this
   // binary as Node (ELECTRON_RUN_AS_NODE): keep the RunAsNode fuse enabled.
@@ -229,6 +230,10 @@ async function bootstrap(): Promise<void> {
   >()
   const ws = new WsService({
     ...requestDeps,
+    oauth2Header: async (auth) => {
+      const token = await http.oauth2.tokenFor(auth)
+      return `${auth.headerPrefix.trim()} ${token.accessToken}`.trim()
+    },
     emit: (payload) => send(EVENTS.wsEvent, payload),
     onFinished: (summary) => {
       const context = wsContext.get(summary.connectionId)

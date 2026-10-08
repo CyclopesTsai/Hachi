@@ -8,7 +8,9 @@
 import {
   HTTP_METHODS,
   ITEM_NAME_MAX,
+  OAUTH2_GRANTS,
   type Auth,
+  type OAuth2Grant,
   type KeyValue,
   type Variable
 } from '../schemas/collection'
@@ -31,6 +33,8 @@ import {
   buildTree,
   emptyPart,
   isObject,
+  readAwsV4,
+  readOAuth2,
   type BrunoCollectionData,
   type BrunoFile,
   type BrunoFolderItem,
@@ -120,7 +124,12 @@ function normalizePart(raw: unknown): BrunoRequestPart {
           value: asString(auth.apikey.value),
           placement: asString(auth.apikey.placement)
         }
-      : undefined
+      : undefined,
+    digest: isObject(auth.digest)
+      ? { username: asString(auth.digest.username), password: asString(auth.digest.password) }
+      : undefined,
+    awsv4: isObject(auth.awsv4) ? readAwsV4((k) => asString((auth.awsv4 as Json)[k])) : undefined,
+    oauth2: isObject(auth.oauth2) ? readOAuth2((k) => (auth.oauth2 as Json)[k]) : undefined
   }
   part.script = { req: asString(script.req), res: asString(script.res) }
   part.vars = { req: pairs(vars.req), res: pairs(vars.res) }
@@ -316,6 +325,49 @@ function mapAuth(auth: BrunoRequestPart['auth'], fallback: Auth, where: string, 
         value: auth.apikey?.value ?? '',
         in: auth.apikey?.placement === 'queryparams' ? 'query' : 'header'
       }
+    case 'digest':
+      return {
+        type: 'digest',
+        username: auth.digest?.username ?? '',
+        password: auth.digest?.password ?? ''
+      }
+    case 'awsv4': {
+      const a = auth.awsv4
+      if (a?.profileName) {
+        ctx.warnings.add('AWS Signature 的 Profile Name Hachi 不支援，請改填 Access Key', where)
+      }
+      return {
+        type: 'awsSigV4',
+        accessKeyId: a?.accessKeyId ?? '',
+        secretAccessKey: a?.secretAccessKey ?? '',
+        sessionToken: a?.sessionToken ?? '',
+        region: a?.region ?? '',
+        service: a?.service ?? ''
+      }
+    }
+    case 'oauth2': {
+      const o = auth.oauth2
+      const grant = o?.grantType ?? ''
+      if (!(OAUTH2_GRANTS as readonly string[]).includes(grant)) {
+        ctx.warnings.add(`不支援的 OAuth 2.0 Grant Type「${grant}」，已改為 None`, where)
+        return { type: 'none' }
+      }
+      return {
+        type: 'oauth2',
+        grantType: grant as OAuth2Grant,
+        accessTokenUrl: o?.accessTokenUrl ?? '',
+        authUrl: o?.authorizationUrl ?? '',
+        callbackUrl: o?.callbackUrl ?? '',
+        clientId: o?.clientId ?? '',
+        clientSecret: o?.clientSecret ?? '',
+        scope: o?.scope ?? '',
+        username: o?.username ?? '',
+        password: o?.password ?? '',
+        pkce: o?.pkce ?? false,
+        clientAuth: o?.credentialsPlacement === 'body' ? 'body' : 'header',
+        headerPrefix: o?.tokenHeaderPrefix ?? 'Bearer'
+      }
+    }
     default:
       ctx.warnings.add(`不支援的 Auth 類型「${auth.mode}」，已改為 None`, where)
       return { type: 'none' }
@@ -732,6 +784,38 @@ function authOut(auth: Auth): BrunoRequestPart['auth'] {
           key: auth.key,
           value: auth.value,
           placement: auth.in === 'query' ? 'queryparams' : 'header'
+        }
+      }
+    case 'digest':
+      return { mode: 'digest', digest: { username: auth.username, password: auth.password } }
+    case 'awsSigV4':
+      return {
+        mode: 'awsv4',
+        awsv4: {
+          accessKeyId: auth.accessKeyId,
+          secretAccessKey: auth.secretAccessKey,
+          sessionToken: auth.sessionToken,
+          service: auth.service,
+          region: auth.region,
+          profileName: ''
+        }
+      }
+    case 'oauth2':
+      return {
+        mode: 'oauth2',
+        oauth2: {
+          grantType: auth.grantType,
+          accessTokenUrl: auth.accessTokenUrl,
+          authorizationUrl: auth.authUrl,
+          callbackUrl: auth.callbackUrl,
+          clientId: auth.clientId,
+          clientSecret: auth.clientSecret,
+          scope: auth.scope,
+          username: auth.username,
+          password: auth.password,
+          pkce: auth.pkce,
+          credentialsPlacement: auth.clientAuth === 'body' ? 'body' : 'basic_auth_header',
+          tokenHeaderPrefix: auth.headerPrefix
         }
       }
   }
