@@ -182,7 +182,14 @@ const LEVEL_CLASS: Record<ScriptLog['level'], string> = {
   error: 'text-red-700 dark:text-red-400'
 }
 
-export function ConsolePanel({ report }: { report: ScriptReport }) {
+export function ConsolePanel({
+  report,
+  inRunner = false
+}: {
+  report: ScriptReport
+  /** setNextRequest only takes effect in the Collection Runner (decision 127). */
+  inRunner?: boolean
+}) {
   const phases = [
     ['Pre-request', report.preRequest],
     ['Post-response', report.postResponse]
@@ -218,6 +225,15 @@ export function ConsolePanel({ report }: { report: ScriptReport }) {
           </ul>
         </section>
       ))}
+      {report.nextRequest !== undefined && (
+        <p className="text-xs text-muted-foreground" data-testid="next-request-note">
+          {inRunner
+            ? report.nextRequest === null
+              ? 'setNextRequest(null)：這一輪在此結束'
+              : `setNextRequest：下一個執行「${report.nextRequest}」`
+            : 'setNextRequest 只在 Collection Runner 中有效，單獨送出時不會影響其他請求'}
+        </p>
+      )}
     </div>
   )
 }

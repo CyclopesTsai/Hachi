@@ -32,6 +32,8 @@ export const workspaceSettingsSchema = z.object({
   followRedirects: z.boolean().default(true),
   /** Maximum number of redirects to follow. */
   maxRedirects: z.number().int().min(0).max(MAX_REDIRECTS_LIMIT).default(3),
+  /** Total time a script may take, waiting for sendRequest included (decision 127). */
+  scriptTimeoutMs: z.number().int().min(1000).max(300_000).default(30_000),
   /** Git: fetch once each time the Workspace is opened (decision 113). */
   gitAutoFetch: z.boolean().default(false)
 })

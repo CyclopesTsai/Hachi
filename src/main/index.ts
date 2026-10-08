@@ -12,7 +12,8 @@ import type {
 } from '@shared/ipc/api'
 import type { HttpResult } from '@shared/http'
 import { HISTORY_INDEX_FILE } from '@shared/schemas/history'
-import { hasScripts } from '@shared/scripts'
+import { hasScripts, SCRIPT_TOTAL_TIMEOUT_DEFAULT_MS } from '@shared/scripts'
+import { findRequestByPath } from '@shared/tree'
 import { SESSIONS_DIR } from '@shared/schemas/session'
 import { EVENTS, type EventChannel, type MenuCommand } from '@shared/ipc/channels'
 import { selectDirectory } from './dialogs'
@@ -159,7 +160,7 @@ async function bootstrap(): Promise<void> {
   const executor: RequestExecutor = new RequestExecutor({
     http,
     runtime,
-    runScript: (input) => scriptHost.run(input),
+    runScript: (input, host) => scriptHost.run(input, host),
     workspacePath: () => workspaces.getCurrent()?.path ?? null,
     isTrusted: (workspacePath) => config.isScriptTrusted(workspacePath),
     getEnvironment: (id) => (id ? environments.get(id).catch(() => null) : Promise.resolve(null)),
@@ -170,7 +171,20 @@ async function bootstrap(): Promise<void> {
     },
     applyCollectionChanges: (id, changes) => collections.applyVariableChanges(id, changes),
     variablesChanged,
-    getScriptChain: (parentId) => collections.getChainFor(parentId).catch(() => [])
+    getScriptChain: (parentId) => collections.getChainFor(parentId).catch(() => []),
+    scriptTimeoutMs: () =>
+      workspaces
+        .getSettings()
+        .then((s) => s.scriptTimeoutMs)
+        .catch(() => SCRIPT_TOTAL_TIMEOUT_DEFAULT_MS),
+    findRequest: async (parentId, path) => {
+      const found = findRequestByPath(await collections.getTree(), parentId, path)
+      if (!found) return null
+      const { request } = await collections.getRequest(found.node.id)
+      return request.type === 'http'
+        ? { id: found.node.id, parentId: found.parent.id, request }
+        : null
+    }
   })
   const runner = new RunnerService({
     executor,

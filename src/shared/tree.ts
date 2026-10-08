@@ -83,3 +83,36 @@ export function isSelfOrDescendant(ancestor: TreeNode, candidateId: string): boo
   if (ancestor.id === candidateId) return true
   return isContainer(ancestor) && ancestor.children.some((c) => isSelfOrDescendant(c, candidateId))
 }
+
+/**
+ * A request for runRequest (decision 127): by id, or by its name path ("Folder/Request")
+ * inside the collection that contains `fromId`. Returns the request node and its parent.
+ */
+export function findRequestByPath(
+  tree: WorkspaceTree,
+  fromId: string | null,
+  path: string
+): { node: RequestNode; parent: ContainerNode } | null {
+  const byId = findNode(tree, path)
+  if (byId && byId.node.kind === 'request' && byId.parent) {
+    return { node: byId.node, parent: byId.parent }
+  }
+  const collection = tree.collections.find((c) => fromId !== null && isSelfOrDescendant(c, fromId))
+  if (!collection) return null
+  const names = path
+    .split('/')
+    .map((s) => s.trim())
+    .filter((s) => s !== '')
+  if (names.length === 0) return null
+  let container: ContainerNode = collection
+  for (const [i, name] of names.entries()) {
+    const last = i === names.length - 1
+    const child: ChildNode | undefined = container.children.find(
+      (c) => c.name === name && (last ? c.kind === 'request' : c.kind === 'folder')
+    )
+    if (!child) return null
+    if (child.kind === 'request') return { node: child, parent: container }
+    container = child
+  }
+  return null
+}

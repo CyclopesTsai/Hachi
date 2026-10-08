@@ -274,9 +274,9 @@ describe('unsupportedScriptApis', () => {
   it('lists Postman APIs the sandbox does not provide', () => {
     expect(
       unsupportedScriptApis(
-        `pm.sendRequest(url, cb); const _ = require('lodash'); const C = require("crypto-js")\npm.cookies.get('a'); postman.setNextRequest('x')`
+        `pm.sendRequest(url, cb); const _ = require('lodash'); const C = require("crypto-js")\npm.cookies.get('a'); postman.setNextRequest('x'); pm.execution.skipRequest()`
       )
-    ).toEqual(['pm.sendRequest', 'pm.cookies', 'setNextRequest', "require('lodash')"])
+    ).toEqual(['pm.cookies', 'pm.execution.skipRequest', "require('lodash')"])
     expect(unsupportedScriptApis('pm.test("ok", () => pm.response.to.have.status(200))')).toEqual(
       []
     )
@@ -290,13 +290,13 @@ describe('unsupportedScriptApis', () => {
           {
             name: 'R',
             request: 'https://a.test',
-            event: [{ listen: 'test', script: { exec: ['pm.sendRequest("x")'] } }]
+            event: [{ listen: 'test', script: { exec: ['pm.vault.get("x")'] } }]
           }
         ]
       },
       ctx
     )
-    expect(warnings).toEqual(['腳本使用了 Hachi 不支援的寫法：pm.sendRequest（R）'])
+    expect(warnings).toEqual(['腳本使用了 Hachi 不支援的寫法：pm.vault（R）'])
   })
 })
 

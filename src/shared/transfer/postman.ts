@@ -188,15 +188,11 @@ function parseAuth(raw: unknown, fallback: Auth, where: string, warnings: Transf
 
 /** Postman script APIs the Hachi sandbox does not provide (decision 72). */
 const UNSUPPORTED_SCRIPT_APIS: [RegExp, string][] = [
-  [/\bpm\.sendRequest\b/, 'pm.sendRequest'],
   [/\bpm\.cookies\b/, 'pm.cookies'],
   [/\bpm\.vault\b/, 'pm.vault'],
-  [/\bpm\.execution\b/, 'pm.execution'],
+  [/\bpm\.execution\.skipRequest\b/, 'pm.execution.skipRequest'],
   [/\bpm\.visualizer\b/, 'pm.visualizer'],
-  [/\b(pm|postman)\.setNextRequest\b/, 'setNextRequest'],
-  [/\bpm\.require\b/, 'pm.require'],
-  [/\bsetTimeout\s*\(/, 'setTimeout'],
-  [/\b(?:await|async)\b/, 'async / await']
+  [/\bpm\.require\b/, 'pm.require']
 ]
 
 export function unsupportedScriptApis(code: string): string[] {

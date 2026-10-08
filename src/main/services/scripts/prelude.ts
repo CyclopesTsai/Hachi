@@ -2,7 +2,8 @@
  * JavaScript evaluated inside the QuickJS sandbox before the user's script. It defines
  * the script API (`hachi.*`, the `pm.*` subset of decision 72, `console`, `btoa` / `atob`)
  * on top of a JSON snapshot (`__hachiInput`); nothing outside the sandbox is reachable.
- * `__hachiFinish()` returns what the script did (logs, tests, variable changes, request).
+ * `__hachiFinish()` returns what the script did (logs, tests, variable changes, request,
+ * setNextRequest). `__hachiHost` (engine.ts) sends requests / waits for async scripts.
  *
  * Keep it ES2020 and self-contained: it is plain text to QuickJS, not compiled by Vite.
  */
@@ -527,6 +528,166 @@ export const PRELUDE = String.raw`
       }
     }
   }
+  // ---- Requests from scripts, waiting (decision 127) ------------------------------
+  // __hachiHost(op, json) is the sandbox's only host function: the app sends the request
+  // (Workspace proxy / SSL / timeout, not recorded in history) or waits.
+  var nextRequest
+  var nextRequestSet = false
+  function setNextRequest(name) {
+    nextRequestSet = true
+    nextRequest = name === null || name === undefined ? null : String(name)
+  }
+  function hostCall(call) {
+    return __hachiHost('call', JSON.stringify(call)).then(function (json) {
+      var reply = JSON.parse(json)
+      if (reply.variables) refreshScopes(reply.variables)
+      return reply.response
+    })
+  }
+  // After runRequest: the stored values, with this script's own (not yet saved) changes on top.
+  function refreshScopes(fresh) {
+    ['runtime', 'environment', 'collection'].forEach(function (scope) {
+      if (scopes[scope] !== null && fresh[scope]) scopes[scope] = Object.assign({}, fresh[scope])
+    })
+    changes.forEach(function (c) {
+      var s = scopes[c.scope]
+      if (!s) return
+      if (c.value === null) delete s[c.name]
+      else s[c.name] = c.value
+    })
+  }
+  function sleep(ms) {
+    return __hachiHost('sleep', String(Math.max(0, Number(ms) || 0))).then(function () {})
+  }
+  function headerPairs(h) {
+    var out = []
+    if (!h) return out
+    if (Array.isArray(h)) {
+      h.forEach(function (x) {
+        if (Array.isArray(x)) out.push([String(x[0]), toText(x[1])])
+        else if (x && typeof x === 'object' && x.key !== undefined && !x.disabled) out.push([String(x.key), toText(x.value)])
+      })
+    } else if (typeof h === 'string') {
+      h.split('\n').forEach(function (line) {
+        var i = line.indexOf(':')
+        if (i > 0) out.push([line.slice(0, i).trim(), line.slice(i + 1).trim()])
+      })
+    } else if (typeof h === 'object') {
+      if (typeof h.toObject === 'function') h = h.toObject()
+      Object.keys(h).forEach(function (k) { out.push([k, toText(h[k])]) })
+    }
+    return out
+  }
+  function hasHeader(pairs, name) {
+    var lower = name.toLowerCase()
+    return pairs.some(function (p) { return p[0].toLowerCase() === lower })
+  }
+  function formBody(list) {
+    return (list || []).filter(function (f) { return f && !f.disabled && f.key !== undefined })
+      .map(function (f) { return encodeURIComponent(String(f.key)) + '=' + encodeURIComponent(toText(f.value)) })
+      .join('&')
+  }
+  /** Postman / axios (Bruno) / Hachi request descriptions → { method, url, headers, body }. */
+  function hostRequest(spec) {
+    if (typeof spec === 'string') return { method: 'GET', url: spec, headers: [], body: null }
+    if (!spec || typeof spec !== 'object') throw new Error('sendRequest 需要網址或請求設定')
+    var url = spec.url
+    if (url && typeof url === 'object') url = url.raw !== undefined ? url.raw : String(url)
+    url = String(url || '')
+    if (spec.params && typeof spec.params === 'object') {
+      var query = Object.keys(spec.params).map(function (k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(toText(spec.params[k]))
+      }).join('&')
+      if (query) url += (url.indexOf('?') < 0 ? '?' : '&') + query
+    }
+    var headers = headerPairs(spec.header !== undefined ? spec.header : spec.headers)
+    var body = null
+    var b = spec.body !== undefined ? spec.body : spec.data
+    if (b !== undefined && b !== null) {
+      if (typeof b === 'object' && typeof b.mode === 'string') {
+        // Postman's body object
+        if (b.mode === 'raw') body = toText(b.raw)
+        else if (b.mode === 'urlencoded') {
+          body = formBody(b.urlencoded)
+          if (!hasHeader(headers, 'content-type')) headers.push(['Content-Type', 'application/x-www-form-urlencoded'])
+        } else if (b.mode === 'formdata') throw new Error('sendRequest 不支援 formdata Body')
+      } else if (typeof b === 'object') {
+        body = JSON.stringify(b)
+        if (!hasHeader(headers, 'content-type')) headers.push(['Content-Type', 'application/json'])
+      } else body = toText(b)
+    }
+    return { method: String(spec.method || 'GET').toUpperCase(), url: url, headers: headers, body: body }
+  }
+  function parsedBody(r) {
+    if (r.body === null) return null
+    try { return JSON.parse(r.body) } catch (e) { return r.body }
+  }
+  function lowerHeaderObject(pairs) {
+    var o = {}
+    pairs.forEach(function (h) { o[h[0].toLowerCase()] = h[1] })
+    return o
+  }
+  function bodyOf(r) {
+    if (r.body === null) throw new Error('回應不是文字或太大，腳本無法讀取')
+    return r.body
+  }
+  function pmResponseOf(r) {
+    return {
+      code: r.status, status: r.statusText, reason: function () { return r.statusText },
+      responseTime: r.timeMs, responseSize: r.sizeBytes,
+      headers: headerList(r.headers, false),
+      text: function () { return bodyOf(r) },
+      json: function () { return JSON.parse(bodyOf(r)) }
+    }
+  }
+  function bruResponseOf(r) {
+    return {
+      status: r.status, statusText: r.statusText, headers: lowerHeaderObject(r.headers),
+      data: parsedBody(r), responseTime: r.timeMs,
+      getStatus: function () { return r.status },
+      getBody: function () { return parsedBody(r) },
+      getHeader: function (n) { return lowerHeaderObject(r.headers)[String(n).toLowerCase()] }
+    }
+  }
+  function hachiResponseOf(r) {
+    return {
+      status: r.status, statusText: r.statusText, headers: headerList(r.headers, false),
+      time: r.timeMs, size: r.sizeBytes,
+      text: function () { return bodyOf(r) },
+      json: function () { return JSON.parse(bodyOf(r)) }
+    }
+  }
+  /** Promise, and the optional Node-style callback(error, response) of Postman / Bruno. */
+  function withCallback(promise, wrap, callback) {
+    var wrapped = promise.then(wrap)
+    if (typeof callback === 'function') {
+      wrapped.then(function (res) { callback(null, res) }, function (err) { callback(err, null) })
+    }
+    return wrapped
+  }
+  function sendRequest(spec, wrap, callback) {
+    var request
+    try { request = hostRequest(spec) } catch (e) { return Promise.reject(e) }
+    return withCallback(hostCall({ op: 'sendRequest', request: request }), wrap, callback)
+  }
+  function runRequest(path, wrap) {
+    return hostCall({ op: 'runRequest', path: String(path) }).then(wrap)
+  }
+  var timers = {}
+  var timerSeq = 0
+  globalThis.setTimeout = function (fn, ms) {
+    var args = Array.prototype.slice.call(arguments, 2)
+    var id = ++timerSeq
+    timers[id] = true
+    sleep(ms).then(function () {
+      if (!timers[id]) return
+      delete timers[id]
+      if (typeof fn === 'function') fn.apply(null, args)
+    })
+    return id
+  }
+  globalThis.clearTimeout = function (id) { delete timers[id] }
+
   function unsupported(name) {
     return function () { throw new Error('Hachi 不支援 ' + name) }
   }
@@ -548,8 +709,13 @@ export const PRELUDE = String.raw`
     response: pmResponse,
     test: pmTest,
     expect: chaiExpect,
-    sendRequest: unsupported('pm.sendRequest'),
-    setNextRequest: unsupported('pm.setNextRequest')
+    sendRequest: function (spec, callback) { return sendRequest(spec, pmResponseOf, callback) },
+    setNextRequest: setNextRequest,
+    execution: {
+      setNextRequest: setNextRequest,
+      runRequest: function (id) { return runRequest(id, pmResponseOf) },
+      skipRequest: unsupported('pm.execution.skipRequest')
+    }
   }
   Object.defineProperty(pm, 'cookies', { get: unsupported('pm.cookies') })
   Object.defineProperty(pm, 'vault', { get: unsupported('pm.vault') })
@@ -564,7 +730,7 @@ export const PRELUDE = String.raw`
     getGlobalVariable: function (k) { return runtimeScope.get(k) },
     clearGlobalVariable: function (k) { runtimeScope.unset(k) },
     getResponseHeader: function (name) { return responseHeaders ? responseHeaders.get(name) : undefined },
-    setNextRequest: unsupported('postman.setNextRequest')
+    setNextRequest: setNextRequest
   }
 
   // ---- Bruno compatibility (bru / req / res, decision 104) -----------------------
@@ -588,13 +754,17 @@ export const PRELUDE = String.raw`
     getRequestVar: lookup,
     getFolderVar: lookup,
     interpolate: function (v) { return typeof v === 'string' ? replaceIn(v) : v },
-    sleep: function () { logger('warn')('Hachi 的腳本是同步執行，bru.sleep() 不會等待') },
+    sleep: sleep,
     getProcessEnv: unsupported('bru.getProcessEnv'),
-    sendRequest: unsupported('bru.sendRequest'),
-    runRequest: unsupported('bru.runRequest'),
-    setNextRequest: unsupported('bru.setNextRequest')
+    sendRequest: function (spec, callback) { return sendRequest(spec, bruResponseOf, callback) },
+    runRequest: function (path) { return runRequest(path, bruResponseOf) },
+    setNextRequest: setNextRequest,
+    runner: {
+      setNextRequest: setNextRequest,
+      stopExecution: function () { setNextRequest(null) },
+      skipRequest: unsupported('bru.runner.skipRequest')
+    }
   }
-  Object.defineProperty(bru, 'runner', { get: unsupported('bru.runner') })
   Object.defineProperty(bru, 'cookies', { get: unsupported('bru.cookies') })
 
   var brunoReq = {
@@ -678,6 +848,10 @@ export const PRELUDE = String.raw`
 
   // ---- globals -------------------------------------------------------------------
   globalThis.hachi = {
+    sendRequest: function (spec) { return sendRequest(spec, hachiResponseOf) },
+    runRequest: function (path) { return runRequest(path, hachiResponseOf) },
+    setNextRequest: setNextRequest,
+    sleep: sleep,
     variables: variables,
     environment: environmentScope,
     collectionVariables: collectionScope,
@@ -721,7 +895,8 @@ export const PRELUDE = String.raw`
         logs: logs,
         tests: tests,
         changes: changes,
-        request: phase === 'preRequest' && requestChanged ? req : null
+        request: phase === 'preRequest' && requestChanged ? req : null,
+        nextRequest: nextRequestSet ? nextRequest : undefined
       })
     },
     writable: false,

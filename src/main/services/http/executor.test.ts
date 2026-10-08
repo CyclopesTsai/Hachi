@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { proxySettingsSchema } from '@shared/schemas/app-config'
 import type { Variable } from '@shared/schemas/collection'
-import { httpRequestSchema } from '@shared/schemas/http-request'
+import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
 import { workspaceSettingsSchema } from '@shared/schemas/workspace'
 import type { HttpResult } from '@shared/http'
 import type { ScriptReport } from '@shared/scripts'
@@ -34,6 +34,7 @@ let runtime: RuntimeVariables
 let trusted: boolean
 let notified: unknown[]
 let chain: ContainerLevel[]
+let saved: Record<string, HttpRequest>
 
 function executor() {
   const layers = async (): Promise<VariableLayer[]> =>
@@ -67,7 +68,12 @@ function executor() {
       col = applyVariableChanges(col, changes)
     },
     variablesChanged: (change) => notified.push(change),
-    getScriptChain: async () => chain
+    getScriptChain: async () => chain,
+    scriptTimeoutMs: async () => 30_000,
+    findRequest: async (_parentId, path) => {
+      const found = saved[path]
+      return found ? { id: path, parentId: 'col', request: found } : null
+    }
   })
 }
 
@@ -78,6 +84,7 @@ beforeEach(() => {
   trusted = true
   notified = []
   chain = []
+  saved = {}
   env[0] = v('host', server.url)
 })
 
@@ -319,6 +326,62 @@ describe('applyScriptRequest', () => {
       trusted = false
       chain = [level('collection', 'Shop', "console.log('x')", '')]
       expect(await send({})).toMatchObject({ kind: 'error', code: 'SCRIPT' })
+    })
+  })
+
+  describe('requests from scripts (decision 127)', () => {
+    it('sends with sendRequest and runs saved requests with runRequest', async () => {
+      saved['Auth/Login'] = request({
+        name: 'Login',
+        url: '{{host}}/json',
+        scripts: { preRequest: '', postResponse: "hachi.variables.set('token', 'from-login')" }
+      })
+      const result = await send({
+        scripts: {
+          preRequest: `
+            const r = await hachi.sendRequest({ url: '${server.url}/echo', method: 'POST', body: { a: 1 } })
+            hachi.request.headers.set('X-Echo', r.json().method + ' ' + r.json().body)
+            const login = await hachi.runRequest('Auth/Login')
+            hachi.request.headers.set('X-Login', String(login.status) + ' ' + hachi.variables.get('token'))
+          `,
+          postResponse: ''
+        }
+      })
+      const headers = echo(result).headers
+      expect(headers['x-echo']).toBe('POST {"a":1}')
+      expect(headers['x-login']).toBe('200 from-login')
+    })
+
+    it('reports a missing request and a bad URL as script errors', async () => {
+      const missing = await send({
+        scripts: { preRequest: "await hachi.runRequest('Nope')", postResponse: '' }
+      })
+      expect(missing.kind === 'error' && missing.message).toContain('找不到請求「Nope」')
+      const relative = await send({
+        scripts: { preRequest: "await hachi.sendRequest('/echo')", postResponse: '' }
+      })
+      expect(relative.kind === 'error' && relative.message).toContain('http:// 或 https://')
+    })
+
+    it('limits runRequest nesting', async () => {
+      saved['Loop'] = request({
+        scripts: { preRequest: "await hachi.runRequest('Loop')", postResponse: '' }
+      })
+      const result = await send({
+        scripts: { preRequest: "await hachi.runRequest('Loop')", postResponse: '' }
+      })
+      expect(result.kind === 'error' && result.message).toContain('最多巢狀 3 層')
+    })
+
+    it('reports setNextRequest', async () => {
+      const result = await send({
+        scripts: { preRequest: '', postResponse: "hachi.setNextRequest('Login')" }
+      })
+      expect(report(result).nextRequest).toBe('Login')
+      const stop = await send({
+        scripts: { preRequest: 'pm.setNextRequest(null)', postResponse: '' }
+      })
+      expect(report(stop).nextRequest).toBeNull()
     })
   })
 })

@@ -3,7 +3,14 @@
  * response viewer. Types + constants only — safe to import anywhere.
  */
 
+/** Computing time of one script (the sandbox interrupts it after this). */
 export const SCRIPT_TIMEOUT_MS = 5000
+/** Total time of one script including waiting for sendRequest / sleep (decision 127). */
+export const SCRIPT_TOTAL_TIMEOUT_DEFAULT_MS = 30_000
+export const SCRIPT_TOTAL_TIMEOUT_MAX_MS = 300_000
+/** sendRequest / runRequest calls per script run, and how deep runRequest may nest. */
+export const SCRIPT_MAX_HOST_REQUESTS = 20
+export const SCRIPT_MAX_RUN_DEPTH = 3
 export const SCRIPT_MEMORY_BYTES = 64 * 1024 * 1024
 /** Response bodies larger than this are not given to Post-response scripts. */
 export const SCRIPT_BODY_LIMIT_BYTES = 10 * 1024 * 1024
@@ -57,8 +64,41 @@ export interface ScriptRunInput {
   }
   request: ScriptRequest
   response: ScriptResponse | null
+  /** Total time, waiting included (computing is limited to SCRIPT_TIMEOUT_MS). */
   timeoutMs: number
 }
+
+/** A request a script sends itself (sendRequest), as plain text (decision 127). */
+export interface HostRequest {
+  method: string
+  url: string
+  headers: [string, string][]
+  body: string | null
+}
+
+/** What sendRequest / runRequest give back to the script. */
+export interface HostResponse {
+  status: number
+  statusText: string
+  headers: [string, string][]
+  /** null when the body is binary or too large for scripts. */
+  body: string | null
+  timeMs: number
+  sizeBytes: number
+}
+
+/** Work a script asks the app to do (the sandbox itself has no network). */
+export type HostCall =
+  { op: 'sendRequest'; request: HostRequest } | { op: 'runRequest'; path: string }
+
+export type HostReply =
+  | {
+      ok: true
+      response: HostResponse
+      /** After runRequest: stored variables now (the nested request may have changed them). */
+      variables?: ScriptRunInput['variables']
+    }
+  | { ok: false; error: string }
 
 export interface ScriptLog {
   level: 'log' | 'info' | 'warn' | 'error'
@@ -86,6 +126,11 @@ export interface ScriptRunOutput {
   changes: VariableChange[]
   /** Pre-request only: the request after the script (null if it did not change it). */
   request: ScriptRequest | null
+  /**
+   * setNextRequest: the request the Runner runs next, null to end the round; absent when
+   * the script did not call it (decision 127).
+   */
+  nextRequest?: string | null
   durationMs: number
 }
 
@@ -127,6 +172,8 @@ export interface ScriptReport {
   changeErrors: string[]
   /** Scripts exist but were not run (the user chose "這次不執行腳本"). */
   scriptsSkipped: boolean
+  /** The last setNextRequest of the scripts (Runner only, decision 127). */
+  nextRequest?: string | null
 }
 
 export function hasScripts(scripts: { preRequest: string; postResponse: string }): boolean {

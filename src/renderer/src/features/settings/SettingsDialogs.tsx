@@ -15,6 +15,7 @@ import {
 } from '@shared/schemas/app-config'
 import { HISTORY_LIMIT_MAX, HISTORY_LIMIT_MIN } from '@shared/schemas/history'
 import { MAX_REDIRECTS_LIMIT, type WorkspaceSettings } from '@shared/schemas/workspace'
+import { SCRIPT_TOTAL_TIMEOUT_MAX_MS } from '@shared/scripts'
 import { Button } from '@renderer/components/ui/button'
 import {
   Dialog,
@@ -174,6 +175,25 @@ function WorkspaceSettingsForm({
             關閉時只在按下 Fetch / Pull 時連線遠端。
           </span>
         </div>
+      </Row>
+      <Row label="腳本總時間 (秒)" htmlFor="ws-script-timeout">
+        <Input
+          id="ws-script-timeout"
+          type="number"
+          min={1}
+          max={SCRIPT_TOTAL_TIMEOUT_MAX_MS / 1000}
+          className="h-8 w-24"
+          data-testid="script-timeout"
+          value={value.scriptTimeoutMs / 1000}
+          onChange={(e) =>
+            setValue({
+              ...value,
+              scriptTimeoutMs:
+                clampInt(e.target.value, 1, SCRIPT_TOTAL_TIMEOUT_MAX_MS / 1000) * 1000
+            })
+          }
+        />
+        <span className="text-xs text-muted-foreground">每段腳本，含 sendRequest / sleep 等待</span>
       </Row>
       <Row label="腳本">
         <div className="flex flex-col gap-1">

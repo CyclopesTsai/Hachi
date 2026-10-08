@@ -509,7 +509,7 @@ function RowDetailDialog({
                       <TestsPanel report={detail.scriptReport} />
                     </TabsContent>
                     <TabsContent value="console" className="min-h-0 flex-1 overflow-auto">
-                      <ConsolePanel report={detail.scriptReport} />
+                      <ConsolePanel report={detail.scriptReport} inRunner />
                     </TabsContent>
                   </>
                 )}

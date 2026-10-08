@@ -14,6 +14,8 @@ export const RUNNER_BODY_LIMIT_BYTES = 1024 * 1024
 export const RUNNER_BODY_TOTAL_BYTES = 200 * 1024 * 1024
 /** Rows that keep their details (headers, script report): the first N, plus failed ones. */
 export const RUNNER_DETAIL_ROWS = 2000
+/** Requests per round when setNextRequest jumps around (decision 127): stops endless loops. */
+export const RUNNER_MAX_STEPS_PER_ROUND = 1000
 
 export interface RunnerItem {
   /** Request id (saved file). */

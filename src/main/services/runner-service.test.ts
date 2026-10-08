@@ -84,7 +84,9 @@ function service() {
     },
     applyCollectionChanges: async () => undefined,
     variablesChanged: () => undefined,
-    getScriptChain: async () => []
+    getScriptChain: async () => [],
+    scriptTimeoutMs: async () => 30_000,
+    findRequest: async () => null
   })
   return new RunnerService({
     executor,
@@ -206,6 +208,38 @@ describe('RunnerService', () => {
     expect(progress.message).toBe('「List」失敗（第 1 輪），已停止')
     expect(svc.rows(runId, { offset: 0, limit: 10, failedOnly: true }).total).toBe(1)
     expect(progress.completedRequests).toBe(2)
+  })
+
+  it('follows setNextRequest within a round (decision 127)', async () => {
+    // List loops back to Login once, then ends the round.
+    requests.login = req('login', { url: '{{host}}/echo' })
+    requests.list = req('list', {
+      url: '{{host}}/echo',
+      scripts: {
+        postResponse: `
+          const n = Number(hachi.variables.get('n') || 0) + 1
+          hachi.variables.set('n', n)
+          hachi.setNextRequest(n < 2 ? 'Login' : null)
+        `
+      }
+    })
+    const svc = service()
+    const { runId, progress } = await run(svc, config({ iterations: 1 }))
+    expect(progress.status).toBe('done')
+    const { rows } = svc.rows(runId, { offset: 0, limit: 10, failedOnly: false })
+    expect(rows.map((r) => r.name)).toEqual(['Login', 'List', 'Login', 'List'])
+  })
+
+  it('stops a setNextRequest loop that never ends', async () => {
+    requests.login = req('login', {
+      url: '{{host}}/echo',
+      scripts: { postResponse: "pm.setNextRequest('Login')" }
+    })
+    const svc = service()
+    const { progress } = await run(svc, config({ itemIds: ['login'] }))
+    expect(progress.status).toBe('stopped')
+    expect(progress.message).toContain('setNextRequest 可能形成無窮迴圈')
+    expect(progress.completedRequests).toBe(1000)
   })
 
   it('can be cancelled while requests are running', async () => {

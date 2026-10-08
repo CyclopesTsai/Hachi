@@ -11,6 +11,7 @@ import {
   RUNNER_BODY_LIMIT_BYTES,
   RUNNER_BODY_TOTAL_BYTES,
   RUNNER_DETAIL_ROWS,
+  RUNNER_MAX_STEPS_PER_ROUND,
   RunnerStatsCollector,
   type RunnerConfig,
   type RunnerEvent,
@@ -391,7 +392,17 @@ export class RunnerService {
       const round = run.nextRound++
       const data = rows ? (rows[round % rows.length] ?? null) : null
       const iteration = { index: round, count: run.totalRounds }
-      for (let i = 0; i < run.items.length && run.status === 'running'; i++) {
+      // setNextRequest (decision 127) jumps within the round; null ends it.
+      let steps = 0
+      for (let i = 0; i < run.items.length && run.status === 'running';) {
+        if (++steps > RUNNER_MAX_STEPS_PER_ROUND) {
+          this.halt(
+            run,
+            'stopped',
+            `第 ${round + 1} 輪已執行 ${RUNNER_MAX_STEPS_PER_ROUND} 個請求（setNextRequest 可能形成無窮迴圈），已停止`
+          )
+          return
+        }
         const item = run.items[i] as PlannedItem
         const scope = state
           ? memoryScope(state, data, iteration)
@@ -428,7 +439,15 @@ export class RunnerService {
           this.halt(run, 'stopped', `「${item.name}」失敗（第 ${round + 1} 輪），已停止`)
           return
         }
-        const last = k === config.iterations - 1 && i === run.items.length - 1
+        const next = result.scriptReport?.nextRequest
+        if (next === undefined) i++
+        else if (next === null) i = run.items.length
+        else {
+          // By name (first match), or id; an unknown name ends the round (as Postman).
+          const target = run.items.findIndex((x) => x.name === next || x.id === next)
+          i = target < 0 ? run.items.length : target
+        }
+        const last = k === config.iterations - 1 && i >= run.items.length
         if (config.delayMs > 0 && !last && run.status === 'running') {
           await new Promise((r) => setTimeout(r, config.delayMs))
         }

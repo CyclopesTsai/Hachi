@@ -11,11 +11,14 @@ import { randomUUID } from 'node:crypto'
 import { evaluateAssertions, runExtractions, type ResponseFacts } from '@shared/assertions'
 import type { HttpErrorData, HttpResponseData, HttpResult } from '@shared/http'
 import { HTTP_METHODS, type HttpMethod, type Variable } from '@shared/schemas/collection'
-import type { HttpRequest } from '@shared/schemas/http-request'
+import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
 import {
   SCRIPT_BODY_LIMIT_BYTES,
-  SCRIPT_TIMEOUT_MS,
+  SCRIPT_MAX_RUN_DEPTH,
   hasScripts,
+  type HostCall,
+  type HostReply,
+  type HostRequest,
   type ScriptPhase,
   type ScriptReport,
   type ScriptRequest,
@@ -32,7 +35,10 @@ import type { HttpService, SendInput } from './http-service'
 export interface ExecutorDeps {
   http: HttpService
   runtime: RuntimeVariables
-  runScript(input: ScriptRunInput): Promise<ScriptRunOutput>
+  runScript(
+    input: ScriptRunInput,
+    host?: (call: HostCall) => Promise<HostReply>
+  ): Promise<ScriptRunOutput>
   /** Folder of the current Workspace (runtime variables and trust are per Workspace). */
   workspacePath(): string | null
   isTrusted(workspacePath: string): boolean
@@ -48,6 +54,16 @@ export interface ExecutorDeps {
   variablesChanged(change: { environmentId: string | null; collectionId: string | null }): void
   /** Collection and folders above a request, outermost first ([] outside a collection). */
   getScriptChain(parentId: string | null): Promise<ContainerLevel[]>
+  /** Total time a script may take, waiting included (Workspace setting, decision 127). */
+  scriptTimeoutMs(): Promise<number>
+  /**
+   * A saved HTTP request for runRequest: by id, or by its name path inside the collection
+   * that contains `parentId` ("Folder/Request").
+   */
+  findRequest(
+    parentId: string | null,
+    path: string
+  ): Promise<{ id: string; parentId: string; request: HttpRequest } | null>
 }
 
 /** One script to run: a collection's, a folder's, or the request's own (label null). */
@@ -84,6 +100,36 @@ export function scriptSteps(
 export interface ExecuteInput extends SendInput {
   /** The user chose "這次不執行腳本" (or the request is run where scripts are off). */
   skipScripts?: boolean
+  /** runRequest nesting (decision 127): 0 for a request sent from the editor / Runner. */
+  depth?: number
+}
+
+/** A response (or failure) as scripts see it from sendRequest / runRequest. */
+function hostReplyOf(result: HttpResult): HostReply {
+  if (result.kind !== 'response') return { ok: false, error: result.message }
+  const body =
+    result.body.kind === 'text' ? result.body.text : result.body.kind === 'empty' ? '' : null
+  return {
+    ok: true,
+    response: {
+      status: result.status,
+      statusText: result.statusText,
+      headers: result.headers,
+      body: result.bodyBytes > SCRIPT_BODY_LIMIT_BYTES ? null : body,
+      timeMs: Math.round(result.timings.totalMs),
+      sizeBytes: result.bodyBytes
+    }
+  }
+}
+
+/** Stored variables as a script sees them. */
+async function scriptVariables(scope: ExecutionScope): Promise<ScriptRunInput['variables']> {
+  const [environment, collection] = await Promise.all([scope.environment(), scope.collection()])
+  return {
+    runtime: scope.runtimeValues(),
+    environment: environment ? enabledRecord(environment.variables) : null,
+    collection: collection ? enabledRecord(collection.variables) : null
+  }
 }
 
 const enabledRecord = (variables: readonly Variable[]): Record<string, string> => {
@@ -313,6 +359,69 @@ export class RequestExecutor {
     return { ...result, scriptReport: report }
   }
 
+  /** sendRequest / runRequest from a script (decision 127): not recorded in history. */
+  private async hostCall(
+    call: HostCall,
+    input: ExecuteInput,
+    scope: ExecutionScope
+  ): Promise<HostReply> {
+    if (call.op === 'sendRequest') return this.sendFromScript(call.request)
+    const depth = (input.depth ?? 0) + 1
+    if (depth > SCRIPT_MAX_RUN_DEPTH) {
+      return { ok: false, error: `runRequest 最多巢狀 ${SCRIPT_MAX_RUN_DEPTH} 層` }
+    }
+    const found = await this.deps.findRequest(input.parentId, call.path)
+    if (!found) return { ok: false, error: `找不到請求「${call.path}」` }
+    const result = await this.execute(
+      {
+        runId: randomUUID(),
+        parentId: found.parentId,
+        environmentId: input.environmentId,
+        request: found.request,
+        skipScripts: input.skipScripts,
+        depth
+      },
+      scope
+    )
+    const reply = hostReplyOf(result)
+    return reply.ok ? { ...reply, variables: await scriptVariables(scope) } : reply
+  }
+
+  /** A plain request: no inherited settings, no {{variable}} substitution (as Postman). */
+  private async sendFromScript(spec: HostRequest): Promise<HostReply> {
+    const method = spec.method.toUpperCase()
+    if (!(HTTP_METHODS as readonly string[]).includes(method)) {
+      return { ok: false, error: `sendRequest 不支援的 HTTP 方法：${spec.method}` }
+    }
+    if (!/^https?:\/\//i.test(spec.url)) {
+      return { ok: false, error: `sendRequest 的網址需要 http:// 或 https://：${spec.url}` }
+    }
+    const contentType = spec.headers.find(([k]) => k.toLowerCase() === 'content-type')?.[1]
+    const request = httpRequestSchema.parse({
+      version: 1,
+      id: 'script-request',
+      type: 'http',
+      name: 'sendRequest',
+      method,
+      url: spec.url,
+      headers: spec.headers.map(([key, value], i) => ({ id: `h${i}`, key, value, enabled: true })),
+      body:
+        spec.body === null
+          ? { mode: 'none' }
+          : { mode: 'raw', raw: spec.body, rawContentType: contentType ?? 'text/plain' },
+      auth: { type: 'none' }
+    })
+    const result = await this.deps.http.send({
+      runId: randomUUID(),
+      parentId: null,
+      environmentId: null,
+      request,
+      layers: [],
+      storeBody: false
+    })
+    return hostReplyOf(result)
+  }
+
   private fail(input: ExecuteInput, message: string, report: ScriptReport): HttpErrorData {
     return {
       kind: 'error',
@@ -363,26 +472,27 @@ export class RequestExecutor {
     const [environment, collection] = await Promise.all([scope.environment(), scope.collection()])
     let out: ScriptRunOutput
     try {
-      out = await this.deps.runScript({
-        phase,
-        code: step.code,
-        variables: {
-          runtime: scope.runtimeValues(),
-          environment: environment ? enabledRecord(environment.variables) : null,
-          collection: collection ? enabledRecord(collection.variables) : null
+      const timeoutMs = await this.deps.scriptTimeoutMs()
+      const host = (call: HostCall) => this.hostCall(call, input, scope)
+      out = await this.deps.runScript(
+        {
+          phase,
+          code: step.code,
+          variables: await scriptVariables(scope),
+          iterationData: scope.iterationData,
+          info: {
+            requestName: input.request.name,
+            environmentName: environment?.name ?? null,
+            collectionName: collection?.name ?? null,
+            iteration: scope.iteration.index,
+            iterationCount: scope.iteration.count
+          },
+          request,
+          response,
+          timeoutMs
         },
-        iterationData: scope.iterationData,
-        info: {
-          requestName: input.request.name,
-          environmentName: environment?.name ?? null,
-          collectionName: collection?.name ?? null,
-          iteration: scope.iteration.index,
-          iterationCount: scope.iteration.count
-        },
-        request,
-        response,
-        timeoutMs: SCRIPT_TIMEOUT_MS
-      })
+        host
+      )
     } catch (error) {
       out = {
         error: `無法執行腳本：${error instanceof Error ? error.message : String(error)}`,
@@ -394,6 +504,7 @@ export class RequestExecutor {
       }
     }
     // Several scripts per phase: one report, their parts labelled in the console.
+    if (out.nextRequest !== undefined) report.nextRequest = out.nextRequest
     const before = report[phase]
     const logs = step.label
       ? [{ level: 'info' as const, text: `── ${step.label}的腳本 ──` }, ...out.logs]

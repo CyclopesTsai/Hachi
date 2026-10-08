@@ -548,13 +548,9 @@ function mapRequest(item: BrunoRequestItem, path: string[], ctx: Ctx): HttpReque
 
 /** Bruno script APIs the Hachi compatibility layer does not provide (decision 104). */
 const UNSUPPORTED_BRUNO_APIS: [RegExp, string][] = [
-  [/\bbru\.(?:sendRequest|runRequest)\b/, 'bru.sendRequest / runRequest'],
-  [/\bbru\.setNextRequest\b/, 'bru.setNextRequest'],
-  [/\bbru\.runner\b/, 'bru.runner'],
+  [/\bbru\.runner\.skipRequest\b/, 'bru.runner.skipRequest'],
   [/\bbru\.cookies\b/, 'bru.cookies'],
-  [/\bbru\.getProcessEnv\b|\bprocess\.env\b/, 'process.env'],
-  [/\bsetTimeout\s*\(/, 'setTimeout'],
-  [/\b(?:await|async)\b/, 'async / await']
+  [/\bbru\.getProcessEnv\b|\bprocess\.env\b/, 'process.env']
 ]
 
 export function unsupportedBrunoApis(code: string): string[] {

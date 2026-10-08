@@ -206,15 +206,18 @@ describe('runScript: response, tests and expectations', () => {
 })
 
 describe('runScript: sandbox', () => {
-  it('has no Node, network or timers', async () => {
+  it('has no Node or network of its own', async () => {
     const out = await runScript(
       input(
-        'console.log([typeof process, typeof fetch, typeof setTimeout, typeof XMLHttpRequest, typeof __hachiInput].join())'
+        'console.log([typeof process, typeof fetch, typeof XMLHttpRequest, typeof __hachiInput].join())'
       )
     )
-    expect(out.logs[0]?.text).toBe('undefined,undefined,undefined,undefined,undefined')
+    expect(out.logs[0]?.text).toBe('undefined,undefined,undefined,undefined')
     expect((await runScript(input('require("fs")'))).error).toMatch(/不支援 require\('fs'\)/)
-    expect((await runScript(input('pm.sendRequest("x")'))).error).toMatch(/pm\.sendRequest/)
+    // Without the app behind it, a script cannot send anything.
+    expect((await runScript(input('await pm.sendRequest("x")'))).error).toMatch(
+      /這裡不能從腳本送出請求/
+    )
   })
 
   it('stops endless loops and memory hogs', async () => {
@@ -348,9 +351,124 @@ describe('runScript: Bruno compatibility (bru / req / res)', () => {
   })
 
   it('reports Bruno APIs Hachi does not provide', async () => {
-    const out = await runScript(input(`bru.sendRequest({})`))
-    expect(out.error).toMatch(/Hachi 不支援 bru.sendRequest/)
+    const out = await runScript(input(`bru.runner.skipRequest()`))
+    expect(out.error).toMatch(/Hachi 不支援 bru.runner.skipRequest/)
     const edit = await runScript(post(`req.setUrl('x')`))
     expect(edit.error).toMatch(/Post-response 腳本不能修改請求/)
+  })
+})
+
+describe('runScript: async scripts and requests (decision 127)', () => {
+  const okResponse = (body: string) => ({
+    ok: true as const,
+    response: {
+      status: 200,
+      statusText: 'OK',
+      headers: [['Content-Type', 'application/json']] as [string, string][],
+      body,
+      timeMs: 12,
+      sizeBytes: body.length
+    }
+  })
+
+  it('awaits sleep and setTimeout', async () => {
+    const out = await runScript(
+      input(`
+        setTimeout(() => console.log('timer'), 20)
+        await bru.sleep(5)
+        console.log('slept')
+        await new Promise((resolve) => setTimeout(resolve, 40))
+        console.log('done')
+      `)
+    )
+    expect(out.error).toBeNull()
+    expect(out.logs.map((l) => l.text)).toEqual(['slept', 'timer', 'done'])
+  })
+
+  it('sends requests through the app: Postman, Bruno and Hachi styles', async () => {
+    const calls: unknown[] = []
+    const out = await runScript(
+      post(`
+        const a = await pm.sendRequest({ url: 'https://api.test/a', method: 'post', header: [{ key: 'X-A', value: '1' }], body: { mode: 'raw', raw: 'hi' } })
+        console.log(a.code, a.json().n, a.headers.get('content-type'))
+        const b = await bru.sendRequest({ method: 'PUT', url: 'https://api.test/b', headers: { 'X-B': 2 }, data: { x: 1 }, params: { q: 'z' } })
+        console.log(b.status, b.data.n, b.headers['content-type'])
+        const c = await hachi.sendRequest('https://api.test/c')
+        console.log(c.status, c.json().n)
+        await new Promise((resolve) => pm.sendRequest('https://api.test/d', (err, res) => { console.log(err, res.code); resolve() }))
+      `),
+      async (call) => {
+        calls.push(call)
+        return okResponse('{"n":7}')
+      }
+    )
+    expect(out.error).toBeNull()
+    expect(out.logs.map((l) => l.text)).toEqual([
+      '200 7 application/json',
+      '200 7 application/json',
+      '200 7',
+      'null 200'
+    ])
+    expect(calls).toEqual([
+      {
+        op: 'sendRequest',
+        request: { method: 'POST', url: 'https://api.test/a', headers: [['X-A', '1']], body: 'hi' }
+      },
+      {
+        op: 'sendRequest',
+        request: {
+          method: 'PUT',
+          url: 'https://api.test/b?q=z',
+          headers: [
+            ['X-B', '2'],
+            ['Content-Type', 'application/json']
+          ],
+          body: '{"x":1}'
+        }
+      },
+      {
+        op: 'sendRequest',
+        request: { method: 'GET', url: 'https://api.test/c', headers: [], body: null }
+      },
+      {
+        op: 'sendRequest',
+        request: { method: 'GET', url: 'https://api.test/d', headers: [], body: null }
+      }
+    ])
+  })
+
+  it('runs saved requests, reports network errors, and limits the number of requests', async () => {
+    const out = await runScript(
+      input(`
+        const r = await bru.runRequest('Auth/Login')
+        console.log(r.status, r.data.n)
+        try { await hachi.sendRequest('https://down.test') } catch (e) { console.log('failed:', e.message) }
+        for (let i = 0; i < 25; i++) await hachi.sendRequest('https://api.test/' + i)
+      `),
+      async (call) =>
+        call.op === 'runRequest'
+          ? okResponse('{"n":1}')
+          : call.request.url === 'https://down.test'
+            ? { ok: false, error: 'ECONNREFUSED' }
+            : okResponse('{}')
+    )
+    expect(out.logs.map((l) => l.text).slice(0, 2)).toEqual(['200 1', 'failed: ECONNREFUSED'])
+    expect(out.error).toMatch(/最多送出 20 個請求/)
+  })
+
+  it('records setNextRequest for the Runner', async () => {
+    expect((await runScript(post(`pm.execution.setNextRequest('Step 3')`))).nextRequest).toBe(
+      'Step 3'
+    )
+    expect((await runScript(post(`bru.runner.stopExecution()`))).nextRequest).toBeNull()
+    expect((await runScript(post(`postman.setNextRequest(null)`))).nextRequest).toBeNull()
+    expect((await runScript(post(`console.log(1)`))).nextRequest).toBeUndefined()
+  })
+
+  it('limits the total time and notices promises that never settle', async () => {
+    const slow = await runScript(input(`await bru.sleep(5000)`, { timeoutMs: 300 }))
+    expect(slow.error).toMatch(/總時間超過/)
+    const stuck = await runScript(input(`await new Promise(() => {})`))
+    expect(stuck.error).toMatch(/永遠不會完成/)
   })
 })
