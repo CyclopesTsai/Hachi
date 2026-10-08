@@ -4,7 +4,7 @@
  */
 import path from 'node:path'
 import { FormData } from 'undici'
-import type { Auth, KeyValue } from '@shared/schemas/collection'
+import type { Auth, KeyValue, RequestScripts, ScriptFlow } from '@shared/schemas/collection'
 import type { HttpBody, HttpRequest } from '@shared/schemas/http-request'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import type { HttpErrorCode, InheritedHeader, InheritedSettings } from '@shared/http'
@@ -14,8 +14,12 @@ import type { CodegenBody, CodegenRequest } from '@shared/codegen'
 export interface ContainerLevel {
   id: string
   name: string
+  kind: 'collection' | 'folder'
   headers: KeyValue[]
   auth: Auth
+  scripts: RequestScripts
+  /** Collections only: the order of the scripts (decision 126). */
+  scriptFlow?: ScriptFlow
 }
 
 export class HttpBuildError extends Error {
@@ -69,7 +73,10 @@ export function resolveInherited(chain: readonly ContainerLevel[]): InheritedSet
       break
     }
   }
-  return { headers, auth }
+  const scripts = chain
+    .filter((l) => l.scripts.preRequest.trim() !== '' || l.scripts.postResponse.trim() !== '')
+    .map((l) => l.name)
+  return { headers, auth, scripts }
 }
 
 /** The auth that applies to a request: its own, or the inherited one ("none" if nothing). */

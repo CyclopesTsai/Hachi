@@ -3,7 +3,7 @@
  * (main then writes the files) and exporters consume it (main reads the files into it).
  * Types only — safe to import anywhere.
  */
-import type { Auth, KeyValue, Variable } from '../schemas/collection'
+import type { Auth, KeyValue, ScriptFlow, Variable } from '../schemas/collection'
 import type { RequestScripts } from '../schemas/http-request'
 import type { AnyRequest } from '../schemas/request'
 
@@ -19,6 +19,8 @@ export interface PortableContainer {
 export interface PortableCollection extends PortableContainer {
   /** Secret values are empty when exporting (they never leave .hachi-secrets.json). */
   variables: Variable[]
+  /** Order of collection / folder / request scripts (decision 126); sequential if absent. */
+  scriptFlow?: ScriptFlow
 }
 
 export interface PortableFolder extends PortableContainer {

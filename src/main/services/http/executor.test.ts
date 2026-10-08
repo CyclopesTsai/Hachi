@@ -8,7 +8,7 @@ import type { ScriptReport } from '@shared/scripts'
 import { applyVariableChanges, type VariableLayer } from '@shared/variables'
 import { RuntimeVariables } from '../runtime-variables'
 import { runScript } from '../scripts/engine'
-import { resolveInherited } from './build-request'
+import { resolveInherited, type ContainerLevel } from './build-request'
 import { RequestExecutor, applyScriptRequest } from './executor'
 import { HttpService } from './http-service'
 import { startHttpServer, type TestServer } from './test-servers'
@@ -33,6 +33,7 @@ let col: Variable[]
 let runtime: RuntimeVariables
 let trusted: boolean
 let notified: unknown[]
+let chain: ContainerLevel[]
 
 function executor() {
   const layers = async (): Promise<VariableLayer[]> =>
@@ -65,7 +66,8 @@ function executor() {
     applyCollectionChanges: async (_id, changes) => {
       col = applyVariableChanges(col, changes)
     },
-    variablesChanged: (change) => notified.push(change)
+    variablesChanged: (change) => notified.push(change),
+    getScriptChain: async () => chain
   })
 }
 
@@ -75,6 +77,7 @@ beforeEach(() => {
   runtime = new RuntimeVariables()
   trusted = true
   notified = []
+  chain = []
   env[0] = v('host', server.url)
 })
 
@@ -251,5 +254,71 @@ describe('applyScriptRequest', () => {
     expect(
       applyScriptRequest(base, { method: 'BREW', url: 'x', headers: [], body: null }).method
     ).toBe('POST')
+  })
+
+  describe('collection / folder scripts (decision 126)', () => {
+    const level = (
+      kind: 'collection' | 'folder',
+      name: string,
+      pre: string,
+      post: string,
+      scriptFlow?: 'sequential' | 'sandwich'
+    ): ContainerLevel => ({
+      id: name,
+      name,
+      kind,
+      headers: [],
+      auth: { type: 'inherit' },
+      scripts: { preRequest: pre, postResponse: post },
+      ...(scriptFlow ? { scriptFlow } : {})
+    })
+    const order = (who: string) =>
+      `hachi.variables.set('order', (hachi.variables.get('order') || '') + '${who},')`
+
+    it('runs pre-request outside in, post-response in the collection flow', async () => {
+      for (const [flow, expected] of [
+        ['sequential', 'C-pre,F-pre,R-pre,C-post,F-post,R-post,'],
+        ['sandwich', 'C-pre,F-pre,R-pre,R-post,F-post,C-post,']
+      ] as const) {
+        runtime = new RuntimeVariables()
+        chain = [
+          level('collection', 'Shop', order('C-pre'), order('C-post'), flow),
+          level('folder', 'Users', order('F-pre'), order('F-post'))
+        ]
+        const result = await send({
+          scripts: { preRequest: order('R-pre'), postResponse: order('R-post') }
+        })
+        expect(result.kind).toBe('response')
+        expect(runtime.values(WS).order).toBe(expected)
+        expect(report(result).preRequest?.logs.map((l) => l.text)).toEqual([
+          '── Collection「Shop」的腳本 ──',
+          '── 資料夾「Users」的腳本 ──'
+        ])
+      }
+    })
+
+    it('passes request changes along and stops on a pre-request error', async () => {
+      chain = [level('collection', 'Shop', "hachi.request.headers.set('X-From', 'collection')", '')]
+      const result = await send({
+        scripts: {
+          preRequest: "hachi.request.headers.set('X-Req', hachi.request.headers.get('X-From'))",
+          postResponse: ''
+        }
+      })
+      expect(echo(result).headers['x-req']).toBe('collection')
+
+      chain = [level('collection', 'Shop', "throw new Error('nope')", '')]
+      const failed = await send({})
+      expect(failed).toMatchObject({ kind: 'error', code: 'SCRIPT' })
+      expect(failed.kind === 'error' && failed.message).toContain(
+        'Collection「Shop」的 Pre-request 腳本錯誤'
+      )
+    })
+
+    it('asks for trust when only a container has scripts', async () => {
+      trusted = false
+      chain = [level('collection', 'Shop', "console.log('x')", '')]
+      expect(await send({})).toMatchObject({ kind: 'error', code: 'SCRIPT' })
+    })
   })
 })

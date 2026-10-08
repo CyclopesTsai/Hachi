@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   ASSERTION_OPERATOR_LABELS,
   ASSERTION_TARGET_LABELS,
@@ -100,10 +100,19 @@ function ScriptHelp({ phase }: { phase: Phase }) {
 
 export function ScriptsTab({
   scripts,
-  onChange
+  onChange,
+  container = false,
+  inheritedFrom = [],
+  children
 }: {
   scripts: RequestScripts
   onChange: (scripts: RequestScripts) => void
+  /** Scripts of a collection / folder: they run for every request inside (decision 126). */
+  container?: boolean
+  /** Collections / folders above whose scripts run too. */
+  inheritedFrom?: string[]
+  /** Extra controls above the editor (the collection's script order). */
+  children?: ReactNode
 }) {
   const [phase, setPhase] = useState<Phase>(
     scripts.preRequest.trim() === '' && scripts.postResponse.trim() !== ''
@@ -134,9 +143,22 @@ export function ScriptsTab({
           ))}
         </div>
         <span className="text-xs text-muted-foreground">
-          {phase === 'preRequest' ? '發送前執行' : '收到回應、擷取變數之後執行（斷言在最後）'}
+          {container
+            ? phase === 'preRequest'
+              ? '裡面的每個請求發送前執行'
+              : '裡面的每個請求收到回應後執行'
+            : phase === 'preRequest'
+              ? '發送前執行'
+              : '收到回應、擷取變數之後執行（斷言在最後）'}
         </span>
       </div>
+      {children}
+      {inheritedFrom.length > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="inherited-scripts">
+          也會執行：{inheritedFrom.map((name) => `「${name}」`).join('、')}的腳本（順序依 Collection
+          設定）
+        </p>
+      )}
       <ScriptHelp phase={phase} />
       <div className="min-h-0 flex-1 overflow-hidden rounded-md border" data-testid="script-editor">
         <CodeEditor

@@ -1,8 +1,8 @@
 /**
- * Sends a request with its scripts, extractions and assertions (decisions 70–73):
+ * Sends a request with its scripts, extractions and assertions (decisions 70–73, 126):
  *
- *   Pre-request script → variable substitution + send → extractions
- *   → Post-response script → assertions
+ *   Pre-request scripts (collection → folders → request) → variable substitution + send
+ *   → extractions → Post-response scripts (order: the collection's script flow) → assertions
  *
  * Scripts run in the sandbox (`runScript`); their variable changes are applied here.
  * Used by `http:send` and, from Phase 5c, by the Collection Runner.
@@ -26,6 +26,7 @@ import {
 } from '@shared/scripts'
 import { VariableResolver, buildVariableMap, type VariableLayer } from '@shared/variables'
 import type { RuntimeVariables } from '../runtime-variables'
+import type { ContainerLevel } from './build-request'
 import type { HttpService, SendInput } from './http-service'
 
 export interface ExecutorDeps {
@@ -45,6 +46,39 @@ export interface ExecutorDeps {
   applyCollectionChanges(id: string, changes: VariableChange[]): Promise<void>
   /** Tells the renderer that stored variables changed (to refresh highlighting / editors). */
   variablesChanged(change: { environmentId: string | null; collectionId: string | null }): void
+  /** Collection and folders above a request, outermost first ([] outside a collection). */
+  getScriptChain(parentId: string | null): Promise<ContainerLevel[]>
+}
+
+/** One script to run: a collection's, a folder's, or the request's own (label null). */
+interface ScriptStep {
+  label: string | null
+  code: string
+}
+
+const levelLabel = (level: ContainerLevel) =>
+  `${level.kind === 'collection' ? 'Collection' : '資料夾'}「${level.name}」`
+
+/**
+ * Pre-request steps run outside in (collection → folders → request). Post-response steps
+ * follow the collection's flow: the same order (sequential), or inside out (sandwich).
+ */
+export function scriptSteps(
+  chain: readonly ContainerLevel[],
+  own: { preRequest: string; postResponse: string }
+): { pre: ScriptStep[]; post: ScriptStep[] } {
+  const levels = chain.filter((l) => hasScripts(l.scripts))
+  const pre = [
+    ...levels.map((l) => ({ label: levelLabel(l), code: l.scripts.preRequest })),
+    { label: null, code: own.preRequest }
+  ]
+  const outerFirst = [
+    ...levels.map((l) => ({ label: levelLabel(l), code: l.scripts.postResponse })),
+    { label: null, code: own.postResponse }
+  ]
+  const post = chain[0]?.scriptFlow === 'sandwich' ? [...outerFirst].reverse() : outerFirst
+  const present = (step: ScriptStep) => step.code.trim() !== ''
+  return { pre: pre.filter(present), post: post.filter(present) }
 }
 
 export interface ExecuteInput extends SendInput {
@@ -206,7 +240,9 @@ export class RequestExecutor {
     scope: ExecutionScope = this.appScope(input)
   ): Promise<HttpResult> {
     const request = input.request
-    const scriptsPresent = hasScripts(request.scripts)
+    const chain = input.parentId ? await this.deps.getScriptChain(input.parentId) : []
+    const steps = scriptSteps(chain, request.scripts)
+    const scriptsPresent = steps.pre.length > 0 || steps.post.length > 0
     const runScripts = scriptsPresent && !input.skipScripts
     const extractions = request.extractions.filter((e) => e.enabled && e.variable.trim() !== '')
     const assertions = request.assertions.filter((a) => a.enabled)
@@ -221,19 +257,22 @@ export class RequestExecutor {
     }
 
     let sending = request
-    const pre = request.scripts.preRequest
-    if (runScripts && pre.trim() !== '') {
+    for (const step of runScripts ? steps.pre : []) {
+      // Each script sees the request as the scripts before it left it.
       const out = await this.runPhase(
         'preRequest',
-        pre,
+        step,
         input,
         scope,
-        scriptRequestOf(request),
+        scriptRequestOf(sending),
         null,
         report
       )
-      if (out.request) sending = applyScriptRequest(request, out.request)
-      if (out.error) return this.fail(input, `Pre-request 腳本錯誤：${out.error}`, report)
+      if (out.request) sending = applyScriptRequest(sending, out.request)
+      if (out.error) {
+        const where = step.label ? `${step.label}的 ` : ''
+        return this.fail(input, `${where}Pre-request 腳本錯誤：${out.error}`, report)
+      }
     }
 
     const result = await this.deps.http.send({
@@ -252,23 +291,18 @@ export class RequestExecutor {
       await this.applyChanges(changes, 'extraction', scope, report)
     }
 
-    const post = request.scripts.postResponse
-    if (runScripts && post.trim() !== '') {
+    if (runScripts && steps.post.length > 0) {
       const sent: ScriptRequest = {
         method: sending.method,
         url: result.url,
         headers: result.requestHeaders,
         body: scriptRequestOf(sending).body
       }
-      await this.runPhase(
-        'postResponse',
-        post,
-        input,
-        scope,
-        sent,
-        this.scriptResponse(result, facts),
-        report
-      )
+      const response = this.scriptResponse(result, facts)
+      // A failing script does not stop the others (the first error is reported).
+      for (const step of steps.post) {
+        await this.runPhase('postResponse', step, input, scope, sent, response, report)
+      }
     }
 
     if (assertions.length > 0) {
@@ -319,7 +353,7 @@ export class RequestExecutor {
 
   private async runPhase(
     phase: ScriptPhase,
-    code: string,
+    step: ScriptStep,
     input: ExecuteInput,
     scope: ExecutionScope,
     request: ScriptRequest,
@@ -331,7 +365,7 @@ export class RequestExecutor {
     try {
       out = await this.deps.runScript({
         phase,
-        code,
+        code: step.code,
         variables: {
           runtime: scope.runtimeValues(),
           environment: environment ? enabledRecord(environment.variables) : null,
@@ -359,12 +393,20 @@ export class RequestExecutor {
         durationMs: 0
       }
     }
-    report[phase] = {
-      error: out.error,
-      logs: out.logs,
-      tests: out.tests,
-      durationMs: out.durationMs
-    }
+    // Several scripts per phase: one report, their parts labelled in the console.
+    const before = report[phase]
+    const logs = step.label
+      ? [{ level: 'info' as const, text: `── ${step.label}的腳本 ──` }, ...out.logs]
+      : out.logs
+    const error = out.error && step.label ? `${step.label}：${out.error}` : out.error
+    report[phase] = before
+      ? {
+          error: before.error ?? error,
+          logs: [...before.logs, ...logs],
+          tests: [...before.tests, ...out.tests],
+          durationMs: before.durationMs + out.durationMs
+        }
+      : { error, logs, tests: out.tests, durationMs: out.durationMs }
     await this.applyChanges(out.changes, phase, scope, report)
     return out
   }

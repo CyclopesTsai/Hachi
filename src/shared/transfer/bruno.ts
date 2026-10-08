@@ -154,9 +154,18 @@ function normalizeItems(list: unknown): BrunoItem[] {
     })
 }
 
+/** `scripts.flow` of bruno.json / opencollection.yml / the exported JSON's brunoConfig. */
+function flowOf(scripts: unknown): 'sequential' | 'sandwich' | undefined {
+  const flow = isObject(scripts) ? scripts.flow : undefined
+  return flow === 'sequential' || flow === 'sandwich' ? flow : undefined
+}
+
 function normalizeJson(json: Json): BrunoCollectionData {
   const root = isObject(json.root) && isObject(json.root.request) ? json.root.request : null
+  const config = isObject(json.brunoConfig) ? json.brunoConfig : {}
+  const flow = flowOf(config.scripts)
   return {
+    ...(flow ? { scriptFlow: flow } : {}),
     name: asString(json.name),
     items: normalizeItems(json.items),
     root: root ? normalizePart(root) : null,
@@ -207,19 +216,23 @@ export function brunoFolderToData(
   const items: BrunoItem[] = []
   const environments: BrunoCollectionData['environments'] = []
   let format: 'bru' | 'yaml' | null = null
+  let flow: 'sequential' | 'sandwich' | undefined
   const yaml = files['opencollection.yml']
   const config = files['bruno.json']
   if (yaml !== undefined) {
     format = 'yaml'
     const oc = guard('opencollection.yml', () => readOpenCollection(yaml))
     name = oc.name
+    flow = oc.scriptFlow
     root = oc.root
     items.push(...oc.items)
     environments.push(...oc.environments)
   } else if (config !== undefined) {
     format = 'bru'
     try {
-      name = asString((JSON.parse(config) as Json).name)
+      const parsed = JSON.parse(config) as Json
+      name = asString(parsed.name)
+      flow = flowOf(parsed.scripts)
     } catch {
       throw new TransferError('bruno.json 不是有效的 JSON')
     }
@@ -250,7 +263,14 @@ export function brunoFolderToData(
     name = tree.top?.name || folderName
     root = tree.top?.part ?? null
   }
-  return { name, items, root, environments, partial: format === null }
+  return {
+    name,
+    items,
+    root,
+    environments,
+    partial: format === null,
+    ...(flow ? { scriptFlow: flow } : {})
+  }
 }
 
 // ---------------------------------------------------------------------------------
@@ -551,7 +571,6 @@ function containerScripts(part: Partial<BrunoRequestPart> | null, where: string,
     .filter((s) => s.trim() !== '')
     .join('\n\n')
   if (req.trim() === '' && res.trim() === '') return null
-  ctx.warnings.add('Collection / 資料夾的腳本已保留，但目前不會執行', where)
   return { preRequest: req, postResponse: res }
 }
 
@@ -609,6 +628,8 @@ function mapCollection(data: BrunoCollectionData, newId: () => string): BrunoImp
       ? mapAuth(root.auth as BrunoRequestPart['auth'], { type: 'none' }, '', ctx)
       : { type: 'none' },
     variables,
+    // Bruno's default flow is sandwich (decision 126).
+    scriptFlow: data.scriptFlow ?? 'sandwich',
     scripts: containerScripts(root, '', ctx),
     children: mapItems(data.items, [], ctx)
   }
@@ -882,6 +903,7 @@ export function exportBrunoCollection(
   }
   const data: BrunoCollectionData = {
     name: collection.name,
+    scriptFlow: collection.scriptFlow ?? 'sequential',
     items: itemsOf(collection, []),
     root,
     environments: envs

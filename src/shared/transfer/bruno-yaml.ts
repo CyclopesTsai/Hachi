@@ -215,6 +215,7 @@ function readEnvironment(doc: Json, fallbackName: string): BrunoEnvironment {
 /** opencollection.yml: name, collection defaults, docs, and inline items if bundled. */
 export function readOpenCollection(text: string): {
   name: string
+  scriptFlow?: 'sequential' | 'sandwich'
   root: BrunoRequestPart
   items: BrunoItem[]
   environments: BrunoEnvironment[]
@@ -242,6 +243,12 @@ export function readOpenCollection(text: string): {
       })
       .filter((i): i is BrunoItem => i !== null)
   return {
+    ...(() => {
+      const bruno =
+        isObject(doc.extensions) && isObject(doc.extensions.bruno) ? doc.extensions.bruno : {}
+      const flow = isObject(bruno.scripts) ? bruno.scripts.flow : undefined
+      return flow === 'sequential' || flow === 'sandwich' ? { scriptFlow: flow } : {}
+    })(),
     name: asString(info.name),
     root,
     items: bundledItems(doc.items),
@@ -451,7 +458,12 @@ export function writeYamlFiles(data: BrunoCollectionData): Record<string, string
         info: { name: data.name },
         request: defaultsOut(data.root),
         bundled: false,
-        extensions: { bruno: { ignore: ['node_modules', '.git'] } }
+        extensions: {
+          bruno: {
+            ignore: ['node_modules', '.git'],
+            ...(data.scriptFlow ? { scripts: { flow: data.scriptFlow } } : {})
+          }
+        }
       })
     )
   }

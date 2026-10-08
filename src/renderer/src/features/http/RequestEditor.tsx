@@ -185,7 +185,11 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
                 />
               </TabsContent>
               <TabsContent value="scripts" className="flex min-h-0 flex-col">
-                <ScriptsTab scripts={draft.scripts} onChange={(scripts) => set({ scripts })} />
+                <ScriptsTab
+                  scripts={draft.scripts}
+                  onChange={(scripts) => set({ scripts })}
+                  inheritedFrom={tab.inherited.scripts}
+                />
               </TabsContent>
               <TabsContent value="tests" className="overflow-auto">
                 <TestsTab

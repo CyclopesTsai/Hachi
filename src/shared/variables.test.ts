@@ -210,7 +210,8 @@ describe('VariableResolver.request', () => {
       headers: [
         { id: 'i', key: 'X', value: '{{hv}}', enabled: true, sourceId: 'c', sourceName: 'C' }
       ],
-      auth: { auth: { type: 'bearer', token: '{{p}}' }, sourceId: 'c', sourceName: 'C' }
+      auth: { auth: { type: 'bearer', token: '{{p}}' }, sourceId: 'c', sourceName: 'C' },
+      scripts: []
     })
     expect(inherited.headers[0]?.value).toBe('H')
     expect(inherited.auth?.auth).toEqual({ type: 'bearer', token: 'pw' })

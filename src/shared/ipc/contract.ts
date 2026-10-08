@@ -6,10 +6,12 @@ import { z } from 'zod'
 import { proxySettingsSchema, themeSchema } from '../schemas/app-config'
 import {
   REQUEST_TYPES,
+  SCRIPT_FLOWS,
   VARIABLES_MAX,
   authSchema,
   itemNameSchema,
   keyValueSchema,
+  requestScriptsSchema,
   variableSchema
 } from '../schemas/collection'
 import { historySettingsSchema } from '../schemas/app-config'
@@ -179,7 +181,9 @@ export const inputSchemas = {
     id: itemIdSchema,
     headers: z.array(keyValueSchema).max(1000),
     auth: authSchema,
-    variables: variablesSchema
+    variables: variablesSchema,
+    scripts: requestScriptsSchema,
+    scriptFlow: z.enum(SCRIPT_FLOWS)
   }),
   [INVOKE.httpSend]: z.strictObject({
     runId: runIdSchema,

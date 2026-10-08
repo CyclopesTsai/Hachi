@@ -18,6 +18,7 @@ import {
   type Auth,
   type KeyValue,
   type RequestType,
+  type ScriptFlow,
   type Variable
 } from '@shared/schemas/collection'
 import { mergeSecrets, splitSecrets } from '@shared/schemas/environment'
@@ -295,7 +296,13 @@ export class CollectionService {
    */
   saveContainer(
     id: string,
-    data: { headers: KeyValue[]; auth: Auth; variables: Variable[] }
+    data: {
+      headers: KeyValue[]
+      auth: Auth
+      variables: Variable[]
+      scripts?: RequestScripts
+      scriptFlow?: ScriptFlow
+    }
   ): Promise<ContainerSettingsData> {
     return this.run(async () => {
       const entry = this.requireContainer(id)
@@ -313,7 +320,9 @@ export class CollectionService {
           ...raw,
           headers: data.headers,
           auth,
-          ...(isCollection ? { variables: stored } : {})
+          ...(data.scripts ? { scripts: data.scripts } : {}),
+          ...(isCollection ? { variables: stored } : {}),
+          ...(isCollection && data.scriptFlow ? { scriptFlow: data.scriptFlow } : {})
         })
       )
       return this.readContainer(id)
@@ -433,7 +442,8 @@ export class CollectionService {
           auth: collection.auth.type === 'inherit' ? { type: 'none' } : collection.auth,
           variables: stored,
           order,
-          ...(collection.scripts ? { scripts: collection.scripts } : {})
+          ...(collection.scripts ? { scripts: collection.scripts } : {}),
+          ...(collection.scriptFlow ? { scriptFlow: collection.scriptFlow } : {})
         })
       } catch (error) {
         await rm(dir, { recursive: true, force: true }).catch(() => undefined)
@@ -460,7 +470,12 @@ export class CollectionService {
       const unreadable: string[] = []
       const container = await this.portableContainer(node, meta, [], unreadable)
       return {
-        collection: { ...container, auth: file.auth, variables: file.variables },
+        collection: {
+          ...container,
+          auth: file.auth,
+          variables: file.variables,
+          scriptFlow: file.scriptFlow
+        },
         unreadable
       }
     })
@@ -812,11 +827,14 @@ export class CollectionService {
       const secrets = await getSecrets(this.requireRoot(), 'collections', id)
       variables = mergeSecrets(meta.variables, secrets)
     }
+    const chain = await this.readChain(id)
     return {
       kind: entry.kind as 'collection' | 'folder',
       headers: own!.headers,
       auth: own!.auth,
       variables,
+      scripts: own!.scripts,
+      scriptFlow: chain[0]?.scriptFlow ?? 'sequential',
       inherited
     }
   }
@@ -838,7 +856,15 @@ export class CollectionService {
       const entry = this.requireValid(id)
       const format = entry.kind === 'collection' ? collectionFormat : folderFormat
       const meta = await readVersionedJson(entry.metaFile as string, format)
-      levels.push({ id, name: meta.name, headers: meta.headers, auth: meta.auth })
+      levels.push({
+        id,
+        name: meta.name,
+        kind: entry.kind as 'collection' | 'folder',
+        headers: meta.headers,
+        auth: meta.auth,
+        scripts: meta.scripts,
+        ...('scriptFlow' in meta ? { scriptFlow: meta.scriptFlow as ScriptFlow } : {})
+      })
     }
     return levels
   }

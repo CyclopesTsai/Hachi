@@ -81,6 +81,8 @@ describe('WsService', () => {
         {
           id: 'c',
           name: 'C',
+          kind: 'collection',
+          scripts: { preRequest: '', postResponse: '' },
           headers: [{ id: 'h', key: 'X-Team', value: 'core', enabled: true }],
           auth: { type: 'bearer', token: '{{token}}' }
         }

@@ -532,7 +532,8 @@ describe('requests and container settings', () => {
     // Collections default to auth "none", which is what the request inherits.
     expect(inherited).toEqual({
       headers: [],
-      auth: { auth: { type: 'none' }, sourceId: c.id, sourceName: 'C' }
+      auth: { auth: { type: 'none' }, sourceId: c.id, sourceName: 'C' },
+      scripts: []
     })
   })
 
@@ -769,7 +770,7 @@ describe('createRequest (save as)', () => {
     expect(shape(created.tree)).toEqual([['API', ['From Draft']]])
     expect(await readJson(col('api/from-draft.json'))).toMatchObject({ url: '{{base}}/users' })
     expect((await service.getInheritedFor(c.id)).auth?.sourceName).toBe('API')
-    expect(await service.getInheritedFor(null)).toEqual({ headers: [], auth: null })
+    expect(await service.getInheritedFor(null)).toEqual({ headers: [], auth: null, scripts: [] })
     await expect(service.createRequest('nope', 'X', created.request)).rejects.toMatchObject({
       code: 'NOT_FOUND'
     })

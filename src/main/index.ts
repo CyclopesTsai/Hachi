@@ -12,6 +12,7 @@ import type {
 } from '@shared/ipc/api'
 import type { HttpResult } from '@shared/http'
 import { HISTORY_INDEX_FILE } from '@shared/schemas/history'
+import { hasScripts } from '@shared/scripts'
 import { SESSIONS_DIR } from '@shared/schemas/session'
 import { EVENTS, type EventChannel, type MenuCommand } from '@shared/ipc/channels'
 import { selectDirectory } from './dialogs'
@@ -168,7 +169,8 @@ async function bootstrap(): Promise<void> {
       await environments.applyVariableChanges(id, changes)
     },
     applyCollectionChanges: (id, changes) => collections.applyVariableChanges(id, changes),
-    variablesChanged
+    variablesChanged,
+    getScriptChain: (parentId) => collections.getChainFor(parentId).catch(() => [])
   })
   const runner = new RunnerService({
     executor,
@@ -186,6 +188,11 @@ async function bootstrap(): Promise<void> {
     },
     getEnvironment: (id) => (id ? environments.get(id).catch(() => null) : Promise.resolve(null)),
     getCollection: (parentId) => collections.getCollectionFor(parentId).catch(() => null),
+    hasContainerScripts: (parentId) =>
+      collections
+        .getChainFor(parentId)
+        .then((chain) => chain.some((level) => hasScripts(level.scripts)))
+        .catch(() => false),
     scriptsTrusted: () => {
       const ws = workspaces.getCurrent()
       return !!ws && config.isScriptTrusted(ws.path)

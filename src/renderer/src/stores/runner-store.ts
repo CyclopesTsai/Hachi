@@ -138,7 +138,11 @@ export const useRunnerStore = create<RunnerState>()((set, get) => {
           const withScripts = await Promise.all(
             itemIds.map((id) =>
               unwrap(window.hachi.request.get({ id }))
-                .then(({ request }) => request.type === 'http' && hasScripts(request.scripts))
+                .then(
+                  ({ request, inherited }) =>
+                    request.type === 'http' &&
+                    (hasScripts(request.scripts) || inherited.scripts.length > 0)
+                )
                 .catch(() => false)
             )
           )

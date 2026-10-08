@@ -70,6 +70,8 @@ export interface BrunoCollectionData {
   items: BrunoItem[]
   root: BrunoRequestPart | null
   environments: BrunoEnvironment[]
+  /** Bruno's script flow (bruno.json / opencollection.yml `scripts.flow`), if set. */
+  scriptFlow?: 'sequential' | 'sandwich'
   /**
    * Imported from a folder inside a collection (no bruno.json / opencollection.yml):
    * settings of the folders above it are missing.

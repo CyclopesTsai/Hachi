@@ -17,6 +17,8 @@ const chain: ContainerLevel[] = [
   {
     id: 'c',
     name: 'API',
+    kind: 'collection',
+    scripts: { preRequest: '', postResponse: '' },
     headers: [{ id: 'h', key: 'X-From', value: 'collection', enabled: true }],
     auth: { type: 'bearer', token: 'tok' }
   }

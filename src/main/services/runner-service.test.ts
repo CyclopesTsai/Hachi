@@ -83,7 +83,8 @@ function service() {
       env = applyVariableChanges(env, changes)
     },
     applyCollectionChanges: async () => undefined,
-    variablesChanged: () => undefined
+    variablesChanged: () => undefined,
+    getScriptChain: async () => []
   })
   return new RunnerService({
     executor,
@@ -94,6 +95,7 @@ function service() {
     getEnvironment,
     getCollection: async () => null,
     scriptsTrusted: () => true,
+    hasContainerScripts: async () => false,
     emit: (e) => events.push(e),
     progressIntervalMs: 20
   })

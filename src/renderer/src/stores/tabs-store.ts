@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { HttpResult } from '@shared/http'
+import type { ContainerSettingsData, HttpResult } from '@shared/http'
 import type { VariablesChangedEvent } from '@shared/ipc/api'
 import type { HistoryEntry } from '@shared/schemas/history'
 import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
@@ -180,6 +180,15 @@ function isLiveTab(tab: Tab): boolean {
 const attentionKeys = (tabs: readonly Tab[]) =>
   tabs.filter((t) => isTabDirty(t) || isLiveTab(t)).map((t) => t.key)
 
+/** What the container editor edits, from what main returns. */
+const containerContent = (data: ContainerSettingsData): ContainerContent => ({
+  headers: data.headers,
+  auth: data.auth,
+  variables: data.variables,
+  scripts: data.scripts,
+  scriptFlow: data.scriptFlow
+})
+
 export const useTabsStore = create<TabsState>()((set, get) => {
   const find = (key: TabKey) => get().tabs.find((t) => t.key === key)
 
@@ -231,7 +240,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
         )
       } else if (tab.kind === 'container') {
         const data = await unwrap(window.hachi.container.get({ id: tab.itemId }))
-        const content = { headers: data.headers, auth: data.auth, variables: data.variables }
+        const content = containerContent(data)
         if (data.kind === 'collection') {
           useEnvStore.getState().setCollectionVariables(tab.itemId, data.variables)
         }
@@ -503,7 +512,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
         } else if (tab.kind === 'container' && tab.draft) {
           const sent = tab.draft
           const data = await unwrap(window.hachi.container.save({ id: tab.itemId, ...sent }))
-          const saved = { headers: data.headers, auth: data.auth, variables: data.variables }
+          const saved = containerContent(data)
           afterSave<ContainerTab>(tab.key, sent, saved)
           if (data.kind === 'collection') {
             useEnvStore.getState().setCollectionVariables(tab.itemId, data.variables)
@@ -576,7 +585,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       if (tab?.kind !== 'request' || !tab.draft || tab.runId) return
       const request = tab.draft
       let skipScripts = false
-      if (hasScripts(request.scripts) && !scriptsTrusted()) {
+      if ((hasScripts(request.scripts) || tab.inherited.scripts.length > 0) && !scriptsTrusted()) {
         const choice = await askScriptTrust()
         if (choice === 'cancel') return
         skipScripts = choice === 'skip'

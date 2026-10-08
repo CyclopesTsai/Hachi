@@ -235,7 +235,8 @@ export class VariableResolver {
   inherited(inherited: InheritedSettings): InheritedSettings {
     return {
       headers: this.rows(inherited.headers),
-      auth: inherited.auth ? { ...inherited.auth, auth: this.auth(inherited.auth.auth) } : null
+      auth: inherited.auth ? { ...inherited.auth, auth: this.auth(inherited.auth.auth) } : null,
+      scripts: inherited.scripts
     }
   }
 }

@@ -60,11 +60,33 @@ export const authSchema = z.discriminatedUnion('type', [
 ])
 export type Auth = z.infer<typeof authSchema>
 
+/** Upper bound for one script (bytes of UTF-16 text, roughly). */
+export const MAX_SCRIPT_TEXT = 1024 * 1024
+
+/**
+ * Pre-request / Post-response scripts (JavaScript, run in a QuickJS sandbox — decision 70).
+ * Requests, collections and folders (decision 126) have them.
+ */
+export const requestScriptsSchema = z.looseObject({
+  preRequest: z.string().max(MAX_SCRIPT_TEXT).default(''),
+  postResponse: z.string().max(MAX_SCRIPT_TEXT).default('')
+})
+export type RequestScripts = z.infer<typeof requestScriptsSchema>
+
+/**
+ * Order of collection / folder / request scripts (decision 126). sequential: collection →
+ * folders → request for both phases (Postman); sandwich: post-response from the request
+ * outwards (Bruno).
+ */
+export const SCRIPT_FLOWS = ['sequential', 'sandwich'] as const
+export type ScriptFlow = (typeof SCRIPT_FLOWS)[number]
+
 const containerFields = {
   version: z.literal(ITEM_VERSION),
   id: z.string().min(1),
   name: itemNameSchema,
   headers: z.array(keyValueSchema).default([]),
+  scripts: requestScriptsSchema.prefault({}),
   /** Child item ids in display order. */
   order: z.array(z.string()).default([])
 }
@@ -72,7 +94,8 @@ const containerFields = {
 export const collectionFileSchema = z.looseObject({
   ...containerFields,
   auth: authSchema.default({ type: 'none' }),
-  variables: z.array(variableSchema).default([])
+  variables: z.array(variableSchema).default([]),
+  scriptFlow: z.enum(SCRIPT_FLOWS).default('sequential')
 })
 export type CollectionFile = z.infer<typeof collectionFileSchema>
 

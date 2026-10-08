@@ -153,7 +153,9 @@ describe('importPostmanCollection', () => {
       ['off', 'x', false]
     ])
     expect(collection.scripts).toEqual({ preRequest: 'console.log(1)', postResponse: '' })
-    expect(warnings).toContain('Collection 的腳本已保留，但目前不會執行')
+    // Container scripts run now (decision 126), in Postman's order.
+    expect(collection.scriptFlow).toBe('sequential')
+    expect(warnings.some((w) => w.includes('目前不會執行'))).toBe(false)
   })
 
   it('maps folders and requests: URL, path variables, params, headers, settings, scripts', () => {

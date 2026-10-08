@@ -6,9 +6,11 @@ import { z } from 'zod'
 import {
   HTTP_METHODS,
   ITEM_VERSION,
+  MAX_SCRIPT_TEXT,
   authSchema,
   itemNameSchema,
-  keyValueSchema
+  keyValueSchema,
+  requestScriptsSchema
 } from './collection'
 
 /** Upper bound for text bodies sent from the editor (bytes of UTF-16 text, roughly). */
@@ -61,18 +63,8 @@ export const httpRequestSettingsSchema = z.looseObject({
 })
 export type HttpRequestSettings = z.infer<typeof httpRequestSettingsSchema>
 
-/** Upper bound for one script (bytes of UTF-16 text, roughly). */
-export const MAX_SCRIPT_TEXT = 1024 * 1024
-
-/**
- * Pre-request / Post-response scripts (JavaScript, run in a QuickJS sandbox — decision 70).
- * Collections / folders may carry the same shape (kept as-is, not run yet).
- */
-export const requestScriptsSchema = z.looseObject({
-  preRequest: z.string().max(MAX_SCRIPT_TEXT).default(''),
-  postResponse: z.string().max(MAX_SCRIPT_TEXT).default('')
-})
-export type RequestScripts = z.infer<typeof requestScriptsSchema>
+// Scripts live in collection.ts (collections / folders have them too, decision 126).
+export { MAX_SCRIPT_TEXT, requestScriptsSchema, type RequestScripts } from './collection'
 
 /** Rows of the assertion table (decision 73). Evaluated after the Post-response script. */
 export const ASSERTION_TARGETS = ['status', 'responseTime', 'header', 'jsonBody', 'body'] as const

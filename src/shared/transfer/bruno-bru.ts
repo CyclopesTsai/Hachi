@@ -325,7 +325,13 @@ function environmentBru(env: BrunoEnvironment): string {
 export function writeBruFiles(data: BrunoCollectionData): Record<string, string> {
   const files: Record<string, string> = {
     'bruno.json': `${JSON.stringify(
-      { version: '1', name: data.name, type: 'collection', ignore: ['node_modules', '.git'] },
+      {
+        version: '1',
+        name: data.name,
+        type: 'collection',
+        ignore: ['node_modules', '.git'],
+        ...(data.scriptFlow ? { scripts: { flow: data.scriptFlow } } : {})
+      },
       null,
       2
     )}\n`

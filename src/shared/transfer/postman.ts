@@ -449,7 +449,6 @@ function parseItems(
         continue
       }
       const scripts = parseScripts(raw.event, where, state.warnings)
-      if (scripts) state.warnings.add('資料夾的腳本已保留，但目前不會執行', where)
       if (Array.isArray(raw.variable) && raw.variable.length > 0) {
         state.warnings.add('Postman 資料夾變數不支援，未匯入', where)
       }
@@ -491,12 +490,13 @@ export function importPostmanCollection(
   const warnings = new TransferWarnings()
   const state: WalkState = { ctx, warnings, items: 0 }
   const scripts = parseScripts(root.event, '', warnings)
-  if (scripts) warnings.add('Collection 的腳本已保留，但目前不會執行')
   const collection: PortableCollection = {
     name: itemName(info.name, 'Imported Collection'),
     headers: [],
     auth: parseAuth(root.auth, { type: 'none' }, '', warnings),
     variables: variables(root.variable, ctx),
+    // Postman runs collection → folder → request scripts in that order (decision 126).
+    scriptFlow: 'sequential',
     scripts,
     children: parseItems(root.item, [], 0, state)
   }

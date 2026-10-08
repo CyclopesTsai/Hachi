@@ -38,6 +38,8 @@ export interface RunnerDeps {
     parentId: string | null
   ): Promise<{ id: string; name: string; variables: Variable[] } | null>
   scriptsTrusted(): boolean
+  /** Whether the collection / folders above `parentId` have scripts (decision 126). */
+  hasContainerScripts(parentId: string): Promise<boolean>
   emit(event: RunnerEvent): void
   /** How often progress is pushed while running. */
   progressIntervalMs?: number
@@ -199,12 +201,17 @@ export class RunnerService {
     }
     for (const child of target.children) await walk(child, target.id)
     if (items.length === 0) throw new HachiError('INVALID_OPERATION', '沒有可以執行的 HTTP 請求')
-    if (
-      !config.skipScripts &&
-      items.some((i) => hasScripts(i.request.scripts)) &&
-      !this.deps.scriptsTrusted()
-    ) {
-      throw new HachiError('INVALID_OPERATION', '這個 Workspace 的腳本尚未信任')
+    if (!config.skipScripts && !this.deps.scriptsTrusted()) {
+      const anyScripts =
+        items.some((i) => hasScripts(i.request.scripts)) ||
+        (
+          await Promise.all(
+            [...new Set(items.map((i) => i.parentId))].map((id) =>
+              this.deps.hasContainerScripts(id)
+            )
+          )
+        ).some(Boolean)
+      if (anyScripts) throw new HachiError('INVALID_OPERATION', '這個 Workspace 的腳本尚未信任')
     }
 
     const environment = await this.deps.getEnvironment(config.environmentId)

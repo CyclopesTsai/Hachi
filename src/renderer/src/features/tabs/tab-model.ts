@@ -3,7 +3,13 @@
  */
 import type { HttpResult, InheritedSettings } from '@shared/http'
 import type { EnvironmentData } from '@shared/ipc/api'
-import type { Auth, KeyValue, Variable } from '@shared/schemas/collection'
+import type {
+  Auth,
+  KeyValue,
+  RequestScripts,
+  ScriptFlow,
+  Variable
+} from '@shared/schemas/collection'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import type { AnyRequest } from '@shared/schemas/request'
 import type { WsMessageFormat, WsRequest } from '@shared/schemas/ws-request'
@@ -47,6 +53,9 @@ export interface ContainerContent {
   headers: KeyValue[]
   auth: Auth
   variables: Variable[]
+  scripts: RequestScripts
+  /** The collection's script order (shown read-only in folders). */
+  scriptFlow: ScriptFlow
 }
 
 export interface ContainerTab extends TabBase {
@@ -113,7 +122,7 @@ export function isRequestLike(tab: Tab): tab is RequestLikeTab {
 }
 
 export const ENVIRONMENTS_TAB_KEY = 'environments'
-export const EMPTY_INHERITED: InheritedSettings = { headers: [], auth: null }
+export const EMPTY_INHERITED: InheritedSettings = { headers: [], auth: null, scripts: [] }
 
 export const itemTabKey = (id: string): TabKey => `item:${id}`
 export const runnerTabKey = (id: string): TabKey => `runner:${id}`

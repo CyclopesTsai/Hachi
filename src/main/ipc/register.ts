@@ -195,7 +195,9 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       ctx.collections.saveContainer(input.id, {
         headers: input.headers,
         auth: input.auth,
-        variables: input.variables
+        variables: input.variables,
+        scripts: input.scripts,
+        scriptFlow: input.scriptFlow
       }),
     [INVOKE.httpSend]: (input) => ctx.sendHttp(input),
     [INVOKE.httpCancel]: (input) => ctx.http.cancel(input.runId),

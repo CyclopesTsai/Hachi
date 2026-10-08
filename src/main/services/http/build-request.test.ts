@@ -34,12 +34,16 @@ function request(overrides: Record<string, unknown> = {}): HttpRequest {
 const collection: ContainerLevel = {
   id: 'c',
   name: 'API',
+  kind: 'collection',
+  scripts: { preRequest: '', postResponse: '' },
   headers: [kv('X-Team', 'core'), kv('X-Env', 'prod'), kv('X-Off', '1', false)],
   auth: { type: 'bearer', token: 'col-token' }
 }
 const folder: ContainerLevel = {
   id: 'f',
   name: 'Admin',
+  kind: 'folder',
+  scripts: { preRequest: '', postResponse: '' },
   headers: [kv('x-env', 'staging')],
   auth: { type: 'inherit' }
 }
@@ -81,7 +85,7 @@ describe('resolveInherited', () => {
   })
 
   it('falls back to no auth', () => {
-    expect(effectiveAuth({ type: 'inherit' }, { headers: [], auth: null })).toEqual({
+    expect(effectiveAuth({ type: 'inherit' }, { headers: [], auth: null, scripts: [] })).toEqual({
       type: 'none'
     })
   })
@@ -243,7 +247,7 @@ describe('buildRequest', () => {
 
 describe('buildCodegenRequest', () => {
   const workspace = workspaceSettingsSchema.parse({ timeoutMs: 5000, maxRedirects: 4 })
-  const none: InheritedSettings = { headers: [], auth: null }
+  const none: InheritedSettings = { headers: [], auth: null, scripts: [] }
   const req = (extra: object) =>
     httpRequestSchema.parse({
       version: 1,

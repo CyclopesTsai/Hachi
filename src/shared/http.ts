@@ -2,7 +2,7 @@
  * Types exchanged between renderer and main for sending HTTP requests.
  * Types + pure helpers only, safe to import anywhere.
  */
-import type { Auth, KeyValue, Variable } from './schemas/collection'
+import type { Auth, KeyValue, RequestScripts, ScriptFlow, Variable } from './schemas/collection'
 import type { ScriptReport } from './scripts'
 
 /** Bodies larger than this are not sent to the renderer unless the user asks. */
@@ -99,6 +99,8 @@ export interface InheritedSettings {
   headers: InheritedHeader[]
   /** Auth used when the item's own auth is "inherit"; null = nothing above sets one. */
   auth: { auth: Auth; sourceId: string; sourceName: string } | null
+  /** Collections / folders above with scripts, outermost first (decision 126). */
+  scripts: string[]
 }
 
 export function formatBytes(bytes: number): string {
@@ -119,6 +121,10 @@ export interface ContainerSettingsData {
   auth: Auth
   /** Collection variables, secret values included (always empty for folders). */
   variables: Variable[]
+  /** Run before / after every request inside (decision 126). */
+  scripts: RequestScripts
+  /** Order of the scripts; set on the collection (folders show their collection's). */
+  scriptFlow: ScriptFlow
   /** What this container inherits from the ones above it (empty for collections). */
   inherited: InheritedSettings
 }

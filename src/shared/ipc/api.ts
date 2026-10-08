@@ -12,7 +12,14 @@ import type {
   Theme,
   UiSettings
 } from '../schemas/app-config'
-import type { Auth, KeyValue, RequestType, Variable } from '../schemas/collection'
+import type {
+  Auth,
+  KeyValue,
+  RequestScripts,
+  RequestType,
+  ScriptFlow,
+  Variable
+} from '../schemas/collection'
 import type { HistoryEntry } from '../schemas/history'
 import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
@@ -175,6 +182,9 @@ export interface ContainerSaveInput {
   auth: Auth
   /** Collection variables (ignored for folders). Secret values go to .hachi-secrets.json. */
   variables: Variable[]
+  scripts: RequestScripts
+  /** Collections only (ignored for folders). */
+  scriptFlow: ScriptFlow
 }
 
 export interface HttpSendInput {
