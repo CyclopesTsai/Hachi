@@ -262,6 +262,7 @@ try {
       'auth',
       'config',
       'container',
+      'cookies',
       'dialog',
       'env',
       'git',

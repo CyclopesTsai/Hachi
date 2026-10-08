@@ -25,6 +25,8 @@ import {
   hasHeader,
   type ContainerLevel
 } from '../http/build-request'
+import type { CookieJar } from '../http/cookie-jar'
+import { withJarCookies } from '../http/http-client'
 import { resolveProxyUrl } from '../http/proxy'
 
 export interface WsServiceDeps {
@@ -44,6 +46,8 @@ export interface WsServiceDeps {
   now?: () => number
   /** Log entries are batched for this long before being emitted. */
   flushIntervalMs?: number
+  /** The Workspace's cookie jar (decision 129): sent with, and filled by, the handshake. */
+  cookieJar?: () => CookieJar | null
   /** Authorization header value for OAuth 2.0 auth (decision 128). */
   oauth2Header?: (auth: OAuth2Auth) => Promise<string>
 }
@@ -231,6 +235,9 @@ export class WsService {
       headers.push(['Authorization', await this.deps.oauth2Header(auth)])
     }
     if (!hasHeader(headers, 'user-agent')) headers.push(['User-Agent', this.deps.userAgent])
+    const jar = this.deps.cookieJar?.() ?? null
+    const withCookies = withJarCookies(headers, jar?.header(url) ?? null)
+    headers.splice(0, headers.length, ...withCookies)
     const headerObject: Record<string, string> = {}
     for (const [key, value] of headers) {
       const existing = Object.keys(headerObject).find((k) => k.toLowerCase() === key.toLowerCase())
@@ -273,6 +280,10 @@ export class WsService {
   }
 
   private attach(conn: Connection, socket: WebSocket): void {
+    socket.on('upgrade', (response) => {
+      const raw = response.headers['set-cookie']
+      if (raw) this.deps.cookieJar?.()?.store(conn.state.url, raw)
+    })
     socket.on('open', () => {
       conn.state = {
         status: 'open',

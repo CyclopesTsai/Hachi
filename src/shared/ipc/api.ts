@@ -26,6 +26,7 @@ import type {
   ScriptFlow,
   Variable
 } from '../schemas/collection'
+import type { StoredCookie } from '../schemas/cookies'
 import type { HistoryEntry } from '../schemas/history'
 import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
@@ -502,6 +503,9 @@ export interface InvokeMap {
   'http:getBody': { input: RunIdInput; output: string }
   'http:saveResponse': { input: RunIdInput; output: string | null }
   'http:resolve': { input: HttpResolveInput; output: HttpResolveResult }
+  'cookies:list': { input: void; output: StoredCookie[] }
+  'cookies:delete': { input: { name: string; domain: string; path: string }; output: void }
+  'cookies:clear': { input: { domain: string | null }; output: void }
   'auth:oauth2Status': { input: OAuth2Input; output: OAuth2TokenStatus }
   'auth:oauth2Obtain': { input: OAuth2Input; output: OAuth2TokenStatus }
   'auth:oauth2Cancel': { input: OAuth2Input; output: boolean }
@@ -665,6 +669,13 @@ export interface HachiApi {
     saveResponse: InvokeFn<'http:saveResponse'>
     /** The request as it would be sent, for code generation (nothing is sent). */
     resolve: InvokeFn<'http:resolve'>
+  }
+  /** The current Workspace's cookie jar (decision 129). */
+  cookies: {
+    list: InvokeFn<'cookies:list'>
+    delete: InvokeFn<'cookies:delete'>
+    /** Every cookie (domain null), or one domain's. */
+    clear: InvokeFn<'cookies:clear'>
   }
   /** OAuth 2.0 tokens, kept in memory only (decision 128). */
   auth: {

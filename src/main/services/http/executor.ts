@@ -30,6 +30,7 @@ import {
 import { VariableResolver, buildVariableMap, type VariableLayer } from '@shared/variables'
 import type { RuntimeVariables } from '../runtime-variables'
 import type { ContainerLevel } from './build-request'
+import type { CookieJar } from './cookie-jar'
 import type { HttpService, SendInput } from './http-service'
 
 export interface ExecutorDeps {
@@ -213,6 +214,8 @@ export interface ExecutionScope {
   layers(): Promise<VariableLayer[]>
   iterationData: Record<string, string> | null
   iteration: { index: number; count: number }
+  /** Runner workers with concurrency > 1 use their own jar; absent = the Workspace's. */
+  cookies?: CookieJar | null
 }
 
 /** Data-file row as a variable layer (between runtime and environment, decision 89). */
@@ -293,7 +296,11 @@ export class RequestExecutor {
     const extractions = request.extractions.filter((e) => e.enabled && e.variable.trim() !== '')
     const assertions = request.assertions.filter((a) => a.enabled)
     if (!scriptsPresent && extractions.length === 0 && assertions.length === 0) {
-      return this.deps.http.send({ ...input, layers: await scope.layers() })
+      return this.deps.http.send({
+        ...input,
+        layers: await scope.layers(),
+        cookies: scope.cookies
+      })
     }
 
     const workspace = this.deps.workspacePath()
@@ -324,7 +331,8 @@ export class RequestExecutor {
     const result = await this.deps.http.send({
       ...input,
       request: sending,
-      layers: await scope.layers()
+      layers: await scope.layers(),
+      cookies: scope.cookies
     })
     if (result.kind !== 'response') return { ...result, scriptReport: report }
 
@@ -365,7 +373,7 @@ export class RequestExecutor {
     input: ExecuteInput,
     scope: ExecutionScope
   ): Promise<HostReply> {
-    if (call.op === 'sendRequest') return this.sendFromScript(call.request)
+    if (call.op === 'sendRequest') return this.sendFromScript(call.request, scope)
     const depth = (input.depth ?? 0) + 1
     if (depth > SCRIPT_MAX_RUN_DEPTH) {
       return { ok: false, error: `runRequest 最多巢狀 ${SCRIPT_MAX_RUN_DEPTH} 層` }
@@ -388,7 +396,7 @@ export class RequestExecutor {
   }
 
   /** A plain request: no inherited settings, no {{variable}} substitution (as Postman). */
-  private async sendFromScript(spec: HostRequest): Promise<HostReply> {
+  private async sendFromScript(spec: HostRequest, scope: ExecutionScope): Promise<HostReply> {
     const method = spec.method.toUpperCase()
     if (!(HTTP_METHODS as readonly string[]).includes(method)) {
       return { ok: false, error: `sendRequest 不支援的 HTTP 方法：${spec.method}` }
@@ -417,7 +425,8 @@ export class RequestExecutor {
       environmentId: null,
       request,
       layers: [],
-      storeBody: false
+      storeBody: false,
+      cookies: scope.cookies
     })
     return hostReplyOf(result)
   }

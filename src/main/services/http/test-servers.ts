@@ -109,6 +109,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       )
       return
     }
+    case '/login':
+      // Cookie on the redirect itself (decision 129).
+      res.writeHead(302, { location: '/echo', 'set-cookie': 'sid=xyz; Path=/; HttpOnly' })
+      res.end()
+      return
     case '/html':
       res.setHeader('content-type', 'text/html')
       res.end('<h1>Hello</h1><script>alert(1)</script>')

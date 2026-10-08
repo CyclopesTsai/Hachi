@@ -26,6 +26,35 @@ export interface SendOptions {
   signal: AbortSignal
   maxResponseBytes?: number
   displayLimitBytes?: number
+  /**
+   * Cookie jar (decision 129). With one, redirects are followed here (not by undici)
+   * so every response's Set-Cookie is kept and every hop gets its cookies.
+   */
+  cookies?: CookieHooks
+}
+
+export interface CookieHooks {
+  header(url: string): string | null
+  store(url: string, setCookies: string[]): void
+}
+
+const REDIRECT_CODES = new Set([301, 302, 303, 307, 308])
+
+/** Adds the jar's cookies to a typed Cookie header (typed ones win by name). */
+export function withJarCookies(
+  headers: readonly [string, string][],
+  jar: string | null
+): [string, string][] {
+  if (!jar) return [...headers]
+  const index = headers.findIndex(([k]) => k.toLowerCase() === 'cookie')
+  if (index < 0) return [...headers, ['Cookie', jar]]
+  const typed = (headers[index] as [string, string])[1]
+  const names = new Set(typed.split(';').map((p) => p.split('=')[0]?.trim()))
+  const extra = jar.split('; ').filter((p) => !names.has(p.split('=')[0]?.trim()))
+  if (extra.length === 0) return [...headers]
+  const out = [...headers]
+  out[index] = [(headers[index] as [string, string])[0], [typed, ...extra].join('; ')]
+  return out
 }
 
 export interface SendOutcome {
@@ -135,8 +164,9 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
         ...idle
       })
     : new Agent({ connect: tls, ...idle })
+  const manual = options.cookies !== undefined
   const dispatcher =
-    followRedirects && maxRedirects > 0
+    followRedirects && maxRedirects > 0 && !manual
       ? agent.compose(
           interceptors.redirect({ maxRedirections: maxRedirects, throwOnMaxRedirect: true })
         )
@@ -146,13 +176,57 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
   const signal = timeoutSignal ? AbortSignal.any([options.signal, timeoutSignal]) : options.signal
 
   try {
-    const response = await request(built.url, {
-      method: built.method as Dispatcher.HttpMethod,
-      headers: built.headers.flat(),
-      body: built.body ?? undefined,
-      dispatcher,
-      signal
-    })
+    let hop = { url: built.url, method: built.method, headers: built.headers, body: built.body }
+    let sentHeaders: [string, string][] | null = null
+    let hops = 0
+    let response: Dispatcher.ResponseData
+    for (;;) {
+      const headers = withJarCookies(hop.headers, options.cookies?.header(hop.url) ?? null)
+      sentHeaders ??= headers
+      response = await request(hop.url, {
+        method: hop.method as Dispatcher.HttpMethod,
+        headers: headers.flat(),
+        body: hop.body ?? undefined,
+        dispatcher,
+        signal
+      })
+      if (!manual) break
+      const raw = response.headers['set-cookie']
+      options.cookies?.store(hop.url, raw === undefined ? [] : Array.isArray(raw) ? raw : [raw])
+      const location = response.headers.location
+      if (
+        !followRedirects ||
+        maxRedirects === 0 ||
+        !REDIRECT_CODES.has(response.statusCode) ||
+        typeof location !== 'string'
+      ) {
+        break
+      }
+      await response.body.dump()
+      if (hops >= maxRedirects) throw new Error('max redirects')
+      hops++
+      const next = new URL(location, hop.url)
+      let { method, body } = hop
+      let nextHeaders = hop.headers
+      // As browsers / undici: 303 (and 301 / 302 after POST) continue with GET, no body.
+      const toGet =
+        (response.statusCode === 303 && method !== 'HEAD') ||
+        ((response.statusCode === 301 || response.statusCode === 302) && method === 'POST')
+      if (toGet) {
+        method = 'GET'
+        body = null
+        nextHeaders = nextHeaders.filter(
+          ([k]) => !/^content-(type|length|encoding|language|location)$/i.test(k)
+        )
+      }
+      // Credentials stay with their origin.
+      if (next.origin !== new URL(hop.url).origin) {
+        nextHeaders = nextHeaders.filter(
+          ([k]) => !/^(authorization|cookie|proxy-authorization)$/i.test(k)
+        )
+      }
+      hop = { url: next.toString(), method, headers: nextHeaders, body }
+    }
     const headersMs = performance.now() - started
 
     const chunks: Buffer[] = []
@@ -198,8 +272,8 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
           headers.reduce((sum, [k, v]) => sum + k.length + v.length + 4, 2),
         timings: { headersMs, totalMs },
         url: built.url,
-        requestHeaders: built.headers,
-        redirects: history && history.length > 1 ? history.length - 1 : 0,
+        requestHeaders: sentHeaders ?? built.headers,
+        redirects: manual ? hops : history && history.length > 1 ? history.length - 1 : 0,
         unresolvedVariables: []
       },
       body: decoded

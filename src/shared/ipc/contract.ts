@@ -210,6 +210,13 @@ export const inputSchemas = {
     request: httpRequestSchema,
     revealSecrets: z.boolean()
   }),
+  [INVOKE.cookiesList]: noInput,
+  [INVOKE.cookiesDelete]: z.strictObject({
+    name: z.string().max(4096),
+    domain: z.string().max(1024),
+    path: z.string().max(4096)
+  }),
+  [INVOKE.cookiesClear]: z.strictObject({ domain: z.string().max(1024).nullable() }),
   [INVOKE.authOAuth2Status]: oauth2Input,
   [INVOKE.authOAuth2Obtain]: oauth2Input,
   [INVOKE.authOAuth2Cancel]: oauth2Input,

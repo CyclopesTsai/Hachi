@@ -76,6 +76,11 @@ const api: HachiApi = {
     saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input),
     resolve: (input) => invoke(INVOKE.httpResolve, input)
   },
+  cookies: {
+    list: () => invoke(INVOKE.cookiesList),
+    delete: (input) => invoke(INVOKE.cookiesDelete, input),
+    clear: (input) => invoke(INVOKE.cookiesClear, input)
+  },
   auth: {
     oauth2Status: (input) => invoke(INVOKE.authOAuth2Status, input),
     oauth2Obtain: (input) => invoke(INVOKE.authOAuth2Obtain, input),

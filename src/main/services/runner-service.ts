@@ -26,6 +26,7 @@ import type { HttpRequest } from '@shared/schemas/http-request'
 import { hasScripts, testSummary, type VariableChange } from '@shared/scripts'
 import { findNode, isContainer, type TreeNode, type WorkspaceTree } from '@shared/tree'
 import { applyVariableChanges, type VariableLayer } from '@shared/variables'
+import type { CookieJar } from './http/cookie-jar'
 import { dataLayer, type ExecutionScope, type RequestExecutor } from './http/executor'
 
 export interface RunnerDeps {
@@ -44,6 +45,8 @@ export interface RunnerDeps {
   emit(event: RunnerEvent): void
   /** How often progress is pushed while running. */
   progressIntervalMs?: number
+  /** The Workspace's cookie jar; workers with concurrency > 1 copy it (decision 129). */
+  cookieJar?: () => CookieJar | null
   /** setNextRequest loop guard (tests use a small one). */
   maxStepsPerRound?: number
 }
@@ -58,6 +61,8 @@ interface WorkerState {
   runtime: Map<string, string>
   environment: { name: string; variables: Variable[] } | null
   collection: { id: string; name: string; variables: Variable[] } | null
+  /** A copy of the Workspace's jar, not saved (decision 129). */
+  cookies: CookieJar | null
 }
 
 interface Run {
@@ -159,7 +164,8 @@ function memoryScope(
       return layers.filter((l): l is VariableLayer => l !== null)
     },
     iterationData: data,
-    iteration
+    iteration,
+    cookies: state.cookies
   }
 }
 
@@ -370,7 +376,8 @@ export class RunnerService {
       : {
           runtime: new Map(Object.entries(this.deps.runtimeValues())),
           environment: await this.deps.getEnvironment(config.environmentId),
-          collection: await this.deps.getCollection(config.targetId)
+          collection: await this.deps.getCollection(config.targetId),
+          cookies: this.deps.cookieJar?.() ?? null
         }
     const workers = Array.from({ length: config.concurrency }, (_, w) =>
       this.worker(
@@ -379,7 +386,8 @@ export class RunnerService {
         base && {
           runtime: new Map(base.runtime),
           environment: base.environment && { ...base.environment },
-          collection: base.collection && { ...base.collection }
+          collection: base.collection && { ...base.collection },
+          cookies: base.cookies?.clone() ?? null
         }
       )
     )

@@ -35,6 +35,7 @@ import { GitService } from './services/git/git-service'
 import { AskpassServer, promptKind } from './services/git/askpass'
 import { RuntimeVariables } from './services/runtime-variables'
 import { ScriptHost } from './services/scripts/script-host'
+import { CookieService } from './services/cookie-service'
 import { RequestExecutor } from './services/http/executor'
 import { RunnerService } from './services/runner-service'
 import { WorkspaceService } from './services/workspace-service'
@@ -87,6 +88,20 @@ async function bootstrap(): Promise<void> {
   )
   await history.load()
 
+  // Cookie jar of the current Workspace, kept in userData (decision 129).
+  const cookies = new CookieService(app.getPath('userData'), (error) =>
+    console.warn(`[cookies] ${String(error)}`)
+  )
+  let cookiesFlushed = false
+  app.on('before-quit', (event) => {
+    if (cookiesFlushed || !cookies.dirty()) return
+    event.preventDefault()
+    void cookies.flush().finally(() => {
+      cookiesFlushed = true
+      app.quit()
+    })
+  })
+
   // Collections, environments and history follow the current Workspace. Files are not
   // watched: changes made outside Hachi are picked up with the reload button.
   let openedPath: string | null = null
@@ -95,6 +110,7 @@ async function bootstrap(): Promise<void> {
     openedPath = current?.path ?? null
     void collections.open(current?.path ?? null, current?.id ?? null)
     environments.open(current?.path ?? null)
+    void cookies.open(current?.id ?? null)
     ws.disconnectAll()
     runner.cancelAll()
     if (current) void history.sync(current.path).catch(showError)
@@ -130,7 +146,11 @@ async function bootstrap(): Promise<void> {
     userAgent: `${APP_NAME}/${app.getVersion()}`
   }
   // OAuth 2.0 authorization code opens the system browser (decision 128).
-  const http = new HttpService({ ...requestDeps, openBrowser: (url) => shell.openExternal(url) })
+  const http = new HttpService({
+    ...requestDeps,
+    openBrowser: (url) => shell.openExternal(url),
+    cookieJar: () => cookies.current()
+  })
   const transfer = new TransferService(collections, environments, loadRedoc)
   // git asks for credentials through a dialog (decision 113). The helper runs this
   // binary as Node (ELECTRON_RUN_AS_NODE): keep the RunAsNode fuse enabled.
@@ -212,7 +232,8 @@ async function bootstrap(): Promise<void> {
       const ws = workspaces.getCurrent()
       return !!ws && config.isScriptTrusted(ws.path)
     },
-    emit: (event) => send(EVENTS.runnerEvent, event)
+    emit: (event) => send(EVENTS.runnerEvent, event),
+    cookieJar: () => cookies.current()
   })
 
   const environmentName = (id: string | null): Promise<string | null> =>
@@ -230,6 +251,7 @@ async function bootstrap(): Promise<void> {
   >()
   const ws = new WsService({
     ...requestDeps,
+    cookieJar: () => cookies.current(),
     oauth2Header: async (auth) => {
       const token = await http.oauth2.tokenFor(auth)
       return `${auth.headerPrefix.trim()} ${token.accessToken}`.trim()
@@ -430,6 +452,7 @@ async function bootstrap(): Promise<void> {
     },
     runtime,
     runner,
+    cookies,
     sendHttp,
     ws,
     connectWs,

@@ -59,7 +59,9 @@ export const httpRequestSettingsSchema = z.looseObject({
   validateSSL: z.boolean().nullable().default(null),
   followRedirects: z.boolean().nullable().default(null),
   /** Turn off to send this request directly even if an app proxy is configured. */
-  useProxy: z.boolean().default(true)
+  useProxy: z.boolean().default(true),
+  /** Send and keep cookies with the Workspace's cookie jar (decision 129). */
+  useCookieJar: z.boolean().default(true)
 })
 export type HttpRequestSettings = z.infer<typeof httpRequestSettingsSchema>
 

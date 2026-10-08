@@ -89,6 +89,16 @@ export function RequestSettingsTab({
           目前：{proxyMode === 'none' ? '未設定' : proxyMode === 'system' ? '系統 Proxy' : '自訂'}
         </span>
       </Row>
+      <Row label="Cookie">
+        <CheckboxLabel
+          checked={settings.useCookieJar}
+          data-testid="use-cookie-jar"
+          onChange={(e) => set({ useCookieJar: e.target.checked })}
+        >
+          使用 Workspace 的 Cookie Jar
+        </CheckboxLabel>
+        <span className="text-xs text-muted-foreground">自動帶上並保存 Cookie</span>
+      </Row>
     </div>
   )
 }

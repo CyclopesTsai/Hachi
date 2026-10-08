@@ -20,7 +20,8 @@ import {
   type CodegenBuild,
   type ContainerLevel
 } from './build-request'
-import { sendHttp, type SendOutcome } from './http-client'
+import type { CookieJar } from './cookie-jar'
+import { sendHttp, type CookieHooks, type SendOutcome } from './http-client'
 import { resolveProxyUrl } from './proxy'
 import { decodeText, suggestFileName } from './response-utils'
 
@@ -78,6 +79,8 @@ export interface HttpServiceDeps {
   readFile?: (absPath: string) => Promise<Uint8Array>
   /** OAuth 2.0 authorization code: opens the system browser. */
   openBrowser?: (url: string) => Promise<void>
+  /** The current Workspace's cookie jar (decision 129); null = none open. */
+  cookieJar?: () => CookieJar | null
 }
 
 export interface SendInput {
@@ -91,6 +94,8 @@ export interface SendInput {
   layers?: VariableLayer[]
   /** false: don't keep the body for "顯示 / 下載" (the Runner keeps its own). */
   storeBody?: boolean
+  /** Jar to use instead of the Workspace's (Runner workers); null = no cookies. */
+  cookies?: CookieJar | null
 }
 
 /** Sends requests from the editor, tracks running ones (for cancel) and keeps bodies. */
@@ -169,12 +174,21 @@ export class HttpService {
       }
       if (controller.signal.aborted) return fail('CANCELLED', 'Request cancelled', built.url)
 
+      const jar = request.settings.useCookieJar
+        ? input.cookies === undefined
+          ? (this.deps.cookieJar?.() ?? null)
+          : input.cookies
+        : null
+      const cookies: CookieHooks | undefined = jar
+        ? { header: (url) => jar.header(url), store: (url, list) => jar.store(url, list) }
+        : undefined
       const transport = (b: BuiltRequest): Promise<SendOutcome> =>
         sendHttp(b, {
           runId: input.runId,
           proxyUrl,
           proxyAuth: this.proxyAuth(proxyUrl),
-          signal: controller.signal
+          signal: controller.signal,
+          cookies
         })
       let { result, body } = await transport(built)
       // Digest: answer the server's challenge once.

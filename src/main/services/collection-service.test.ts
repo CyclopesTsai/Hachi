@@ -759,7 +759,13 @@ describe('createRequest (save as)', () => {
         urlencoded: []
       },
       auth: { type: 'inherit' },
-      settings: { timeoutMs: null, validateSSL: null, followRedirects: null, useProxy: true },
+      settings: {
+        timeoutMs: null,
+        validateSSL: null,
+        followRedirects: null,
+        useProxy: true,
+        useCookieJar: true
+      },
       scripts: { preRequest: '', postResponse: '' },
       assertions: [],
       extractions: [],

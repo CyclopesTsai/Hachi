@@ -4,6 +4,7 @@ import { httpRequestSchema } from '@shared/schemas/http-request'
 import { workspaceSettingsSchema } from '@shared/schemas/workspace'
 import { resolveInherited, type ContainerLevel } from './build-request'
 import type { VariableLayer } from '@shared/variables'
+import { CookieJar } from './cookie-jar'
 import { HttpService, ResponseStore } from './http-service'
 import { startHttpServer, type TestServer } from './test-servers'
 
@@ -314,5 +315,55 @@ describe('HttpService auth (decision 128)', () => {
       revealSecrets: false
     })
     expect(resolved.authNote).toContain('Digest')
+  })
+})
+
+describe('HttpService cookie jar (decision 129)', () => {
+  const jarService = (jar: CookieJar) =>
+    new HttpService({
+      getContainerChain: async () => [],
+      resolveInherited,
+      getVariableLayers: async () => [],
+      getWorkspaceSettings: async () => workspaceSettingsSchema.parse({}),
+      getProxySettings: () => proxySettingsSchema.parse({}),
+      resolveSystemProxy: async () => 'DIRECT',
+      userAgent: 'Hachi/test',
+      cookieJar: () => jar
+    })
+  const headersOf = (r: Awaited<ReturnType<HttpService['send']>>) => {
+    if (r.kind !== 'response' || r.body.kind !== 'text') throw new Error(JSON.stringify(r))
+    return (JSON.parse(r.body.text) as { headers: Record<string, string> }).headers
+  }
+  const send = (http: HttpService, path: string, extra: object = {}) =>
+    http.send({
+      runId: crypto.randomUUID(),
+      parentId: null,
+      environmentId: null,
+      request: request(`${server.url}${path}`, extra)
+    })
+
+  it('keeps cookies set on a redirect and sends them on the next hop', async () => {
+    const jar = new CookieJar()
+    const http = jarService(jar)
+    const result = await send(http, '/login')
+    expect(result).toMatchObject({ kind: 'response', status: 200, redirects: 1 })
+    expect(headersOf(result).cookie).toBe('sid=xyz')
+    expect(jar.list().map((c) => c.name)).toEqual(['sid'])
+    // Typed Cookie headers win by name; the jar adds the rest.
+    const typed = await send(http, '/echo', {
+      headers: [{ id: 'h', key: 'Cookie', value: 'mine=1', enabled: true }]
+    })
+    expect(headersOf(typed).cookie).toBe('mine=1; sid=xyz')
+    // Turned off for one request.
+    const off = await send(http, '/echo', { settings: { useCookieJar: false } })
+    expect(headersOf(off).cookie).toBeUndefined()
+  })
+
+  it('still follows / limits redirects when following them itself', async () => {
+    const http = jarService(new CookieJar())
+    expect(await send(http, '/redirect?n=2')).toMatchObject({ status: 200, redirects: 2 })
+    expect(await send(http, '/redirect?n=5')).toMatchObject({ code: 'TOO_MANY_REDIRECTS' })
+    const kept = await send(http, '/redirect?n=1', { settings: { followRedirects: false } })
+    expect(kept).toMatchObject({ status: 302, redirects: 0 })
   })
 })

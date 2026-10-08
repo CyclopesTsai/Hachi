@@ -19,6 +19,7 @@ import type { TransferService } from '../services/transfer-service'
 import type { GitService } from '../services/git/git-service'
 import { uniqueFileName } from '../services/fs/unique-name'
 import type { RuntimeVariables } from '../services/runtime-variables'
+import type { CookieService } from '../services/cookie-service'
 import type { RunnerService } from '../services/runner-service'
 import { DataFileError, parseDataFile } from '@shared/runner'
 import { readFile, stat } from 'node:fs/promises'
@@ -38,6 +39,7 @@ export interface IpcContext {
   answerGitPrompt(id: string, value: string | null): void
   runtime: RuntimeVariables
   runner: RunnerService
+  cookies: CookieService
   /** Sends a request and records it in the history. */
   sendHttp(input: HttpSendInput): Promise<HttpResult>
   ws: WsService
@@ -213,6 +215,13 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       return target
     },
     [INVOKE.httpResolve]: (input) => ctx.http.resolveForCode(input),
+    [INVOKE.cookiesList]: () => ctx.cookies.current()?.list() ?? [],
+    [INVOKE.cookiesDelete]: (input) => {
+      ctx.cookies.current()?.delete(input)
+    },
+    [INVOKE.cookiesClear]: (input) => {
+      ctx.cookies.current()?.clear(input.domain ?? undefined)
+    },
     [INVOKE.authOAuth2Status]: (input) => ctx.http.oauth2Status(input),
     [INVOKE.authOAuth2Obtain]: (input) => ctx.http.oauth2Obtain(input),
     [INVOKE.authOAuth2Cancel]: async (input) =>

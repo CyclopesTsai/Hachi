@@ -11,6 +11,7 @@ import { RequestExecutor } from './http/executor'
 import { HttpService } from './http/http-service'
 import { startHttpServer, type TestServer } from './http/test-servers'
 import { RunnerService } from './runner-service'
+import { CookieJar } from './http/cookie-jar'
 import { RuntimeVariables } from './runtime-variables'
 import { runScript } from './scripts/engine'
 
@@ -25,6 +26,7 @@ let env: Variable[]
 let runtime: RuntimeVariables
 let events: RunnerEvent[]
 let requests: Record<string, HttpRequest>
+let jar: CookieJar
 
 const tree: WorkspaceTree = {
   workspaceId: 'w',
@@ -67,7 +69,8 @@ function service() {
     getWorkspaceSettings: async () => workspaceSettingsSchema.parse({}),
     getProxySettings: () => proxySettingsSchema.parse({}),
     resolveSystemProxy: async () => 'DIRECT',
-    userAgent: 'Hachi/test'
+    userAgent: 'Hachi/test',
+    cookieJar: () => jar
   })
   const getEnvironment = async (id: string | null) => (id ? { name: 'dev', variables: env } : null)
   const executor = new RequestExecutor({
@@ -100,6 +103,7 @@ function service() {
     hasContainerScripts: async () => false,
     emit: (e) => events.push(e),
     progressIntervalMs: 20,
+    cookieJar: () => jar,
     maxStepsPerRound: 50
   })
 }
@@ -122,6 +126,7 @@ beforeEach(() => {
   env = [{ id: 'h', key: 'host', value: server.url, enabled: true, secret: false }]
   runtime = new RuntimeVariables()
   events = []
+  jar = new CookieJar()
   requests = {
     login: req('login', {
       method: 'POST',
@@ -241,6 +246,15 @@ describe('RunnerService', () => {
     expect(progress.status).toBe('stopped')
     expect(progress.message).toContain('setNextRequest 可能形成無窮迴圈')
     expect(progress.completedRequests).toBe(50)
+  })
+
+  it('shares the cookie jar at concurrency 1, copies it per worker otherwise (decision 129)', async () => {
+    requests.login = req('login', { url: '{{host}}/login' })
+    const svc = service()
+    await run(svc, config({ itemIds: ['login'], concurrency: 2, iterations: 2 }))
+    expect(jar.list()).toEqual([])
+    await run(svc, config({ itemIds: ['login'] }))
+    expect(jar.list().map((c) => c.name)).toEqual(['sid'])
   })
 
   it('can be cancelled while requests are running', async () => {

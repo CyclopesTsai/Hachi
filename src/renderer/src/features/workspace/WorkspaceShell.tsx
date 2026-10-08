@@ -1,4 +1,12 @@
-import { ArrowLeftRight, ChevronDown, FolderSearch, Pencil, Settings, Trash2 } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  ChevronDown,
+  Cookie,
+  FolderSearch,
+  Pencil,
+  Settings,
+  Trash2
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { WorkspaceInfo } from '@shared/ipc/api'
 import { AppLogo } from '@renderer/components/app-logo'
@@ -22,6 +30,7 @@ import { WorkspaceSettingsDialog } from '@renderer/features/settings/SettingsDia
 import { FileDropZone } from '@renderer/features/transfer/TransferDialogs'
 import { reveal, revealLabel } from '@renderer/lib/reveal'
 import { useAppStore } from '@renderer/stores/app-store'
+import { CookiesDialog } from './CookiesDialog'
 import { DeleteWorkspaceDialog, RenameWorkspaceDialog } from './WorkspaceDialogs'
 
 /** Main layout once a Workspace is open: header, Collection tree, item panel. */
@@ -30,6 +39,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
   const [renaming, setRenaming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [cookiesOpen, setCookiesOpen] = useState(false)
   const loadWorkspaceSettings = useAppStore((s) => s.loadWorkspaceSettings)
   const platform = useAppStore((s) => s.info?.platform)
   useGitSync(workspace.id)
@@ -67,6 +77,10 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
             <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
               <Settings />
               Workspace 設定…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setCookiesOpen(true)} data-testid="open-cookies">
+              <Cookie />
+              Cookies…
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void reveal(null)}>
               <FolderSearch />
@@ -107,6 +121,7 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
         onOpenChange={setRenaming}
       />
       <WorkspaceSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <CookiesDialog open={cookiesOpen} onOpenChange={setCookiesOpen} />
       <DeleteWorkspaceDialog
         target={deleting ? workspace : null}
         onClose={() => setDeleting(false)}
