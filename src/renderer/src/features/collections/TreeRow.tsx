@@ -18,6 +18,7 @@ import {
   Trash2
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { selectRenameInput } from './rename-input'
 import { ITEM_NAME_MAX } from '@shared/schemas/collection'
 import { isContainer, type TreeNode } from '@shared/tree'
 import {
@@ -52,6 +53,11 @@ function InlineRename({
 }) {
   const [value, setValue] = useState(initial)
   const done = useRef(false)
+  // Select the whole name once the menu that opened the field has let go of focus.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => selectRenameInput(initial))
+    return () => cancelAnimationFrame(id)
+  }, [initial])
   const finish = (result: string | null): void => {
     if (done.current) return
     done.current = true
@@ -66,7 +72,10 @@ function InlineRename({
       maxLength={ITEM_NAME_MAX}
       autoFocus
       onFocus={(e) => e.currentTarget.select()}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => {
+        e.currentTarget.dataset.touched = 'true'
+        setValue(e.target.value)
+      }}
       onKeyDown={(e) => {
         e.stopPropagation()
         // Enter / Esc while an input method is composing (e.g. picking 注音 / 拼音
@@ -283,7 +292,9 @@ export function TreeRow({
         data-testid="tree-context-menu"
         // Don't pull focus back to the row while a rename field (new or renamed item) is open.
         onCloseAutoFocus={(e) => {
-          if (useTreeStore.getState().editingId) e.preventDefault()
+          if (!useTreeStore.getState().editingId) return
+          e.preventDefault()
+          selectRenameInput()
         }}
       >
         {container && !broken && (

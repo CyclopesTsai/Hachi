@@ -76,6 +76,18 @@ const api: HachiApi = {
     saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input),
     resolve: (input) => invoke(INVOKE.httpResolve, input)
   },
+  mock: {
+    list: () => invoke(INVOKE.mockList),
+    get: (input) => invoke(INVOKE.mockGet, input),
+    create: (input) => invoke(INVOKE.mockCreate, input),
+    save: (input) => invoke(INVOKE.mockSave, input),
+    rename: (input) => invoke(INVOKE.mockRename, input),
+    duplicate: (input) => invoke(INVOKE.mockDuplicate, input),
+    delete: (input) => invoke(INVOKE.mockDelete, input),
+    start: (input) => invoke(INVOKE.mockStart, input),
+    stop: (input) => invoke(INVOKE.mockStop, input),
+    statuses: () => invoke(INVOKE.mockStatuses)
+  },
   cookies: {
     list: () => invoke(INVOKE.cookiesList),
     delete: (input) => invoke(INVOKE.cookiesDelete, input),

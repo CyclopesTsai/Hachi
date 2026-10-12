@@ -38,6 +38,8 @@
 ├─ .hachi-secrets.json               ✅ Phase 3：機密變數值（已列入 .gitignore；沒有機密變數時不建立）
 ├─ environments/
 │  └─ <env>.json                     ✅ Phase 3（檔名為 slug）
+├─ mocks/
+│  └─ <mock>.json                    ✅ 決策 133：Mock Server（檔名為 slug，可進 git）
 └─ collections/
    └─ <collection>/                  ✅ Phase 1（資料夾名為 slug）
       ├─ collection.json             ✅ Phase 1
@@ -630,3 +632,43 @@ Workspace 的 Cookie Jar，只存在這台電腦（不在 Workspace 資料夾，
 ```
 
 規則（RFC 6265，沒有 Public Suffix List）：Domain 屬性必須符合請求主機且含有點；`Secure` Cookie 只能由 https（或 localhost）設定與送出；`Max-Age` 優先於 `Expires`，`Max-Age=0` / 過期即刪除；總數上限 3000、每個網域 180（超過時刪最舊的），每個 Cookie 4 KB。
+
+## ✅ `mocks/<mock>.json`（決策 133，`src/shared/schemas/mock.ts`）
+
+```jsonc
+{
+  "version": 1,
+  "id": "…", // UUID；複製的檔案在掃描時給新的 id
+  "name": "Shop Mock",
+  "port": 4010, // 1–65535
+  "lan": false, // true：所有網路介面（區網的其他裝置可連）；false：只有 127.0.0.1
+  "cors": true, // 允許任何來源並回應預檢請求
+  "routes": [
+    {
+      "id": "…",
+      "enabled": true,
+      "method": "GET", // ANY | GET | POST | PUT | PATCH | DELETE | HEAD | OPTIONS
+      "path": "/users/:id", // :name 一段、結尾 * 其餘全部；不含 query
+      "status": 200,
+      "headers": [], // KeyValue[]
+      "body": "{\"id\":1}", // 固定內容，不替換變數（上限 10 MB）
+      "delayMs": 0, // 0–60000
+      "description": "Users / Get user" // 從 Collection 建立時是請求的位置
+    }
+  ],
+  "websockets": [
+    {
+      "id": "…",
+      "enabled": true,
+      "path": "/ws",
+      "onConnect": [{ "id": "…", "enabled": true, "message": "hello" }],
+      "rules": [
+        { "id": "…", "enabled": true, "match": "equals", "pattern": "ping", "reply": "pong" }
+      ], // match: contains | equals | regex
+      "intervals": [{ "id": "…", "enabled": true, "everyMs": 5000, "message": "tick" }] // 100–3600000
+    }
+  ]
+}
+```
+
+各清單上限 500 列。紀錄不寫入檔案（只在 App 執行中保留）。

@@ -11,6 +11,7 @@ import {
 import { Button } from '@renderer/components/ui/button'
 import { isDraftTab, isTabDirty, tabTitle } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { useMockStore } from '@renderer/stores/mock-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isLive, useWsStore } from '@renderer/stores/ws-store'
 
@@ -57,7 +58,7 @@ export function UnsavedChangesDialog() {
         <ul className="max-h-48 list-disc overflow-auto pl-6 text-sm" data-testid="unsaved-list">
           {affected.map((t) => (
             <li key={t.key}>
-              {tabTitle(t, tree)}
+              {tabTitle(t, tree, useMockStore.getState().list)}
               {isTabDirty(t) && isDraftTab(t) && (
                 <span className="text-muted-foreground">（新請求，儲存時會詢問位置）</span>
               )}

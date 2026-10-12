@@ -11,6 +11,7 @@ import type {
   Variable
 } from '@shared/schemas/collection'
 import type { HttpRequest } from '@shared/schemas/http-request'
+import type { MockSettings } from '@shared/schemas/mock'
 import type { AnyRequest } from '@shared/schemas/request'
 import type { WsMessageFormat, WsRequest } from '@shared/schemas/ws-request'
 import type { SessionData, SessionTab } from '@shared/schemas/session'
@@ -112,7 +113,16 @@ export interface RunnerTab extends TabBase {
   itemId: string
 }
 
-export type Tab = RequestTab | ContainerTab | EnvironmentsTab | StaticTab | WsTab | RunnerTab
+/** A Mock Server (decision 133): settings saved to `mocks/<name>.json`; not remembered. */
+export interface MockTab extends TabBase {
+  kind: 'mock'
+  mockId: string
+  saved: MockSettings | null
+  draft: MockSettings | null
+}
+
+export type Tab =
+  RequestTab | ContainerTab | EnvironmentsTab | StaticTab | WsTab | RunnerTab | MockTab
 
 /** Tabs that edit a request file (HTTP or WebSocket), saved or not. */
 export type RequestLikeTab = RequestTab | WsTab
@@ -126,6 +136,17 @@ export const EMPTY_INHERITED: InheritedSettings = { headers: [], auth: null, scr
 
 export const itemTabKey = (id: string): TabKey => `item:${id}`
 export const runnerTabKey = (id: string): TabKey => `runner:${id}`
+export const mockTabKey = (id: string): TabKey => `mock:${id}`
+
+export function createMockTab(mockId: string): MockTab {
+  return { ...tabBase(mockTabKey(mockId), false), kind: 'mock', mockId, saved: null, draft: null }
+}
+
+/** The settings part of a Mock Server file (what its tab edits). */
+export function mockSettingsOf(mock: MockSettings): MockSettings {
+  const { port, lan, cors, routes, websockets } = mock
+  return { port, lan, cors, routes, websockets }
+}
 
 export function createRunnerTab(targetId: string): RunnerTab {
   return {
@@ -137,7 +158,7 @@ export function createRunnerTab(targetId: string): RunnerTab {
 }
 
 export function tabItemId(tab: Tab): string | null {
-  return tab.kind === 'environments' ? null : tab.itemId
+  return tab.kind === 'environments' || tab.kind === 'mock' ? null : tab.itemId
 }
 
 const tabBase = (key: TabKey, preview: boolean): TabBase => ({
@@ -254,8 +275,13 @@ export function isDraftTab(tab: Tab): boolean {
   return isRequestLike(tab) && tab.itemId === null
 }
 
-export function tabTitle(tab: Tab, tree: WorkspaceTree): string {
+export function tabTitle(
+  tab: Tab,
+  tree: WorkspaceTree,
+  mocks: readonly { id: string; name: string }[] = []
+): string {
   if (tab.kind === 'environments') return '環境'
+  if (tab.kind === 'mock') return `Mock：${mocks.find((m) => m.id === tab.mockId)?.name ?? ''}`
   if (tab.kind === 'runner') return `執行：${findNode(tree, tab.itemId)?.node.name ?? ''}`
   if (isRequestLike(tab) && tab.itemId === null) return tab.draftName
   const id = tabItemId(tab)
@@ -344,9 +370,11 @@ export function toSession(
   activeEnvironmentId: string | null
 ): SessionData {
   // Unsaved requests and Runner tabs are not remembered.
-  const kept = tabs.filter((t) => !isDraftTab(t) && t.kind !== 'runner')
+  const kept = tabs.filter((t) => !isDraftTab(t) && t.kind !== 'runner' && t.kind !== 'mock')
   const sessionTabs = kept.map((t): SessionTab =>
-    t.kind === 'environments' ? { kind: 'environments' } : { kind: 'item', id: t.itemId as string }
+    t.kind === 'environments'
+      ? { kind: 'environments' }
+      : { kind: 'item', id: tabItemId(t) as string }
   )
   const active = kept.findIndex((t) => t.key === activeKey)
   return { tabs: sessionTabs, activeTab: active >= 0 ? active : null, activeEnvironmentId }

@@ -87,6 +87,8 @@ export interface HttpErrorData {
   /** `{{names}}` that had no value and were sent as-is. */
   unresolvedVariables: string[]
   scriptReport?: ScriptReport
+  /** Certificate chain check after a TLS failure (editor sends only). */
+  tls?: TlsDiagnosis
 }
 
 export type HttpResult = HttpResponseData | HttpErrorData
@@ -139,4 +141,53 @@ export interface OAuth2TokenStatus {
   /** Has a refresh token: renewed automatically when it expires. */
   refreshable: boolean
   scope: string | null
+}
+
+/** One certificate of a server's chain, as the TLS diagnosis shows it. */
+export interface TlsCertInfo {
+  /** Common name (or the first subject field). */
+  name: string
+  subject: string
+  issuerName: string
+  validFrom: string // ISO
+  validTo: string // ISO
+  altNames: string[]
+  fingerprint256: string
+  selfSigned: boolean
+  /** Where it came from: sent by the server, or found in the trusted list (a root). */
+  source: 'server' | 'trust-store'
+  /** A trusted root (in Hachi's list: the bundled roots plus the system's). */
+  trusted: boolean
+  expired: boolean
+  notYetValid: boolean
+  /** Its issuer's signature does not check out (wrong order / foreign certificate). */
+  badSignature: boolean
+}
+
+export type TlsVerdict =
+  | 'incomplete-chain' // the server did not send an intermediate certificate
+  | 'self-signed' // the site's own certificate is self-signed
+  | 'untrusted-root' // the chain ends in a root that is not trusted (e.g. a company CA)
+  | 'expired'
+  | 'not-yet-valid'
+  | 'hostname-mismatch'
+  | 'bad-signature'
+  | 'ok' // the chain looks fine here (the failure came from somewhere else)
+  | 'unavailable' // could not connect again to read the chain
+
+/** Why a TLS connection failed, from a second connection that reads the chain (decision 132). */
+export interface TlsDiagnosis {
+  host: string
+  port: number
+  verdict: TlsVerdict
+  /** One line for the heading. */
+  summary: string
+  /** What to do about it. */
+  advice: string
+  /** Leaf first; a root found in the trust store is appended with source "trust-store". */
+  chain: TlsCertInfo[]
+  /** incomplete-chain: the certificate that is missing after the last one sent. */
+  missing: { name: string; aiaUrl: string | null } | null
+  /** OpenSSL's verify error (e.g. UNABLE_TO_GET_ISSUER_CERT_LOCALLY), when there is one. */
+  opensslError: string | null
 }

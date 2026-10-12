@@ -12,11 +12,12 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
+import https from 'node:https'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron } from 'playwright-core'
-import { WebSocketServer } from 'ws'
+import WebSocket, { WebSocketServer } from 'ws'
 
 const require = createRequire(import.meta.url)
 const electronPath = require('electron')
@@ -84,6 +85,27 @@ const testServer = await new Promise((resolve) => {
         server.close()
       }
     })
+  )
+})
+
+// Decision 132: an HTTPS server that sends its certificate without the intermediate.
+const chainDir = path.join(
+  import.meta.dirname,
+  '..',
+  'src',
+  'main',
+  'services',
+  'http',
+  '__fixtures__'
+)
+const chainCert = {
+  cert: await readFile(path.join(chainDir, 'chain-leaf.pem')),
+  key: await readFile(path.join(chainDir, 'chain-leaf-key.pem'))
+}
+const brokenChainServer = await new Promise((resolve) => {
+  const server = https.createServer(chainCert, (_req, res) => res.end('ok'))
+  server.listen(0, '127.0.0.1', () =>
+    resolve({ url: `https://localhost:${server.address().port}/`, close: () => server.close() })
   )
 })
 
@@ -279,6 +301,7 @@ try {
       'history',
       'http',
       'item',
+      'mock',
       'on',
       'request',
       'runner',
@@ -433,6 +456,12 @@ try {
   const config1 = JSON.parse(await readFile(path.join(userData, 'app-config.json'), 'utf8'))
   assert.equal(config1.lastWorkspacePath, wsDir)
   assert.equal(config1.recentWorkspaces[0].path, wsDir)
+  // The sidebar header (three tabs + reload / add) fits its width on every platform.
+  const sidebarHeader = await page.getByTestId('sidebar-add').evaluate((el) => {
+    const aside = el.closest('aside').getBoundingClientRect()
+    return el.getBoundingClientRect().right <= aside.right
+  })
+  assert.ok(sidebarHeader, 'sidebar header buttons inside the sidebar')
   step('workspace folder skeleton + app-config recent list written to disk')
 
   // Menu → Switch Workspace… shows the welcome screen with the recent list.
@@ -479,6 +508,18 @@ try {
   await t.contextAction('Get Users copy', '重新命名')
   // Enter while an input method is composing picks a candidate, it does not finish the rename.
   const renameField = page.getByTestId('tree-rename-input')
+  // The whole name is selected once the menu has closed: typing replaces it.
+  await new Promise((r) => setTimeout(r, 400))
+  assert.deepEqual(
+    await renameField.evaluate((el) => [
+      document.activeElement === el,
+      el.selectionStart,
+      el.selectionEnd,
+      el.value.length
+    ]),
+    [true, 0, 'Get Users copy'.length, 'Get Users copy'.length],
+    'rename field focused with the whole name selected'
+  )
   await renameField.dispatchEvent('keydown', { key: 'Enter', isComposing: true, keyCode: 229 })
   assert.ok(await renameField.isVisible(), 'rename still open while composing')
   await t.typeName('List Users')
@@ -666,6 +707,19 @@ try {
   assert.ok(cookies.includes('session') && cookies.includes('theme'))
   await page.getByRole('tab', { name: /^Body/ }).last().click()
   step('response cookies are listed')
+
+  await urlInput.fill(brokenChainServer.url)
+  await sendButton().click()
+  const tlsDiagnosis = page.getByTestId('tls-diagnosis')
+  await tlsDiagnosis.waitFor({ timeout: 15_000 })
+  assert.equal(await tlsDiagnosis.getAttribute('data-verdict'), 'incomplete-chain')
+  assert.ok(
+    (await page.getByTestId('tls-missing').innerText()).includes('Hachi Test Intermediate CA'),
+    'missing intermediate named'
+  )
+  assert.equal(await page.getByTestId('tls-cert-name').first().innerText(), 'localhost')
+  await page.screenshot({ path: path.join(shots, '22-tls.png') })
+  step('TLS failure: the chain is read again and the missing intermediate is pointed out')
 
   await sendTo('/big')
   const large = page.getByTestId('large-body')
@@ -1477,6 +1531,77 @@ try {
   assert.match(durationCounts, /\/ 2\.00 s/, durationCounts)
   await runnerView.getByLabel('結束條件').selectOption('iterations')
   step('Runner duration mode runs until the time is up')
+
+  // ---- Decision 133: Mock Server ----
+  await page.getByTestId('sidebar-mocks').click()
+  await page.getByTestId('mock-add').click()
+  const mockDialog = page.getByTestId('mock-name-dialog')
+  await mockDialog.getByLabel('路由').selectOption({ label: '從 Collection「Shop」建立' })
+  assert.equal(await mockDialog.getByLabel('名稱').inputValue(), 'Shop Mock')
+  await mockDialog.getByRole('button', { name: '建立' }).click()
+  const mockEditor = page.getByTestId('mock-editor')
+  await mockEditor.waitFor()
+  const mockFile = path.join(wsDir, 'mocks', 'shop-mock.json')
+  await waitUntil(() => exists(mockFile), 'mock file written')
+  assert.deepEqual(
+    (await readJson(mockFile)).routes.map((r) => [r.method, r.path]),
+    [
+      ['GET', '/json'],
+      ['POST', '/echo']
+    ]
+  )
+  await mockEditor.getByTestId('mock-route').filter({ hasText: '/json' }).click()
+  await mockEditor.locator('[data-testid="mock-route-body"] .cm-content').click()
+  await page.keyboard.insertText('{"mocked":true}')
+  const mockPort = 41000 + Math.floor(Math.random() * 2000)
+  await mockEditor.getByLabel('連接埠').fill(String(mockPort))
+  await mockEditor.getByRole('tab', { name: /^WebSocket/ }).click()
+  await mockEditor.getByTestId('mock-add-ws').click()
+  const wsDetail = mockEditor.getByTestId('mock-ws-detail')
+  await wsDetail.getByRole('button', { name: '新增訊息' }).click()
+  await wsDetail.getByLabel('連線時送出的訊息').fill('hello mock')
+  await wsDetail.getByRole('button', { name: '新增規則' }).click()
+  await wsDetail.getByLabel('比對方式').selectOption('equals')
+  await wsDetail.getByLabel('比對內容').fill('ping')
+  await wsDetail.getByLabel('回覆內容').fill('pong')
+  await mockEditor.getByTestId('mock-start').click() // saves first
+  await waitUntil(
+    async () =>
+      (await mockEditor.getByTestId('mock-status').getAttribute('data-running')) === 'true',
+    'mock running'
+  )
+  assert.equal((await readJson(mockFile)).port, mockPort)
+  const mockBase = `http://127.0.0.1:${mockPort}`
+  const mocked = await fetch(`${mockBase}/json`)
+  assert.equal(await mocked.text(), '{"mocked":true}')
+  assert.equal(mocked.headers.get('access-control-allow-origin'), '*')
+  assert.equal((await fetch(`${mockBase}/nothing`)).status, 404)
+  const mockWs = new WebSocket(`ws://127.0.0.1:${mockPort}/ws`)
+  const mockMessages = []
+  mockWs.on('message', (d) => mockMessages.push(d.toString()))
+  await new Promise((resolve, reject) => {
+    mockWs.once('open', resolve)
+    mockWs.once('error', reject)
+  })
+  mockWs.send('ping')
+  await waitUntil(() => mockMessages.includes('pong'), 'mock WebSocket reply')
+  assert.equal(mockMessages[0], 'hello mock')
+  mockWs.close()
+  await mockEditor.getByRole('tab', { name: /^紀錄/ }).click()
+  await waitUntil(
+    async () => (await mockEditor.getByTestId('mock-log-row').count()) >= 5,
+    'mock log rows'
+  )
+  await page.screenshot({ path: path.join(shots, '23-mock.png') })
+  await mockEditor.getByRole('button', { name: '停止' }).click()
+  await waitUntil(
+    async () =>
+      (await mockEditor.getByTestId('mock-status').getAttribute('data-running')) === 'false',
+    'mock stopped'
+  )
+  await tabByTitle('Mock：Shop Mock').getByTestId('tab-close').click()
+  await page.getByTestId('sidebar-collections').click()
+  step('Mock Server from a Collection: fixed HTTP routes, CORS, WebSocket on connect + reply, log')
   await tabByTitle('Cookies').click()
   await page.getByTestId('request-editor').locator('h2').getByText('Cookies').waitFor()
 
@@ -2083,6 +2208,7 @@ try {
   throw error
 } finally {
   testServer.close()
+  brokenChainServer.close()
   wsServer.close()
   await rm(tmp, { recursive: true, force: true })
 }

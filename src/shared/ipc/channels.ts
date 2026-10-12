@@ -46,6 +46,16 @@ export const INVOKE = {
   httpGetBody: 'http:getBody',
   httpSaveResponse: 'http:saveResponse',
   httpResolve: 'http:resolve',
+  mockList: 'mock:list',
+  mockGet: 'mock:get',
+  mockCreate: 'mock:create',
+  mockSave: 'mock:save',
+  mockRename: 'mock:rename',
+  mockDuplicate: 'mock:duplicate',
+  mockDelete: 'mock:delete',
+  mockStart: 'mock:start',
+  mockStop: 'mock:stop',
+  mockStatuses: 'mock:statuses',
   cookiesList: 'cookies:list',
   cookiesDelete: 'cookies:delete',
   cookiesClear: 'cookies:clear',
@@ -122,7 +132,8 @@ export const EVENTS = {
   runnerEvent: 'runner:event',
   wsEvent: 'ws:event',
   appCloseRequested: 'app:closeRequested',
-  gitPrompt: 'git:prompt'
+  gitPrompt: 'git:prompt',
+  mockEvent: 'mock:event'
 } as const
 
 export type EventChannel = (typeof EVENTS)[keyof typeof EVENTS]

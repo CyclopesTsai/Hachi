@@ -121,7 +121,9 @@ export function classifyError(
       return { code: 'PROXY', message: messages.join(': ') }
     }
     if (TLS_CODES.has(code) || code.startsWith('ERR_TLS') || code.startsWith('ERR_SSL')) {
-      return { code: 'TLS', message: messages.join(': ') }
+      // Node's hint about --use-system-ca does not apply: Hachi trusts the system's roots.
+      const text = messages.join(': ').replace(/; if the root CA is installed locally.*$/, '')
+      return { code: 'TLS', message: text }
     }
     if (NETWORK_CODES.has(code)) return { code: 'NETWORK', message: messages.join(': ') }
     current = e.cause

@@ -27,6 +27,8 @@ import type {
   Variable
 } from '../schemas/collection'
 import type { StoredCookie } from '../schemas/cookies'
+import type { MockFile, MockSettings } from '../schemas/mock'
+import type { MockEvent, MockStatus, MockSummary } from '../mock'
 import type { HistoryEntry } from '../schemas/history'
 import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
@@ -503,6 +505,16 @@ export interface InvokeMap {
   'http:getBody': { input: RunIdInput; output: string }
   'http:saveResponse': { input: RunIdInput; output: string | null }
   'http:resolve': { input: HttpResolveInput; output: HttpResolveResult }
+  'mock:list': { input: void; output: MockSummary[] }
+  'mock:get': { input: { id: string }; output: MockFile }
+  'mock:create': { input: { name: string; fromCollectionId: string | null }; output: MockFile }
+  'mock:save': { input: { id: string; settings: MockSettings }; output: MockFile }
+  'mock:rename': { input: { id: string; name: string }; output: MockFile }
+  'mock:duplicate': { input: { id: string }; output: MockFile }
+  'mock:delete': { input: { id: string }; output: void }
+  'mock:start': { input: { id: string }; output: MockStatus }
+  'mock:stop': { input: { id: string }; output: MockStatus }
+  'mock:statuses': { input: void; output: MockStatus[] }
   'cookies:list': { input: void; output: StoredCookie[] }
   'cookies:delete': { input: { name: string; domain: string; path: string }; output: void }
   'cookies:clear': { input: { domain: string | null }; output: void }
@@ -587,6 +599,7 @@ export interface EventPayloads {
   'ws:event': WsEventPayload
   'app:closeRequested': CloseRequest
   'git:prompt': GitPrompt
+  'mock:event': MockEvent
 }
 
 export interface HachiApi {
@@ -669,6 +682,22 @@ export interface HachiApi {
     saveResponse: InvokeFn<'http:saveResponse'>
     /** The request as it would be sent, for code generation (nothing is sent). */
     resolve: InvokeFn<'http:resolve'>
+  }
+  /** Mock Servers of the current Workspace (decision 133). */
+  mock: {
+    list: InvokeFn<'mock:list'>
+    get: InvokeFn<'mock:get'>
+    /** `fromCollectionId`: start with one route per request of that Collection. */
+    create: InvokeFn<'mock:create'>
+    save: InvokeFn<'mock:save'>
+    rename: InvokeFn<'mock:rename'>
+    duplicate: InvokeFn<'mock:duplicate'>
+    /** Stops it if it is running, then moves the file to the trash. */
+    delete: InvokeFn<'mock:delete'>
+    /** Starts with the saved file (restarts if running). */
+    start: InvokeFn<'mock:start'>
+    stop: InvokeFn<'mock:stop'>
+    statuses: InvokeFn<'mock:statuses'>
   }
   /** The current Workspace's cookie jar (decision 129). */
   cookies: {

@@ -1,4 +1,4 @@
-import { AlertTriangle, Folder, Globe, Layers, Plus, Radio, X, Play } from 'lucide-react'
+import { AlertTriangle, Folder, Globe, Layers, Plus, Radio, Server, X, Play } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { findNode } from '@shared/tree'
 import {
@@ -18,6 +18,7 @@ import { RequestBadge } from '@renderer/features/collections/RequestBadge'
 import { isLive, useWsStore } from '@renderer/stores/ws-store'
 import { cn } from '@renderer/lib/utils'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { useMockStore } from '@renderer/stores/mock-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isDraftTab, isTabDirty, tabItemId, tabTitle, type Tab } from './tab-model'
 
@@ -49,6 +50,7 @@ function TabIcon({ tab }: { tab: Tab }) {
   })
   if (tab.kind === 'environments') return <Globe className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'runner') return <Play className="size-3.5 shrink-0 text-primary" />
+  if (tab.kind === 'mock') return <Server className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'request') {
     return (
       <RequestBadge node={{ requestType: 'http', method: tab.draft?.method }} className="w-auto" />
@@ -68,7 +70,8 @@ function TabIcon({ tab }: { tab: Tab }) {
 
 function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   const store = useTabsStore.getState()
-  const title = useTreeStore((s) => tabTitle(tab, s.tree))
+  const mocks = useMockStore((s) => s.list)
+  const title = useTreeStore((s) => tabTitle(tab, s.tree, mocks))
   const dirty = isTabDirty(tab)
   const ref = useRef<HTMLDivElement>(null)
 

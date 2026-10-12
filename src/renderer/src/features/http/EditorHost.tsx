@@ -6,6 +6,8 @@ import { EnvironmentsEditor } from '@renderer/features/environments/Environments
 import { TabBar } from '@renderer/features/tabs/TabBar'
 import { tabTitle, type Tab } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { MockEditor } from '@renderer/features/mock/MockEditor'
+import { useMockStore } from '@renderer/stores/mock-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { ContainerEditor } from './ContainerEditor'
 import { RequestEditor } from './RequestEditor'
@@ -43,7 +45,8 @@ function StaticView({ itemId }: { itemId: string }) {
 }
 
 function TabContent({ tab }: { tab: Tab }) {
-  const title = useTreeStore((s) => tabTitle(tab, s.tree))
+  const mocks = useMockStore((s) => s.list)
+  const title = useTreeStore((s) => tabTitle(tab, s.tree, mocks))
   if (tab.kind === 'static') return <StaticView itemId={tab.itemId} />
   if (tab.status === 'error') {
     return (
@@ -68,6 +71,8 @@ function TabContent({ tab }: { tab: Tab }) {
       return <EnvironmentsEditor key={key} tab={tab} />
     case 'runner':
       return <RunnerView tab={tab} />
+    case 'mock':
+      return tab.draft ? <MockEditor key={key} tab={tab} title={title} /> : null
   }
 }
 

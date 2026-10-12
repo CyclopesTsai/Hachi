@@ -36,6 +36,8 @@ import { AskpassServer, promptKind } from './services/git/askpass'
 import { RuntimeVariables } from './services/runtime-variables'
 import { ScriptHost } from './services/scripts/script-host'
 import { CookieService } from './services/cookie-service'
+import { MockServers } from './services/mock/mock-server'
+import { MockStore } from './services/mock/mock-store'
 import { RequestExecutor } from './services/http/executor'
 import { RunnerService } from './services/runner-service'
 import { WorkspaceService } from './services/workspace-service'
@@ -81,6 +83,10 @@ async function bootstrap(): Promise<void> {
   const workspaces = new WorkspaceService(config, undefined, trash)
   const collections = new CollectionService(trash)
   const environments = new EnvironmentService(trash)
+  // Mock Servers (decision 133): files in the Workspace, servers stop on switch / quit.
+  const mocks = new MockStore(trash)
+  const mockServers = new MockServers((event) => send(EVENTS.mockEvent, event))
+  app.on('will-quit', () => void mockServers.stopAll())
   const sessions = new SessionService(path.join(app.getPath('userData'), SESSIONS_DIR))
   const history = new HistoryService(
     path.join(app.getPath('userData'), HISTORY_INDEX_FILE),
@@ -110,6 +116,8 @@ async function bootstrap(): Promise<void> {
     openedPath = current?.path ?? null
     void collections.open(current?.path ?? null, current?.id ?? null)
     environments.open(current?.path ?? null)
+    mocks.open(current?.path ?? null)
+    void mockServers.stopAll()
     void cookies.open(current?.id ?? null)
     ws.disconnectAll()
     runner.cancelAll()
@@ -299,7 +307,8 @@ async function bootstrap(): Promise<void> {
   const sendHttp = async (input: HttpSendInput): Promise<HttpResult> => {
     const workspace = workspaces.getCurrent()
     const sentAt = new Date().toISOString()
-    const result = await executor.execute(input)
+    // Editor sends explain certificate failures (decision 132).
+    const result = await executor.execute({ ...input, diagnoseTls: true })
     if (workspace && !(result.kind === 'error' && result.code === 'CANCELLED')) {
       await history
         .add(workspace.path, {
@@ -453,6 +462,8 @@ async function bootstrap(): Promise<void> {
     runtime,
     runner,
     cookies,
+    mocks,
+    mockServers,
     sendHttp,
     ws,
     connectWs,

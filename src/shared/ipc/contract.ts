@@ -16,6 +16,7 @@ import {
   variableSchema
 } from '../schemas/collection'
 import { historySettingsSchema } from '../schemas/app-config'
+import { mockSettingsSchema } from '../schemas/mock'
 import { sessionDataSchema } from '../schemas/session'
 import { httpRequestSchema } from '../schemas/http-request'
 import { anyRequestSchema } from '../schemas/request'
@@ -212,6 +213,19 @@ export const inputSchemas = {
     request: httpRequestSchema,
     revealSecrets: z.boolean()
   }),
+  [INVOKE.mockList]: noInput,
+  [INVOKE.mockGet]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.mockCreate]: z.strictObject({
+    name: itemNameSchema,
+    fromCollectionId: itemIdSchema.nullable()
+  }),
+  [INVOKE.mockSave]: z.strictObject({ id: itemIdSchema, settings: mockSettingsSchema }),
+  [INVOKE.mockRename]: z.strictObject({ id: itemIdSchema, name: itemNameSchema }),
+  [INVOKE.mockDuplicate]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.mockDelete]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.mockStart]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.mockStop]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.mockStatuses]: noInput,
   [INVOKE.cookiesList]: noInput,
   [INVOKE.cookiesDelete]: z.strictObject({
     name: z.string().max(4096),

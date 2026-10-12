@@ -20,6 +20,9 @@ import type { GitService } from '../services/git/git-service'
 import { uniqueFileName } from '../services/fs/unique-name'
 import type { RuntimeVariables } from '../services/runtime-variables'
 import type { CookieService } from '../services/cookie-service'
+import { mockFromCollection } from '../services/mock/from-collection'
+import type { MockServers } from '../services/mock/mock-server'
+import type { MockStore } from '../services/mock/mock-store'
 import type { RunnerService } from '../services/runner-service'
 import { DataFileError, parseDataFile } from '@shared/runner'
 import { readFile, stat } from 'node:fs/promises'
@@ -40,6 +43,8 @@ export interface IpcContext {
   runtime: RuntimeVariables
   runner: RunnerService
   cookies: CookieService
+  mocks: MockStore
+  mockServers: MockServers
   /** Sends a request and records it in the history. */
   sendHttp(input: HttpSendInput): Promise<HttpResult>
   ws: WsService
@@ -218,6 +223,38 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       return target
     },
     [INVOKE.httpResolve]: (input) => ctx.http.resolveForCode(input),
+    [INVOKE.mockList]: () => ctx.mocks.list(),
+    [INVOKE.mockGet]: (input) => ctx.mocks.get(input.id),
+    [INVOKE.mockCreate]: async (input) => {
+      if (input.fromCollectionId === null) return ctx.mocks.create(input.name)
+      const tree = await ctx.collections.getTree()
+      const collection = tree.collections.find((c) => c.id === input.fromCollectionId)
+      if (!collection) throw new HachiError('NOT_FOUND', 'Collection not found')
+      const content = await mockFromCollection(collection, async (id) =>
+        ctx.collections.getRequest(id).then((r) => r.request)
+      )
+      return ctx.mocks.create(input.name, content)
+    },
+    [INVOKE.mockSave]: (input) => ctx.mocks.save(input.id, input.settings),
+    [INVOKE.mockRename]: (input) => ctx.mocks.rename(input.id, input.name),
+    [INVOKE.mockDuplicate]: (input) => ctx.mocks.duplicate(input.id),
+    [INVOKE.mockDelete]: async (input) => {
+      await ctx.mockServers.stop(input.id)
+      await ctx.mocks.delete(input.id)
+    },
+    [INVOKE.mockStart]: async (input) => {
+      const mock = await ctx.mocks.get(input.id)
+      try {
+        return await ctx.mockServers.start(mock)
+      } catch (error) {
+        throw new HachiError(
+          'INVALID_OPERATION',
+          error instanceof Error ? error.message : String(error)
+        )
+      }
+    },
+    [INVOKE.mockStop]: (input) => ctx.mockServers.stop(input.id),
+    [INVOKE.mockStatuses]: () => ctx.mockServers.statuses(),
     [INVOKE.cookiesList]: () => ctx.cookies.current()?.list() ?? [],
     [INVOKE.cookiesDelete]: (input) => {
       ctx.cookies.current()?.delete(input)

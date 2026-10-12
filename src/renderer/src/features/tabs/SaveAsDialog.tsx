@@ -50,6 +50,7 @@ function SaveAsForm({ tab }: { tab: RequestTab }) {
         <Input
           id="save-as-name"
           autoFocus
+          onFocus={(e) => e.currentTarget.select()}
           maxLength={ITEM_NAME_MAX}
           value={name}
           onChange={(e) => setName(e.target.value)}

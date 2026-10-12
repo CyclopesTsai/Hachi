@@ -17,6 +17,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useWrapPreference } from '@renderer/hooks/use-wrap-preference'
 import { testSummary } from '@shared/scripts'
 import { ConsolePanel, TestsPanel } from './ScriptResults'
+import { TlsDiagnosisView } from './TlsDiagnosisView'
 
 const ERROR_TITLES: Record<HttpErrorCode, string> = {
   INVALID_URL: 'URL 格式不正確',
@@ -288,7 +289,7 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
     return (
       <div className="flex h-full flex-col" data-testid="response-error">
         <UnresolvedNotice names={result.unresolvedVariables} />
-        <div className="flex flex-col gap-2 p-4">
+        <div className="flex min-h-0 shrink flex-col gap-2 overflow-auto p-4">
           <p className="flex items-center gap-2 font-medium text-destructive">
             <AlertTriangle className="size-4" />
             {ERROR_TITLES[result.code]}
@@ -299,6 +300,7 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
           <p className="text-xs text-muted-foreground">
             {result.url} · {formatDuration(result.timings.totalMs)}
           </p>
+          {result.tls && <TlsDiagnosisView diagnosis={result.tls} />}
         </div>
         {result.scriptReport && (
           <Tabs defaultValue="console" className="flex min-h-0 flex-1 flex-col border-t">

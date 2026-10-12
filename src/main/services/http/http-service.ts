@@ -9,6 +9,7 @@ import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import { VariableResolver, buildVariableMap, type VariableLayer } from '@shared/variables'
 import { signAwsSigV4 } from './auth/aws-sigv4'
 import { digestAuthorization, parseDigestChallenge } from './auth/digest'
+import { diagnoseTls } from './tls-diagnosis'
 import { OAuth2Error, OAuth2Service, type TokenRequest } from './auth/oauth2'
 import {
   buildCodegenRequest,
@@ -96,6 +97,8 @@ export interface SendInput {
   storeBody?: boolean
   /** Jar to use instead of the Workspace's (Runner workers); null = no cookies. */
   cookies?: CookieJar | null
+  /** On a certificate failure, read and diagnose the server's chain (decision 132). */
+  diagnoseTls?: boolean
 }
 
 /** Sends requests from the editor, tracks running ones (for cancel) and keeps bodies. */
@@ -214,6 +217,12 @@ export class HttpService {
             ...built,
             headers: [...built.headers, ['Authorization', authorization]]
           }))
+        }
+      }
+      if (result.kind === 'error' && result.code === 'TLS' && input.diagnoseTls) {
+        result = {
+          ...result,
+          tls: await diagnoseTls(built.url, { proxyUrl, proxyAuth: this.proxyAuth(proxyUrl) })
         }
       }
       if (result.kind === 'response' && body && input.storeBody !== false) {

@@ -33,6 +33,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { GitPromptDialog } from '@renderer/features/git/GitPromptDialog'
 import { useGitStore } from '@renderer/stores/git-store'
 import { useTransferStore } from '@renderer/stores/transfer-store'
+import { useMockStore } from '@renderer/stores/mock-store'
 import { useRunnerStore } from '@renderer/stores/runner-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isLive, useWsStore } from '@renderer/stores/ws-store'
@@ -51,6 +52,7 @@ function useMainProcessEvents(): void {
       ),
       window.hachi.on(EVENTS.wsEvent, (payload) => useWsStore.getState().handleEvent(payload)),
       window.hachi.on(EVENTS.runnerEvent, (event) => useRunnerStore.getState().handleEvent(event)),
+      window.hachi.on(EVENTS.mockEvent, (event) => useMockStore.getState().handleEvent(event)),
       window.hachi.on(EVENTS.variablesChanged, (event) => {
         void useEnvStore.getState().variablesChanged(event)
         useTabsStore.getState().variablesChanged(event)

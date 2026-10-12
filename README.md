@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前版本：**v0.5.0**（macOS、Windows）（[Releases](https://github.com/CyclopesTsai/Hachi/releases)）。HTTP / WebSocket、環境變數、腳本與斷言（含 Collection / 資料夾腳本、`await`、`sendRequest`）、驗證（Bearer / Basic / API Key / OAuth 2.0 / Digest / AWS Signature）、Cookie Jar、Collection Runner（持續時間模式、HTML 報告）、Postman / Bruno / cURL 匯入匯出、OpenAPI 文件（HTML / JSON）匯出、程式碼產生、Git（commit、Pull / Push、衝突處理、History）。開發進度與設計決策見 [docs/progress.md](docs/progress.md)。
+> 目前版本：**v0.5.0**（macOS、Windows）（[Releases](https://github.com/CyclopesTsai/Hachi/releases)）。HTTP / WebSocket、環境變數、腳本與斷言（含 Collection / 資料夾腳本、`await`、`sendRequest`）、驗證（Bearer / Basic / API Key / OAuth 2.0 / Digest / AWS Signature）、Cookie Jar、TLS 憑證鏈診斷、Mock Server（HTTP / WebSocket）、Collection Runner（持續時間模式、HTML 報告）、Postman / Bruno / cURL 匯入匯出、OpenAPI 文件（HTML / JSON）匯出、程式碼產生、Git（commit、Pull / Push、衝突處理、History）。開發進度與設計決策見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
@@ -59,7 +59,7 @@ src/
 │  ├─ platform/   ★ 平台專屬程式碼（darwin.ts / default.ts），其他地方不判斷 process.platform
 │  ├─ ipc/        IPC 註冊、輸入驗證、sender 驗證
 │  ├─ services/   設定檔、Workspace、Collection、環境 / 機密值、歷史紀錄、分頁記憶、HTTP 引擎（含驗證、Cookie Jar）、
-│  │              WebSocket、腳本沙箱、Collection Runner、匯入匯出、Git
+│  │              WebSocket、腳本沙箱、Collection Runner、Mock Server、匯入匯出、Git
 │  └─ script-process.ts  執行腳本的 utilityProcess（QuickJS）
 ├─ preload/       暴露 window.hachi 白名單 API
 └─ renderer/      React UI（features/、components/ui/、stores/）

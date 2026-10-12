@@ -70,6 +70,8 @@ import {
   resolveDrop,
   searchTree
 } from './tree-model'
+import { MockActions, MockPanel } from '@renderer/features/mock/MockPanel'
+import { selectRenameInput } from './rename-input'
 import { TreeRow, type DropIndicator } from './TreeRow'
 
 const AUTO_EXPAND_DELAY_MS = 600
@@ -123,10 +125,11 @@ function createCollection(): Promise<void> {
 
 const MODES: { mode: SidebarMode; label: string }[] = [
   { mode: 'collections', label: 'Collections' },
-  { mode: 'history', label: 'History' }
+  { mode: 'history', label: 'History' },
+  { mode: 'mocks', label: 'Mocks' }
 ]
 
-/** Left sidebar: Collections tree or History of the current Workspace. */
+/** Left sidebar: Collections tree, History or Mock Servers of the current Workspace. */
 export function CollectionSidebar() {
   const mode = useHistoryStore((s) => s.sidebarMode)
   return (
@@ -144,7 +147,7 @@ export function CollectionSidebar() {
               aria-selected={mode === m.mode}
               data-testid={`sidebar-${m.mode}`}
               className={cn(
-                'rounded-sm px-2 py-1 text-xs font-semibold tracking-wide uppercase',
+                'rounded-sm px-1.5 py-1 text-[11px] font-semibold uppercase',
                 mode === m.mode
                   ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -157,9 +160,16 @@ export function CollectionSidebar() {
         </div>
         <div className="flex-1" />
         {mode === 'collections' && <CollectionActions />}
+        {mode === 'mocks' && <MockActions />}
       </div>
       {mode === 'collections' && <TreeToolbar />}
-      {mode === 'collections' ? <CollectionTree /> : <HistoryPanel />}
+      {mode === 'collections' ? (
+        <CollectionTree />
+      ) : mode === 'history' ? (
+        <HistoryPanel />
+      ) : (
+        <MockPanel />
+      )}
     </aside>
   )
 }
@@ -374,7 +384,10 @@ function CollectionActions() {
           align="end"
           data-testid="sidebar-add-menu"
           onCloseAutoFocus={(e) => {
-            if (creating.current) e.preventDefault()
+            if (creating.current) {
+              e.preventDefault()
+              selectRenameInput()
+            }
             creating.current = false
           }}
         >

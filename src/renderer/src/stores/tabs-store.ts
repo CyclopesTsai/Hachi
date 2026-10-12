@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { ContainerSettingsData, HttpResult } from '@shared/http'
 import type { VariablesChangedEvent } from '@shared/ipc/api'
 import type { HistoryEntry } from '@shared/schemas/history'
+import type { MockSettings } from '@shared/schemas/mock'
 import { httpRequestSchema, type HttpRequest } from '@shared/schemas/http-request'
 import { wsRequestSchema, type WsRequest } from '@shared/schemas/ws-request'
 import type { SessionData } from '@shared/schemas/session'
@@ -12,6 +13,9 @@ import {
   contextParentId,
   createDraftTab,
   createEnvironmentsTab,
+  createMockTab,
+  mockSettingsOf,
+  mockTabKey,
   createItemTab,
   createRunnerTab,
   fromSession,
@@ -28,6 +32,7 @@ import {
   type ContainerContent,
   type ContainerTab,
   type EnvironmentsTab,
+  type MockTab,
   type RequestLikeTab,
   type RequestTab,
   type Tab,
@@ -82,6 +87,11 @@ interface TabsState {
   /** Opens a tree item; `preview` (single click) reuses the preview tab. */
   openItem(id: string, options?: { preview?: boolean }): void
   openEnvironments(): void
+  /** Opens (or shows) a Mock Server's tab (decision 133). */
+  openMock(id: string): void
+  updateMock(key: TabKey, change: (draft: MockSettings) => MockSettings): void
+  /** Closes the tab of a deleted Mock Server without asking. */
+  dropMock(id: string): void
   /** New unsaved HTTP or WebSocket request ("+" button). */
   newRequest(type?: 'http' | 'websocket'): void
   /** Opens the Collection Runner for a Collection / folder (Phase 5c). */
@@ -253,6 +263,16 @@ export const useTabsStore = create<TabsState>()((set, get) => {
           inherited: data.inherited,
           version: t.version + 1
         }))
+      } else if (tab.kind === 'mock') {
+        const mock = await unwrap(window.hachi.mock.get({ id: tab.mockId }))
+        const settings = mockSettingsOf(mock)
+        patch<MockTab>(key, (t) => ({
+          ...t,
+          status: 'ready',
+          saved: settings,
+          draft: settings,
+          version: t.version + 1
+        }))
       } else {
         const list = await useEnvStore.getState().loadList()
         const valid = list.filter((e) => !e.error)
@@ -365,6 +385,22 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       const existing = find(ENVIRONMENTS_TAB_KEY)
       if (existing) setActive(existing.key)
       else addTab(createEnvironmentsTab())
+    },
+
+    openMock(id) {
+      const existing = find(mockTabKey(id))
+      if (existing) setActive(existing.key)
+      else addTab(createMockTab(id))
+    },
+
+    updateMock(key, change) {
+      patch<MockTab>(key, (t) =>
+        t.kind === 'mock' && t.draft ? { ...t, draft: change(t.draft), preview: false } : t
+      )
+    },
+
+    dropMock(id) {
+      if (find(mockTabKey(id))) removeTab(mockTabKey(id))
     },
 
     newRequest(type = 'http') {
@@ -518,6 +554,10 @@ export const useTabsStore = create<TabsState>()((set, get) => {
             useEnvStore.getState().setCollectionVariables(tab.itemId, data.variables)
           }
           void get().refreshInherited()
+        } else if (tab.kind === 'mock' && tab.draft) {
+          const sent = tab.draft
+          const saved = await unwrap(window.hachi.mock.save({ id: tab.mockId, settings: sent }))
+          afterSave<MockTab>(tab.key, sent, mockSettingsOf(saved))
         } else if (tab.kind === 'environments' && tab.draft) {
           const sent = tab.draft
           const saved = await unwrap(window.hachi.env.save(sent))
