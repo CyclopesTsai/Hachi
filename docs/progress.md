@@ -6,8 +6,8 @@
 ## 目前狀態
 
 - **目前階段**：原規格的 Phase 0–6 全部完成；之後依下方「待辦」逐項進行（每項先規劃、確認決策再實作）。由本機（macOS）的 Claude Code 桌面版開發
-- **目前版本**：**v0.5.0**（2026-10-09，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
-- **最後更新**：2026-10-09
+- **目前版本**：**v0.6.0**（2026-10-12，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
+- **最後更新**：2026-10-12
 
 ## Phase 進度
 
@@ -299,7 +299,7 @@
   - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
   - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
 - **v0.2.1 發佈**（2026-10-07）：Bruno YAML 與多個 Collection 匯入（決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
-- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）：見下方「待辦」各項
+- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0**（決策 131–133）：見下方「待辦」各項
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
 ## 待辦（使用者排定，2026-10-07）
@@ -319,7 +319,7 @@
    - 129：Cookie Jar（`cookie-jar.ts`、`cookie-service.ts`，`<userData>/cookies/<id>.json`）；使用 Jar 時重新導向由 Hachi 跟隨；WebSocket 交握也帶上；Workspace 選單「Cookies…」；請求 Settings 可關閉；Runner 並行時每個 worker 一份副本
    - 130：Runner「結束條件：持續時間」、匯出 HTML 報告（`runner-report.ts`）
    - 驗證：`npm run verify`（單元測試 509 個；Digest 用 RFC 2617 / 7616 範例、AWS 用官方 test suite 向量、OAuth2 用本機 Callback 的完整流程、Cookie Jar、Runner 持續時間 / 報告 / setNextRequest）；E2E 新增 Collection 腳本＋await sendRequest、OAuth 2.0 取得 Token 並送出、Cookies 對話框、Runner HTML 報告與持續時間模式、腳本總時間設定（淺色、深色都通過）
-4. **決策 131–133 ✅（2026-10-12，等使用者確認）**：改名全選、TLS 憑證鏈診斷（`src/main/services/http/tls-diagnosis.ts`、`TlsDiagnosisView.tsx`）、Mock Server（`src/main/services/mock/`、`src/renderer/src/features/mock/`）。驗證：單元測試 526 個（三層測試憑證鏈 fixture 驗證斷鏈 / 完整 / 根不受信任 / 自簽 / 網域 / 日期；Mock 路由比對、HTTP / CORS / WS 行為、檔案操作），E2E 新增改名全選、TLS 斷鏈診斷、從 Collection 建立 Mock 並以 HTTP / WebSocket 實際連線、側欄標題列寬度（淺色、深色都通過）。另修：Node 錯誤訊息中「--use-system-ca」的提示不再顯示（不適用於 Hachi）
+4. **決策 131–133 ✅（2026-10-12，**v0.6.0 發佈**）**：改名全選、TLS 憑證鏈診斷（`src/main/services/http/tls-diagnosis.ts`、`TlsDiagnosisView.tsx`）、Mock Server（`src/main/services/mock/`、`src/renderer/src/features/mock/`）。驗證：單元測試 526 個（三層測試憑證鏈 fixture 驗證斷鏈 / 完整 / 根不受信任 / 自簽 / 網域 / 日期；Mock 路由比對、HTTP / CORS / WS 行為、檔案操作），E2E 新增改名全選、TLS 斷鏈診斷、從 Collection 建立 Mock 並以 HTTP / WebSocket 實際連線、側欄標題列寬度（淺色、深色都通過）。另修：Node 錯誤訊息中「--use-system-ca」的提示不再顯示（不適用於 Hachi）
 5. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）
