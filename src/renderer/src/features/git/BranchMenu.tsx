@@ -46,17 +46,28 @@ import { gitInstallHint } from './git-names'
 
 /** origin's URL (decision 113): needed before the first push of a new repository. */
 function RemoteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent data-testid="git-remote-dialog">
+        {/* A fresh form each time it opens. */}
+        {open && <RemoteForm onClose={onClose} />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RemoteForm({ onClose }: { onClose: () => void }) {
   const remote = useGitStore((s) => s.remote)
   const busy = useGitStore((s) => s.busy)
   const [url, setUrl] = useState('')
 
   useEffect(() => {
-    if (!open) return
+    // The current URL arrives later (git runs first): don't overwrite what was typed meanwhile.
     void useGitStore
       .getState()
       .loadRemote()
-      .then(() => setUrl(useGitStore.getState().remote?.url ?? ''))
-  }, [open])
+      .then(() => setUrl((typed) => typed || (useGitStore.getState().remote?.url ?? '')))
+  }, [])
 
   async function submit(e: FormEvent): Promise<void> {
     e.preventDefault()
@@ -64,35 +75,29 @@ function RemoteDialog({ open, onClose }: { open: boolean; onClose: () => void })
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent data-testid="git-remote-dialog">
-        <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
-          <DialogHeader>
-            <DialogTitle>設定遠端</DialogTitle>
-            <DialogDescription>
-              {remote
-                ? `目前的 ${remote.name}：${remote.url}`
-                : '還沒有遠端；設定後會加入 origin。'}
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            autoFocus
-            aria-label="遠端網址"
-            placeholder="https://github.com/me/api.git 或 git@github.com:me/api.git"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              取消
-            </Button>
-            <Button type="submit" disabled={busy || url.trim() === ''}>
-              儲存
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
+      <DialogHeader>
+        <DialogTitle>設定遠端</DialogTitle>
+        <DialogDescription>
+          {remote ? `目前的 ${remote.name}：${remote.url}` : '還沒有遠端；設定後會加入 origin。'}
+        </DialogDescription>
+      </DialogHeader>
+      <Input
+        autoFocus
+        aria-label="遠端網址"
+        placeholder="https://github.com/me/api.git 或 git@github.com:me/api.git"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+      />
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          取消
+        </Button>
+        <Button type="submit" disabled={busy || url.trim() === ''}>
+          儲存
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }
 

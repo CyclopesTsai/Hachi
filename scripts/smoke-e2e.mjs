@@ -1992,6 +1992,8 @@ try {
         GIT_COMMITTER_EMAIL: 'other@example.com'
       }
     }).trim()
+  // Push / Pull run git with the packaged app on slow CI machines: give them time.
+  const GIT_NETWORK_WAIT_MS = 60_000
   /** Pull asks about the unsaved tabs left by earlier steps: keep them as they are. */
   const keepUnsaved = async () => {
     const prompt = page.getByTestId('unsaved-dialog')
@@ -2003,17 +2005,24 @@ try {
   await page.getByRole('menuitem', { name: '設定遠端…' }).click()
   const remoteDialog = page.getByTestId('git-remote-dialog')
   await remoteDialog.getByLabel('遠端網址').fill(remoteDir)
+  // The current remote is read after the dialog opens; what was typed must stay.
+  await new Promise((r) => setTimeout(r, 500))
+  assert.equal(await remoteDialog.getByLabel('遠端網址').inputValue(), remoteDir)
   await remoteDialog.getByRole('button', { name: '儲存' }).click()
   await remoteDialog.waitFor({ state: 'hidden' })
   await page.getByTestId('branch-menu').click()
   await page.getByRole('menuitem', { name: /^Push/ }).click()
-  await waitUntil(async () => {
-    try {
-      return gitIn('rev-parse', '--abbrev-ref', '@{u}') === 'origin/main'
-    } catch {
-      return false
-    }
-  }, 'the first push sets origin/main as upstream')
+  await waitUntil(
+    async () => {
+      try {
+        return gitIn('rev-parse', '--abbrev-ref', '@{u}') === 'origin/main'
+      } catch {
+        return false
+      }
+    },
+    'the first push sets origin/main as upstream',
+    GIT_NETWORK_WAIT_MS
+  )
   step('設定遠端… then Push (the first push sets the upstream)')
 
   // Someone else pushes a change; Fetch shows it, Pull brings it in.
@@ -2031,7 +2040,8 @@ try {
   await waitUntil(
     async () =>
       (await readFile(path.join(wsDir, '.gitignore'), 'utf8')).includes('# from someone else'),
-    'pull brought the change in'
+    'pull brought the change in',
+    GIT_NETWORK_WAIT_MS
   )
   step('Fetch shows how far behind; Pull (merge) brings the change in')
 
@@ -2069,7 +2079,8 @@ try {
   await page.getByTestId('git-push').click()
   await waitUntil(
     async () => gitIn('rev-parse', 'HEAD') === gitIn('rev-parse', 'origin/main'),
-    'the merge is pushed'
+    'the merge is pushed',
+    GIT_NETWORK_WAIT_MS
   )
   await page.getByTestId('git-back').click()
   step('a conflicting Pull: 保留我的 → 完成合併 → Push')
