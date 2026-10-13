@@ -49,13 +49,16 @@ function sections(mac: boolean, packaged: boolean): Section[] {
       title: '欄位與對話框',
       rows: [
         ['Enter / Esc', '改名欄位：確定 / 取消'],
-        ['Enter / Esc', '對話框：送出 / 關閉']
+        ['Enter / Esc', '對話框：送出 / 關閉'],
+        ['Enter / Esc', '變數懸浮框的值：儲存 / 取消']
       ]
     },
     {
       title: 'Body、腳本與回應編輯器',
       rows: [
-        [`${mod}F`, '搜尋（CodeMirror 標準按鍵，另有復原、多重選取等）'],
+        [`${mod}F`, '搜尋（另有 CodeMirror 標準按鍵：復原、多重選取等）'],
+        [`Enter / ${shift}Enter`, '搜尋框：下一個 / 上一個（取代欄的 Enter：取代）'],
+        ['Esc', '關閉搜尋框'],
         [`${mod}A / ${mod}C`, '全選 / 複製（唯讀的回應也可以）']
       ]
     }

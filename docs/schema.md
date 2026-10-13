@@ -75,7 +75,7 @@
     "url": "", // custom 時：http://host:port 或 https://host:port（沒寫 scheme 補 http://）
     "bypass": ["localhost", "127.0.0.1", "::1"], // 不經過 Proxy：完全相符、"*.example.com" / ".example.com"（含子網域）、"*"（全部）
     "username": "", // 選填，Proxy-Authorization: Basic
-    "password": "" // 目前以明文存在本機；之後可改存系統 Keychain
+    "password": "" // 以明文存在這台電腦的 app-config.json（不寫進 Workspace）
   },
   "ui": {
     "requestBodyWrap": false, // 請求 Body 編輯器自動換行（僅影響顯示）

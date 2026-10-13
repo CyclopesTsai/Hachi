@@ -1909,7 +1909,9 @@ try {
   const shortcuts = page.getByTestId('shortcuts-dialog')
   await shortcuts.waitFor()
   const shortcutsText = await shortcuts.innerText()
-  assert.ok(shortcutsText.includes('移動選取') && shortcutsText.includes('儲存目前分頁'))
+  assert.ok(
+    ['移動選取', '儲存目前分頁', '搜尋框', '變數懸浮框'].every((t) => shortcutsText.includes(t))
+  )
   await page.keyboard.press('Escape')
   await shortcuts.waitFor({ state: 'hidden' })
 

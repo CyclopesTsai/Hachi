@@ -405,7 +405,7 @@ function AppSettingsForm({
             />
           </Row>
           <p className="text-xs text-muted-foreground">
-            密碼目前以明文存在本機設定檔；之後會改存系統 Keychain。
+            密碼以明文存在這台電腦的設定檔（app-config.json），不會寫進 Workspace。
           </p>
         </>
       )}

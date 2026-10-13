@@ -683,6 +683,8 @@ interface CodegenRequest {
 | 改名欄位          | Enter / Esc                                  | 確定 / 取消（改名只從右鍵選單開始）                                                                    |
 | Body / 回應編輯器 | CodeMirror 標準按鍵（搜尋、復原、多重選取…） | 不含摺疊 / 展開（用左側的摺疊箭頭）；唯讀的回應與 Git 差異也可聚焦，全選 / 複製 / 搜尋可用（決策 125） |
 | 對話框            | Enter / Esc                                  | 送出 / 關閉                                                                                            |
+| 編輯器的搜尋框    | Enter / Shift+Enter、Esc                     | 下一個 / 上一個（取代欄的 Enter：取代）、關閉搜尋框（`search-panel.ts`）                               |
+| 變數懸浮框        | Enter / Esc                                  | 儲存 / 取消修改（離開欄位也會儲存，決策 135）                                                          |
 
 平台差異集中在 `src/main/platform/`（`darwin.ts`、`default.ts`）。
 
