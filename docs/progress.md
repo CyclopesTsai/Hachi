@@ -322,7 +322,7 @@
 4. **決策 131–133 ✅（2026-10-12，**v0.6.0 發佈**）**：改名全選、TLS 憑證鏈診斷（`src/main/services/http/tls-diagnosis.ts`、`TlsDiagnosisView.tsx`）、Mock Server（`src/main/services/mock/`、`src/renderer/src/features/mock/`）。驗證：單元測試 526 個（三層測試憑證鏈 fixture 驗證斷鏈 / 完整 / 根不受信任 / 自簽 / 網域 / 日期；Mock 路由比對、HTTP / CORS / WS 行為、檔案操作），E2E 新增改名全選、TLS 斷鏈診斷、從 Collection 建立 Mock 並以 HTTP / WebSocket 實際連線、側欄標題列寬度（淺色、深色都通過）。另修：Node 錯誤訊息中「--use-system-ca」的提示不再顯示（不適用於 Hachi）
    - **v0.6.1**（使用者回報）：Collection 名稱很長時「新增 Mock Server」對話框的欄位被撐出對話框 → 所有表單格線的欄改為 `minmax(0,1fr)`、下拉選單不超過容器寬度；E2E 以超長選項檢查欄位留在對話框內
    - **v0.6.2**（使用者在 Windows 回報：commit 很多檔案時畫面像卡住）：Commit 按鈕顯示「Commit 中…」與轉圈，清單與訊息欄鎖住並提示檔案多時需要時間；檔案清單改由 stdin 傳給 git（`--pathspec-from-file=- --pathspec-file-nul`、`--literal-pathspecs`），不再受 Windows 命令列約 32,000 字元的限制；add / commit 的逾時由 60 秒放寬為 5 分鐘。單元測試以 800 個長檔名＋含 `[ ]` 的檔名 commit
-   - **v0.6.3**：v0.6.2 的發版在打包後的 E2E 失敗（GitHub 機器較慢才會出現）：「設定遠端」對話框打開後才讀到目前的遠端，晚到的結果會蓋掉已輸入的網址（使用者打字快也會遇到）→ 對話框每次打開重新建立表單，讀到的網址只在欄位還是空的時候填入；E2E 的 Push / Pull 等待由 5 秒放寬為 60 秒。`v0.6.2` tag 留著但沒有 Release
+   - **v0.6.3**：v0.6.2 的發版在打包後的 E2E 失敗（GitHub 機器較慢才會出現）：「設定遠端」對話框打開後才讀到目前的遠端，晚到的結果會蓋掉已輸入的網址（使用者打字快也會遇到）→ 對話框每次打開重新建立表單，讀到的網址只在欄位還是空的時候填入；E2E 的 Push / Pull 等待由 5 秒放寬為 60 秒。失敗的 `v0.6.2` tag 已依使用者指示刪除（沒有對應的 Release）
 5. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）
