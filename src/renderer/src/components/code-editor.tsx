@@ -33,7 +33,13 @@ import {
   type ViewUpdate
 } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
-import { editorTheme, highlightStyle, languageExtension, type CodeLanguage } from './code-theme'
+import {
+  editorPhrases,
+  editorTheme,
+  highlightStyle,
+  languageExtension,
+  type CodeLanguage
+} from './code-theme'
 
 export type { CodeLanguage } from './code-theme'
 import { findVariableTokens, type VariableMap } from '@shared/variables'
@@ -178,6 +184,7 @@ export function CodeEditor({
         extensions: [
           editorSetup,
           editorTheme,
+          editorPhrases,
           c.language.of(languageExtension(language)),
           c.wrap.of(wrap ? EditorView.lineWrapping : []),
           c.variables.of(variableExtension(variables)),

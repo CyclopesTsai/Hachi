@@ -8,7 +8,7 @@ import { json } from '@codemirror/lang-json'
 import { python } from '@codemirror/lang-python'
 import { xml } from '@codemirror/lang-xml'
 import { HighlightStyle } from '@codemirror/language'
-import type { Extension } from '@codemirror/state'
+import { EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
 
@@ -92,6 +92,72 @@ export const editorTheme = EditorView.theme({
     color: 'var(--muted-foreground)'
   },
   '.cm-panels': { backgroundColor: 'var(--card)', color: 'var(--card-foreground)' },
+  '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border)' },
+  // Search panel: Hachi's look, compact (12px) so it does not crowd the editor.
+  '.cm-panel.cm-search': {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '4px 6px',
+    padding: '6px 28px 6px 8px',
+    fontFamily: 'var(--font-sans)',
+    fontSize: '12px'
+  },
+  '.cm-panel.cm-search br': { flexBasis: '100%', height: '0', content: '""' },
+  '.cm-search .cm-textfield': {
+    height: '24px',
+    width: '13rem',
+    margin: '0',
+    padding: '0 6px',
+    fontSize: '12px',
+    fontFamily: 'var(--font-sans)',
+    color: 'var(--foreground)',
+    backgroundColor: 'var(--background)',
+    border: '1px solid var(--input)',
+    borderRadius: '6px',
+    outline: 'none'
+  },
+  '.cm-search .cm-textfield:focus': {
+    borderColor: 'var(--ring)',
+    boxShadow: '0 0 0 2px color-mix(in oklch, var(--ring) 35%, transparent)'
+  },
+  '.cm-search .cm-button': {
+    height: '24px',
+    margin: '0',
+    padding: '0 8px',
+    fontSize: '12px',
+    fontFamily: 'var(--font-sans)',
+    color: 'var(--foreground)',
+    backgroundImage: 'none',
+    backgroundColor: 'var(--background)',
+    border: '1px solid var(--input)',
+    borderRadius: '6px',
+    cursor: 'default'
+  },
+  '.cm-search .cm-button:hover': { backgroundColor: 'var(--accent)' },
+  '.cm-search .cm-button:active': { backgroundImage: 'none' },
+  // "all" (select every match) is left out.
+  '.cm-search .cm-button[name="select"]': { display: 'none' },
+  // The match case / regexp / by word options are not offered either.
+  '.cm-search label': { display: 'none' },
+  '.cm-search button[name="close"]': {
+    position: 'absolute',
+    top: '6px',
+    right: '6px',
+    width: '20px',
+    height: '20px',
+    padding: '0',
+    fontSize: '16px',
+    lineHeight: '18px',
+    color: 'var(--muted-foreground)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '4px'
+  },
+  '.cm-search button[name="close"]:hover': {
+    color: 'var(--foreground)',
+    backgroundColor: 'var(--accent)'
+  },
   '.cm-hachi-var-defined, .cm-hachi-var-defined *': { color: 'oklch(0.62 0.15 155) !important' },
   '.cm-hachi-var-dynamic, .cm-hachi-var-dynamic *': { color: 'oklch(0.62 0.14 240) !important' },
   '.cm-hachi-var-missing, .cm-hachi-var-missing *': { color: 'oklch(0.62 0.2 25) !important' },
@@ -102,4 +168,21 @@ export const editorTheme = EditorView.theme({
     borderRadius: '6px'
   },
   '.cm-hachi-var-tip': { padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: '11px' }
+})
+
+/** Texts of CodeMirror's own panels (search, go to line) in Chinese. */
+export const editorPhrases = EditorState.phrases.of({
+  Find: '搜尋',
+  Replace: '取代',
+  next: '下一個',
+  previous: '上一個',
+  replace: '取代',
+  'replace all': '全部取代',
+  close: '關閉',
+  'current match': '目前的符合項目',
+  'on line': '位於第',
+  'replaced match on line $': '已取代第 $ 行的符合項目',
+  'replaced $ matches': '已取代 $ 個符合項目',
+  'Go to line': '前往行號',
+  go: '前往'
 })

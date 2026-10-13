@@ -650,7 +650,31 @@ try {
   // The read-only response can take focus: select all / copy / search work there.
   await page.getByTestId('response-body').locator('.cm-content').click()
   await page.keyboard.press('ControlOrMeta+f')
-  await page.getByTestId('response-body').locator('.cm-search').waitFor()
+  const searchPanel = page.getByTestId('response-body').locator('.cm-search')
+  await searchPanel.waitFor()
+  // Hachi's look and texts; no "all" button and no match options (read-only: no replace).
+  assert.deepEqual(
+    await searchPanel.evaluate((el) => {
+      const visible = (q) =>
+        [...el.querySelectorAll(q)].filter((n) => getComputedStyle(n).display !== 'none')
+      return {
+        placeholder: el.querySelector('input[name="search"]').placeholder,
+        buttons: visible('.cm-button').map((b) => b.textContent),
+        options: visible('label').length,
+        replace: !!el.querySelector('input[name="replace"]'),
+        fontSize: getComputedStyle(el.querySelector('.cm-button')).fontSize
+      }
+    }),
+    {
+      placeholder: '搜尋',
+      buttons: ['下一個', '上一個'],
+      options: 0,
+      replace: false,
+      fontSize: '12px'
+    }
+  )
+  await page.keyboard.type('method')
+  await page.screenshot({ path: path.join(shots, '24-search.png') })
   await page.keyboard.press('Escape')
   for (const expected of [
     '"method": "POST"',
