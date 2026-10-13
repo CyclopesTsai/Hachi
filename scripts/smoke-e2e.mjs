@@ -2514,11 +2514,11 @@ try {
   testServer.close()
   brokenChainServer.close()
   wsServer.close()
-  // Killed, not closed: unsaved tabs would make a close wait for the save prompt.
+  // Killed (SIGKILL), not closed: with unsaved tabs a close or SIGTERM waits for the save prompt.
   const proc = lastProcess
   if (proc && proc.exitCode === null && proc.signalCode === null) {
     const exited = new Promise((resolve) => proc.once('exit', resolve))
-    proc.kill()
+    proc.kill('SIGKILL')
     await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))])
   }
   // A cleanup failure must not hide the error of the check that failed.
