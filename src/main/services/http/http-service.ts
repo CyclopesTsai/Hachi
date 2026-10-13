@@ -109,6 +109,16 @@ export interface SendInput {
   diagnoseTls?: boolean
 }
 
+/** Every string inside a value (objects and arrays included). */
+function stringsIn(value: unknown, out: string[] = []): string[] {
+  if (typeof value === 'string') out.push(value)
+  else if (Array.isArray(value)) for (const v of value) stringsIn(v, out)
+  else if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) stringsIn(v, out)
+  }
+  return out
+}
+
 /** Sends requests from the editor, tracks running ones (for cancel) and keeps bodies. */
 export class HttpService {
   private readonly running = new Map<string, AbortController>()
@@ -145,9 +155,10 @@ export class HttpService {
       const layers =
         input.layers ?? (await this.deps.getVariableLayers(input.parentId, input.environmentId))
       // {{$file:…}} contents are read first (the resolver itself is synchronous).
+      // The strings themselves (JSON text would double the backslashes of Windows paths).
       const fileNames = findFileVariables([
-        JSON.stringify(input.request),
-        JSON.stringify(chain),
+        ...stringsIn(input.request),
+        ...stringsIn(chain),
         ...layers.flatMap((l) => l.variables.map((v) => v.value))
       ])
       let files: Map<string, string> | undefined

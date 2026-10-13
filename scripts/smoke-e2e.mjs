@@ -707,16 +707,16 @@ try {
   await re.getByRole('tab', { name: /^Body/ }).first().click()
   // 格式化 / 自動換行 share the row of the Body types (right side), leaving room below.
   const bodyRow = await page.getByTestId('body-editor').evaluate((el) => {
-    const center = (n) => {
-      const r = n.getBoundingClientRect()
-      return r.top + r.height / 2
-    }
-    const radios = el.querySelector('[role="radiogroup"]')
-    const tools = el.querySelector('[data-testid="body-tools"]')
-    return (
-      Math.abs(center(radios) - center(tools)) < 6 &&
-      tools.getBoundingClientRect().left > radios.getBoundingClientRect().right
-    )
+    const toolsEl = el.querySelector('[data-testid="body-tools"]')
+    const radios = el.querySelector('[role="radiogroup"]').getBoundingClientRect()
+    const tools = toolsEl.getBoundingClientRect()
+    const row = toolsEl.parentElement.getBoundingClientRect()
+    const center = (r) => r.top + r.height / 2
+    // Same row when there is room (narrow windows, e.g. CI's 1024 px, wrap them below);
+    // on the right either way.
+    const fits = radios.width + tools.width + 16 <= row.width
+    const sameRow = Math.abs(center(radios) - center(tools)) < 6 && tools.left > radios.right
+    return (!fits || sameRow) && Math.abs(tools.right - row.right) < 2
   })
   assert.ok(bodyRow, '格式化 / 自動換行 on the Body type row, on the right')
   const bodyJson = page.getByTestId('body-json')

@@ -111,6 +111,14 @@ describe('{{$file:base64:…}} (decision 134)', () => {
     expect(JSON.parse(ok.body.text).body).toBe('{"img":"AAEC+v8="}')
 
     const abs = path.join(outside, 'secret.txt')
+    // A path with backslashes (Windows) is found as written, not JSON-escaped.
+    const backslashed = await send('{"s":"{{$file:base64:files\\img.bin}}"}')
+    if (process.platform === 'win32') {
+      if (backslashed.kind !== 'response' || backslashed.body.kind !== 'text') throw new Error()
+      expect(JSON.parse(backslashed.body.text).body).toBe('{"s":"AAEC+v8="}')
+    } else {
+      expect(backslashed).toMatchObject({ kind: 'error', code: 'FILE_NOT_FOUND' })
+    }
     const refused = await send(`{"s":"{{$file:base64:${abs}}}"}`)
     expect(refused).toMatchObject({ kind: 'error', code: 'FILE_ACCESS', untrustedFiles: [abs] })
     trusted = true
