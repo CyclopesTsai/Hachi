@@ -45,10 +45,16 @@ export async function findGit(locator: GitLocator): Promise<string | null> {
 export function runGit(
   git: string,
   args: readonly string[],
-  options: { cwd: string; env?: Record<string, string>; timeoutMs?: number }
+  options: {
+    cwd: string
+    env?: Record<string, string>
+    timeoutMs?: number
+    /** Written to git's stdin (e.g. `--pathspec-from-file=-`). */
+    input?: string
+  }
 ): Promise<GitResult> {
   return new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       git,
       [...args],
       {
@@ -73,5 +79,9 @@ export function runGit(
         resolve({ stdout, stderr: stderr || (error && code !== 0 ? error.message : ''), code })
       }
     )
+    if (options.input !== undefined) {
+      child.stdin?.on('error', () => undefined) // git exited early: its exit code tells why
+      child.stdin?.end(options.input)
+    }
   })
 }

@@ -30,6 +30,8 @@ interface GitState {
   /** Changed files left out of the next commit (everything else is included). */
   unchecked: ReadonlySet<string>
   busy: boolean
+  /** A commit in progress: the panel shows it (many files can take a while). */
+  committing: boolean
   /** A network operation in progress (its button shows it). */
   running: 'fetch' | 'pull' | 'push' | null
   remote: GitRemote | null
@@ -115,6 +117,7 @@ export const useGitStore = create<GitState>()((set, get) => {
     message: '',
     unchecked: new Set(),
     busy: false,
+    committing: false,
     running: null,
     remote: null,
     log: null,
@@ -234,7 +237,10 @@ export const useGitStore = create<GitState>()((set, get) => {
         set({ error: errorMessage(error) })
         return
       }
-      const ok = await operate(() => unwrap(window.hachi.git.commit({ paths, message })))
+      set({ committing: true })
+      const ok = await operate(() => unwrap(window.hachi.git.commit({ paths, message }))).finally(
+        () => set({ committing: false })
+      )
       if (ok) set({ message: '', unchecked: new Set() })
     },
 

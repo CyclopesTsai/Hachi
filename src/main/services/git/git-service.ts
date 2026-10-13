@@ -24,6 +24,8 @@ import { LOG_FORMAT, parseBranches, parseLog, parseNameStatus, parseStatus } fro
 
 /** Fetch / pull / push may wait for the network and for the user's password. */
 const NETWORK_TIMEOUT_MS = 10 * 60_000
+/** Adding / committing many files can be slow (Windows, antivirus scanners). */
+const COMMIT_TIMEOUT_MS = 5 * 60_000
 
 /** Environment that makes git ask for credentials through the app (askpass.ts). */
 export type AskpassEnv = () => Promise<Record<string, string>>
@@ -76,20 +78,32 @@ export class GitService {
     return this.gitPath
   }
 
-  private async exec(cwd: string, args: string[], network = false): Promise<GitResult> {
+  private async exec(
+    cwd: string,
+    args: string[],
+    network = false,
+    extra: { input?: string; timeoutMs?: number } = {}
+  ): Promise<GitResult> {
     const git = await this.findGit()
     if (!git) throw new HachiError('NOT_FOUND', '找不到 git，請先安裝')
     return runGit(git, ['-c', 'core.quotepath=false', ...args], {
       cwd,
       // No editor ever opens (merge commits use their default message).
       env: { GIT_EDITOR: ':', GIT_MERGE_AUTOEDIT: 'no', ...(network ? await this.askpass() : {}) },
-      timeoutMs: network ? NETWORK_TIMEOUT_MS : undefined
+      timeoutMs: extra.timeoutMs ?? (network ? NETWORK_TIMEOUT_MS : undefined),
+      input: extra.input
     })
   }
 
   /** Runs git; a failure becomes an error with git's own message. */
-  private async must(cwd: string, args: string[], what: string, network = false): Promise<string> {
-    const result = await this.exec(cwd, args, network)
+  private async must(
+    cwd: string,
+    args: string[],
+    what: string,
+    network = false,
+    extra: { input?: string; timeoutMs?: number } = {}
+  ): Promise<string> {
+    const result = await this.exec(cwd, args, network, extra)
     if (result.code !== 0) throw new HachiError('IO_ERROR', `${what}失敗：${gitMessage(result)}`)
     return result.stdout
   }
@@ -225,9 +239,27 @@ export class GitService {
         this.repoPath(repo, c.path),
         ...(c.oldPath !== undefined ? [this.repoPath(repo, c.oldPath)] : [])
       ])
-      await this.must(repo.root, ['add', '-A', '--', ...repoPaths], 'Commit')
+      // Paths go through stdin: Windows limits a command line to ~32,000 characters.
+      const pathspec = {
+        input: repoPaths.join('\0'),
+        timeoutMs: COMMIT_TIMEOUT_MS
+      }
+      const fromStdin = ['--pathspec-from-file=-', '--pathspec-file-nul']
+      await this.must(
+        repo.root,
+        ['--literal-pathspecs', 'add', '-A', ...fromStdin],
+        'Commit',
+        false,
+        pathspec
+      )
       // With paths, git commits exactly these (anything else already staged stays staged).
-      await this.must(repo.root, ['commit', '-m', message, '--', ...repoPaths], 'Commit')
+      await this.must(
+        repo.root,
+        ['--literal-pathspecs', 'commit', '-m', message, ...fromStdin],
+        'Commit',
+        false,
+        pathspec
+      )
       return this.readStatus(workspace)
     })
   }

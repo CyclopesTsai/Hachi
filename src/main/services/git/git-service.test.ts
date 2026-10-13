@@ -191,6 +191,27 @@ describe('GitService', () => {
     })
   })
 
+  it('commits many files at once (paths over stdin, beyond the Windows command-line limit)', async () => {
+    git(repo, 'init', '-q', '-b', 'main')
+    git(repo, 'config', 'user.name', 'Tester')
+    git(repo, 'config', 'user.email', 'tester@example.com')
+    // ~800 × 60 characters ≈ 48,000: more than Windows allows on one command line.
+    const names = Array.from(
+      { length: 800 },
+      (_, i) => `request-with-a-rather-long-descriptive-name-${String(i).padStart(4, '0')}.json`
+    )
+    await Promise.all(
+      names.map((n) => writeFile(path.join(ws, 'collections', n), `{"i":"${n}"}\n`))
+    )
+    // A literal pathspec: brackets are not a glob.
+    await writeFile(path.join(ws, 'collections', 'odd [1].json'), '{}\n')
+    await writeFile(path.join(ws, 'collections', 'odd 1.json'), '{}\n')
+    const paths = [...names, 'odd [1].json'].map((n) => `collections/${n}`)
+    const after = (await service.commit(ws, paths, 'many')) as GitRepoStatus
+    expect(after.files.map((f) => f.path)).toEqual(['collections/odd 1.json'])
+    expect(git(repo, 'show', '--name-only', '--format=').split('\n')).toHaveLength(801)
+  }, 120_000)
+
   it('discards changes per file: restore tracked files, trash new ones', async () => {
     git(repo, 'init', '-q', '-b', 'main')
     git(repo, 'config', 'user.name', 'Tester')

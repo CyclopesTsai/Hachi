@@ -387,6 +387,7 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
         />
       ]
     })
+  const committing = useGitStore((s) => s.committing)
   const checkedCount = status.files.filter((f) => !unchecked.has(f.path)).length
   const selectedChange = status.files.find((f) => f.path === selected)
   const allChecked = status.files.length > 0 && checkedCount === status.files.length
@@ -469,7 +470,13 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
             沒有變更。
           </p>
         ) : (
-          <ul className="min-h-0 flex-1 overflow-auto">
+          <ul
+            className={cn(
+              'min-h-0 flex-1 overflow-auto',
+              committing && 'pointer-events-none opacity-60'
+            )}
+            aria-busy={committing}
+          >
             {treeView
               ? renderTree(changeTree, 0)
               : status.files.map((file) => {
@@ -494,6 +501,7 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
             <textarea
               aria-label="Commit 訊息"
               data-testid="git-message"
+              disabled={committing}
               placeholder="Commit 訊息"
               rows={4}
               value={message}
@@ -507,8 +515,14 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
               disabled={busy || checkedCount === 0 || message.trim() === ''}
               onClick={() => void useGitStore.getState().commit()}
             >
-              Commit（{checkedCount} 個檔案）
+              {committing && <Loader2 className="animate-spin" />}
+              {committing ? 'Commit 中…' : `Commit（${checkedCount} 個檔案）`}
             </Button>
+            {committing && (
+              <p className="text-xs text-muted-foreground" data-testid="git-committing">
+                正在 commit {checkedCount} 個檔案，檔案多時可能需要一些時間…
+              </p>
+            )}
           </>
         )}
       </aside>
