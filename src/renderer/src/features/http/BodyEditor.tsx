@@ -102,66 +102,68 @@ export function BodyEditor({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4" data-testid="body-editor">
-      <div
-        className="flex flex-wrap items-center gap-x-4 gap-y-2"
-        role="radiogroup"
-        aria-label="Body 類型"
-      >
-        {BODY_MODES.map((mode) => (
-          <label key={mode} className="inline-flex items-center gap-1.5 text-sm">
-            <input
-              type="radio"
-              name="body-mode"
-              className="accent-primary"
-              checked={body.mode === mode}
-              onChange={() => set({ mode })}
-            />
-            {MODE_LABELS[mode]}
-          </label>
-        ))}
-      </div>
-
-      {(body.mode === 'json' || body.mode === 'raw') && (
-        <div className="flex items-center gap-3">
-          {body.mode === 'raw' && (
-            <>
+      {/* Body type on the left; the text tools on the right of the same row (more room below). */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div
+          className="flex flex-wrap items-center gap-x-4 gap-y-2"
+          role="radiogroup"
+          aria-label="Body 類型"
+        >
+          {BODY_MODES.map((mode) => (
+            <label key={mode} className="inline-flex items-center gap-1.5 text-sm">
               <input
-                aria-label="Content-Type"
-                list="raw-content-types"
-                className="h-8 w-56 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
-                value={body.rawContentType}
-                onChange={(e) => set({ rawContentType: e.target.value })}
+                type="radio"
+                name="body-mode"
+                className="accent-primary"
+                checked={body.mode === mode}
+                onChange={() => set({ mode })}
               />
-              <datalist id="raw-content-types">
-                {RAW_CONTENT_TYPES.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-            </>
-          )}
-          {body.mode === 'json' && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={error !== null || body.json.trim() === ''}
-              onClick={() => set({ json: JSON.stringify(JSON.parse(body.json), null, 2) })}
-            >
-              <Wand2 />
-              格式化
-            </Button>
-          )}
-          <div className="flex-1" />
-          {error && (
-            <span className="truncate text-xs text-destructive" title={error}>
-              JSON 格式錯誤：{error}
-            </span>
-          )}
-          <CheckboxLabel checked={wrap} onChange={(e) => setWrap(e.target.checked)}>
-            自動換行
-          </CheckboxLabel>
+              {MODE_LABELS[mode]}
+            </label>
+          ))}
         </div>
-      )}
+        {(body.mode === 'json' || body.mode === 'raw') && (
+          <div className="ml-auto flex min-w-0 items-center gap-3" data-testid="body-tools">
+            {error && (
+              <span className="max-w-64 truncate text-xs text-destructive" title={error}>
+                JSON 格式錯誤：{error}
+              </span>
+            )}
+            {body.mode === 'raw' && (
+              <>
+                <input
+                  aria-label="Content-Type"
+                  list="raw-content-types"
+                  className="h-8 w-56 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+                  value={body.rawContentType}
+                  onChange={(e) => set({ rawContentType: e.target.value })}
+                />
+                <datalist id="raw-content-types">
+                  {RAW_CONTENT_TYPES.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
+              </>
+            )}
+            {body.mode === 'json' && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7"
+                disabled={error !== null || body.json.trim() === ''}
+                onClick={() => set({ json: JSON.stringify(JSON.parse(body.json), null, 2) })}
+              >
+                <Wand2 />
+                格式化
+              </Button>
+            )}
+            <CheckboxLabel checked={wrap} onChange={(e) => setWrap(e.target.checked)}>
+              自動換行
+            </CheckboxLabel>
+          </div>
+        )}
+      </div>
 
       {body.mode === 'none' && <p className="text-sm text-muted-foreground">這個請求不帶 Body。</p>}
 

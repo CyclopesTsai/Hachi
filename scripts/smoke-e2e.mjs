@@ -650,66 +650,109 @@ try {
   // The read-only response can take focus: select all / copy / search work there.
   await page.getByTestId('response-body').locator('.cm-content').click()
   await page.keyboard.press('ControlOrMeta+f')
-  const searchPanel = page.getByTestId('response-body').locator('.cm-search')
+  const searchPanel = page.getByTestId('response-body').locator('.cm-hachi-search')
   await searchPanel.waitFor()
   // Hachi's panel: magnifier, 下一個 / 上一個; read-only, so no replace arrow.
   const searchState = (panel) =>
-    panel.evaluate((el) => ({
-      placeholder: el.querySelector('input[name="search"]').placeholder,
-      // The icon sits left of the text, not on top of it.
-      magnifier: (() => {
-        const svg = el.querySelector('.cm-hachi-search-field svg')
-        const input = el.querySelector('input[name="search"]')
-        if (!svg) return false
-        const pad = parseFloat(getComputedStyle(input).paddingLeft)
-        return svg.getBoundingClientRect().right <= input.getBoundingClientRect().left + pad
-      })(),
-      buttons: [...el.querySelectorAll('.cm-button')]
-        .filter((b) => b.checkVisibility())
-        .map((b) => b.textContent),
-      toggle: el.querySelector('button[name="toggle"]')?.getAttribute('aria-expanded') ?? null,
-      fontSize: getComputedStyle(el.querySelector('.cm-button')).fontSize
-    }))
+    panel.evaluate((el) => {
+      const input = el.querySelector('input[name="search"]')
+      const svg = el.querySelector('.cm-hachi-search-field svg')
+      const box = el.getBoundingClientRect()
+      const editor = el.closest('.cm-editor').getBoundingClientRect()
+      const count = el.querySelector('.cm-hachi-search-count')
+      return {
+        placeholder: input.placeholder,
+        // The icon sits left of the text, not on top of it.
+        magnifier:
+          !!svg &&
+          svg.getBoundingClientRect().right <=
+            input.getBoundingClientRect().left + parseFloat(getComputedStyle(input).paddingLeft),
+        // Floats at the editor's top right (over the text, like Claude / VS Code).
+        floating: box.top - editor.top <= 16 && editor.right - box.right <= 24,
+        buttons: [...el.querySelectorAll('button')]
+          .filter((b) => b.checkVisibility())
+          .map((b) => b.name),
+        toggle: el.querySelector('button[name="toggle"]')?.getAttribute('aria-expanded') ?? null,
+        count: count.checkVisibility() ? count.textContent : null,
+        fontSize: getComputedStyle(input).fontSize,
+        // Controls of a row never sit on top of each other.
+        overlap: [...el.querySelectorAll('.cm-hachi-search-row')].some((row) => {
+          const rects = [...row.querySelectorAll('button, input')]
+            .filter((n) => n.checkVisibility())
+            .map((n) => n.getBoundingClientRect())
+            .sort((a, b) => a.left - b.left)
+          return rects.some((r, i) => i > 0 && r.left < rects[i - 1].right - 0.5)
+        })
+      }
+    })
   assert.deepEqual(await searchState(searchPanel), {
     placeholder: '搜尋',
     magnifier: true,
-    buttons: ['下一個', '上一個'],
+    floating: true,
+    buttons: ['prev', 'next', 'close'],
     toggle: null,
-    fontSize: '12px'
+    count: null,
+    fontSize: '12px',
+    overlap: false
   })
   await page.keyboard.type('method')
+  // Typing jumps to the first match and counts them.
+  assert.equal((await searchState(searchPanel)).count, '1/1')
   await page.screenshot({ path: path.join(shots, '24-search.png') })
   await page.keyboard.press('Escape')
   // An editable editor (the request body) also gets the replace row.
   // The first Body tab is the request's (the response viewer has one too).
   await re.getByRole('tab', { name: /^Body/ }).first().click()
+  // 格式化 / 自動換行 share the row of the Body types (right side), leaving room below.
+  const bodyRow = await page.getByTestId('body-editor').evaluate((el) => {
+    const center = (n) => {
+      const r = n.getBoundingClientRect()
+      return r.top + r.height / 2
+    }
+    const radios = el.querySelector('[role="radiogroup"]')
+    const tools = el.querySelector('[data-testid="body-tools"]')
+    return (
+      Math.abs(center(radios) - center(tools)) < 6 &&
+      tools.getBoundingClientRect().left > radios.getBoundingClientRect().right
+    )
+  })
+  assert.ok(bodyRow, '格式化 / 自動換行 on the Body type row, on the right')
   const bodyJson = page.getByTestId('body-json')
   await bodyJson.locator('.cm-content').click()
   await page.keyboard.press('ControlOrMeta+f')
-  const requestSearch = bodyJson.locator('.cm-search')
+  const requestSearch = bodyJson.locator('.cm-hachi-search')
   await requestSearch.waitFor()
   // Editable: collapsed at first; the arrow opens the replace row and closes it again.
   assert.deepEqual(await searchState(requestSearch), {
     placeholder: '搜尋',
     magnifier: true,
-    buttons: ['下一個', '上一個'],
+    floating: true,
+    buttons: ['toggle', 'prev', 'next', 'close'],
     toggle: 'false',
-    fontSize: '12px'
+    count: null,
+    fontSize: '12px',
+    overlap: false
   })
   const replaceToggle = requestSearch.locator('button[name="toggle"]')
   await replaceToggle.click()
   assert.deepEqual((await searchState(requestSearch)).buttons, [
-    '下一個',
-    '上一個',
-    '取代',
-    '全部取代'
+    'toggle',
+    'prev',
+    'next',
+    'close',
+    'replace',
+    'replaceAll'
   ])
   assert.equal(await replaceToggle.getAttribute('aria-expanded'), 'true')
   await requestSearch.locator('input[name="search"]').click()
-  await page.keyboard.type('n')
+  await page.keyboard.type('h') // {"hello":"hachi"}: three matches
+  assert.equal((await searchState(requestSearch)).count, '1/3')
+  await page.keyboard.press('Enter')
+  assert.equal((await searchState(requestSearch)).count, '2/3')
+  assert.equal((await searchState(requestSearch)).overlap, false)
   await page.screenshot({ path: path.join(shots, '25-search-request.png') })
   await replaceToggle.click()
-  assert.deepEqual((await searchState(requestSearch)).buttons, ['下一個', '上一個'])
+  assert.deepEqual((await searchState(requestSearch)).buttons, ['toggle', 'prev', 'next', 'close'])
   await requestSearch.locator('input[name="search"]').click()
   await page.keyboard.press('Escape')
   await re.getByRole('tab', { name: 'Auth' }).click()

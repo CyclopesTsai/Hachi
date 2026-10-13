@@ -93,110 +93,119 @@ export const editorTheme = EditorView.theme({
   },
   '.cm-panels': { backgroundColor: 'var(--card)', color: 'var(--card-foreground)' },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border)' },
-  // Search panel (search-panel.ts): Hachi's look, compact (12px).
-  '.cm-panel.cm-search': {
-    position: 'relative',
+  // Search box (search-panel.ts): a card floating at the top right, over the text.
+  '.cm-panels.cm-panels-top': {
+    position: 'absolute',
+    top: '8px',
+    right: '14px',
+    left: 'auto',
+    zIndex: '5',
+    maxWidth: 'calc(100% - 28px)',
+    backgroundColor: 'transparent',
+    border: 'none !important'
+  },
+  '.cm-panel.cm-hachi-search': {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '6px',
-    padding: '6px 32px 6px 8px',
+    gap: '2px',
+    width: '22rem',
+    maxWidth: '100%',
+    padding: '3px',
     fontFamily: 'var(--font-sans)',
-    fontSize: '12px'
+    fontSize: '12px',
+    color: 'var(--card-foreground)',
+    backgroundColor: 'var(--card)',
+    border: '1px solid var(--border)',
+    borderRadius: '10px',
+    boxShadow: '0 6px 20px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 8%)'
   },
+  '.cm-panel.cm-hachi-search:focus-within': { borderColor: 'var(--ring)' },
   '.cm-hachi-search-rows': {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '2px',
     flex: '1',
     minWidth: '0'
   },
-  '.cm-hachi-search-row': { display: 'flex', alignItems: 'center', gap: '6px' },
-  '.cm-hachi-search-row[hidden]': { display: 'none' },
-  '.cm-hachi-search-field': { position: 'relative', display: 'inline-flex' },
+  '.cm-hachi-search-row': { display: 'flex', alignItems: 'center', gap: '2px', height: '28px' },
+  '.cm-hachi-search-row[hidden], .cm-hachi-search-count[hidden]': { display: 'none' },
+  '.cm-hachi-search-row[data-row="replace"]': { borderTop: '1px solid var(--border)' },
+  '.cm-hachi-search-field': {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    flex: '1',
+    minWidth: '0',
+    height: '100%'
+  },
   '.cm-hachi-search-field svg': {
     position: 'absolute',
-    left: '7px',
-    top: '50%',
-    transform: 'translateY(-50%)',
+    left: '8px',
     color: 'var(--muted-foreground)',
     pointerEvents: 'none'
   },
-  '.cm-search .cm-hachi-search-field .cm-textfield': { paddingLeft: '24px' },
-  '.cm-hachi-search-toggle': {
+  '.cm-hachi-search-input': {
+    width: '100%',
+    height: '100%',
+    padding: '0 6px 0 28px',
+    fontSize: '12px',
+    fontFamily: 'var(--font-sans)',
+    color: 'var(--foreground)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    outline: 'none'
+  },
+  '.cm-hachi-search-input::placeholder': { color: 'var(--muted-foreground)', opacity: '0.8' },
+  '.cm-hachi-search-count': {
+    flexShrink: '0',
+    padding: '0 4px',
+    fontSize: '11px',
+    color: 'var(--muted-foreground)',
+    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums'
+  },
+  '.cm-hachi-search-divider': {
+    flexShrink: '0',
+    width: '1px',
+    height: '16px',
+    margin: '0 3px',
+    backgroundColor: 'var(--border)'
+  },
+  '.cm-hachi-search-icon': {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: '0',
-    width: '24px',
-    height: '24px',
+    width: '26px',
+    height: '26px',
     padding: '0',
     color: 'var(--muted-foreground)',
     backgroundColor: 'transparent',
     border: 'none',
     borderRadius: '6px'
   },
-  '.cm-hachi-search-toggle:hover': {
-    color: 'var(--foreground)',
-    backgroundColor: 'var(--accent)'
-  },
+  '.cm-hachi-search-icon:hover': { color: 'var(--foreground)', backgroundColor: 'var(--accent)' },
   '.cm-hachi-search-toggle svg': { transition: 'transform 120ms ease' },
   '.cm-hachi-search-expanded .cm-hachi-search-toggle svg': { transform: 'rotate(90deg)' },
-  '.cm-search .cm-textfield': {
-    height: '24px',
-    width: '13rem',
-    margin: '0',
-    padding: '0 6px',
-    fontSize: '12px',
-    fontFamily: 'var(--font-sans)',
-    color: 'var(--foreground)',
-    backgroundColor: 'var(--background)',
-    border: '1px solid var(--input)',
-    borderRadius: '6px',
-    outline: 'none'
-  },
-  '.cm-search .cm-textfield:focus': {
-    borderColor: 'var(--ring)',
-    boxShadow: '0 0 0 2px color-mix(in oklch, var(--ring) 35%, transparent)'
-  },
-  '.cm-search .cm-button': {
-    height: '24px',
-    margin: '0',
+  '.cm-hachi-search-text': {
+    flexShrink: '0',
+    height: '22px',
+    margin: '0 1px',
     padding: '0 8px',
-    fontSize: '12px',
+    fontSize: '11px',
     fontFamily: 'var(--font-sans)',
     color: 'var(--foreground)',
-    backgroundImage: 'none',
     backgroundColor: 'var(--background)',
     border: '1px solid var(--input)',
-    borderRadius: '6px',
-    cursor: 'default'
+    borderRadius: '6px'
   },
-  '.cm-search .cm-button:hover': { backgroundColor: 'var(--accent)' },
-  '.cm-search .cm-button:active': { backgroundImage: 'none' },
-  '.cm-search button[name="close"]': {
-    position: 'absolute',
-    top: '6px',
-    right: '6px',
-    width: '20px',
-    height: '20px',
-    padding: '0',
-    fontSize: '16px',
-    lineHeight: '18px',
-    color: 'var(--muted-foreground)',
-    backgroundColor: 'transparent',
-    border: 'none',
-    borderRadius: '4px'
-  },
-  '.cm-search button[name="close"]:hover': {
-    color: 'var(--foreground)',
-    backgroundColor: 'var(--accent)'
-  },
+  '.cm-hachi-search-text:hover': { backgroundColor: 'var(--accent)' },
   '.cm-hachi-var-defined, .cm-hachi-var-defined *': { color: 'oklch(0.62 0.15 155) !important' },
   '.cm-hachi-var-dynamic, .cm-hachi-var-dynamic *': { color: 'oklch(0.62 0.14 240) !important' },
   '.cm-hachi-var-missing, .cm-hachi-var-missing *': { color: 'oklch(0.62 0.2 25) !important' },
   '.cm-tooltip.cm-tooltip-hover': {
-    backgroundColor: 'var(--popover)',
-    color: 'var(--popover-foreground)',
+    backgroundColor: 'var(--card)',
+    color: 'var(--card-foreground)',
     border: '1px solid var(--border)',
     borderRadius: '6px'
   },
