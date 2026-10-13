@@ -148,6 +148,8 @@ if (process.platform === 'linux' && (process.getuid?.() === 0 || process.env.CI)
 
 /** The window of the latest launch, for a screenshot when a check fails. */
 let lastPage = null
+/** The latest launch, closed before cleaning up (Windows can't delete files it holds). */
+let lastApp = null
 
 async function launch() {
   const app = await electron.launch({
@@ -183,6 +185,7 @@ async function launch() {
     await page.emulateMedia({ colorScheme: process.env.SMOKE_COLOR_SCHEME })
   }
   lastPage = page
+  lastApp = app
   return { app, page }
 }
 
@@ -2459,5 +2462,9 @@ try {
   testServer.close()
   brokenChainServer.close()
   wsServer.close()
-  await rm(tmp, { recursive: true, force: true })
+  await lastApp?.close().catch(() => undefined)
+  // A cleanup failure must not hide the error of the check that failed.
+  await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }).catch((error) =>
+    console.warn(`Could not remove ${tmp}: ${error.message}`)
+  )
 }

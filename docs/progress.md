@@ -6,7 +6,7 @@
 ## 目前狀態
 
 - **目前階段**：原規格的 Phase 0–6 全部完成；之後依下方「待辦」逐項進行（每項先規劃、確認決策再實作）。由本機（macOS）的 Claude Code 桌面版開發
-- **目前版本**：**v0.6.5**（2026-10-13，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
+- **目前版本**：**v0.7.0**（2026-10-13，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
 - **最後更新**：2026-10-13
 
 ## Phase 進度
@@ -301,7 +301,7 @@
   - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
   - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
 - **v0.2.1 發佈**（2026-10-07）：Bruno YAML 與多個 Collection 匯入（決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
-- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）：見下方「待辦」各項
+- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）、**v0.7.0**（決策 134–135）：見下方「待辦」各項
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
 ## 待辦（使用者排定，2026-10-07）
@@ -327,8 +327,8 @@
    - **v0.6.3**：v0.6.2 的發版在打包後的 E2E 失敗（GitHub 機器較慢才會出現）：「設定遠端」對話框打開後才讀到目前的遠端，晚到的結果會蓋掉已輸入的網址（使用者打字快也會遇到）→ 對話框每次打開重新建立表單，讀到的網址只在欄位還是空的時候填入；E2E 的 Push / Pull 等待由 5 秒放寬為 60 秒。失敗的 `v0.6.2` tag 已依使用者指示刪除（沒有對應的 Release）
    - **v0.6.4**（使用者回報）：Runner 設定欄展開「查看資料檔範例」後被撐寬、右邊欄位被切掉（`<fieldset>` 預設最小寬度等於內容寬度）→ 加 `min-w-0`（匯出對話框的 fieldset 一併處理）；E2E 檢查展開範例後設定欄仍在欄寬內（已確認移除修正時這項檢查會失敗）
    - **v0.6.5**（使用者要求）：編輯器的搜尋列（CodeMirror 內建）改用 Hachi 的配色與圓角、字級 12px，文字改中文（搜尋 / 下一個 / 上一個 / 取代 / 全部取代 / 關閉），拿掉「全部（選取所有符合）」按鈕與大小寫相符 / 規則運算式 / 全字相符三個選項（`code-theme.ts`）；之後依使用者要求換成自己的搜尋框（`search-panel.ts`）：像 Claude / VS Code 浮在編輯器右上角的卡片（圓角、陰影），一列是放大鏡＋搜尋欄、「3/12」計數（最多算到 1000，超過顯示「1000+」）、↑ ↓ ✕ 圖示按鈕；輸入時跳到最近的符合項目；可編輯的編輯器最左邊有箭頭，按下展開第二列（取代 / 全部取代）、再按收回，預設收合（參考 IntelliJ）；唯讀編輯器沒有箭頭。不再使用 CodeMirror 搜尋套件的 `.cm-search` 樣式（它的基本樣式會把關閉按鈕絕對定位）。另外原本程式碼引用了不存在的 `--popover` 顏色 token，改用 `--card`。Body 的「格式化」「自動換行」（Raw 的 Content-Type）移到 Body 類型那一列的右邊，編輯區變大。E2E 檢查文字、浮在右上角、按鈕不重疊、計數、展開 / 收合、字級、Body 工具同列，並截圖回應區（唯讀，只有搜尋）與請求 Body（可編輯，多了取代 / 全部取代；`25-search-request.png`），淺色、深色
-   - v0.6.5 之後（使用者要求）：Scripts 分頁原本展開式的「可用的 API」改成提示文字右邊的連結樣式按鈕，點擊開啟文件視窗（`ScriptDocsDialog.tsx`、內容在 `script-docs.ts`），Pre-request / Post-response 兩個頁籤（預設為正在編輯的那個），每個指令附說明與範例：修改請求 / 回應、測試、變數、送出其他請求與流程（sendRequest / runRequest / setNextRequest / sleep）、工具、Postman / Bruno 相容、限制。原本說明中「沒有網路與計時器、最多 5 秒」已過時，一併更正。E2E 開啟文件、切換頁籤並截圖（淺色、深色）
-   - **決策 134–135**（等使用者確認）：`{{$file:base64:…}}`（`src/main/services/http/file-variables.ts`、`FileTrustDialog.tsx`）、懸浮框改變數（`src/renderer/src/lib/variable-hover.ts`、IPC `variables:set`）。驗證：單元測試（路徑、信任、大小、格式、實際送出 base64）；E2E 新增 Workspace 內檔案直接送出、外部檔案允許後送出、懸浮框修改環境值並還原、機密值遮住 / 顯示 / Esc 不儲存、未定義變數唯讀（淺色、深色）。另修：腳本信任對話框「無法連網」的說明已過時。之後（使用者要求）：Body 工具列「自動換行」右邊加「可用的變數」連結，開啟文件視窗（`VariableDocsDialog.tsx`）：一般變數、所有動態變數（由 `DYNAMIC_VARIABLES` 產生，附範例）、`{{$file:base64:…}}`；文件區塊元件與腳本文件共用（`DocSection.tsx`）。Windows CI 發現：找 `{{$file:…}}` 時原本把請求轉成 JSON 文字再搜尋，Windows 路徑的反斜線被 JSON 變成兩個而對不上 → 改為逐一走訪請求中的字串（單元測試在 Windows 上驗證反斜線路徑）；E2E「Body 工具與類型同列」在 1024 寬的 CI 視窗會換行，改為有空間時才要求同列
+   - **v0.7.0**（使用者要求）：Scripts 分頁原本展開式的「可用的 API」改成提示文字右邊的連結樣式按鈕，點擊開啟文件視窗（`ScriptDocsDialog.tsx`、內容在 `script-docs.ts`），Pre-request / Post-response 兩個頁籤（預設為正在編輯的那個），每個指令附說明與範例：修改請求 / 回應、測試、變數、送出其他請求與流程（sendRequest / runRequest / setNextRequest / sleep）、工具、Postman / Bruno 相容、限制。原本說明中「沒有網路與計時器、最多 5 秒」已過時，一併更正。E2E 開啟文件、切換頁籤並截圖（淺色、深色）
+   - **v0.7.0 決策 134–135**：`{{$file:base64:…}}`（`src/main/services/http/file-variables.ts`、`FileTrustDialog.tsx`）、懸浮框改變數（`src/renderer/src/lib/variable-hover.ts`、IPC `variables:set`）。驗證：單元測試（路徑、信任、大小、格式、實際送出 base64）；E2E 新增 Workspace 內檔案直接送出、外部檔案允許後送出、懸浮框修改環境值並還原、機密值遮住 / 顯示 / Esc 不儲存、未定義變數唯讀（淺色、深色）。另修：腳本信任對話框「無法連網」的說明已過時。之後（使用者要求）：Body 工具列「自動換行」右邊加「可用的變數」連結，開啟文件視窗（`VariableDocsDialog.tsx`）：一般變數、所有動態變數（由 `DYNAMIC_VARIABLES` 產生，附範例）、`{{$file:base64:…}}`；文件區塊元件與腳本文件共用（`DocSection.tsx`）。Windows CI 發現：找 `{{$file:…}}` 時原本把請求轉成 JSON 文字再搜尋，Windows 路徑的反斜線被 JSON 變成兩個而對不上 → 改為逐一走訪請求中的字串（單元測試在 Windows 上驗證反斜線路徑）；E2E「Body 工具與類型同列」在 1024 寬的 CI 視窗會換行，改為有空間時才要求同列；E2E 結束時先關閉 App 再刪暫存資料夾（並重試），刪除失敗只警告，不再蓋掉真正失敗的檢查（Windows 上 App 還開著時會 EBUSY）
 5. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）
