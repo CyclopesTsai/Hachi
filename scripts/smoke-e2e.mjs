@@ -1336,6 +1336,21 @@ try {
   const pingEditor = page.getByTestId('request-editor')
   await page.getByTestId('url-input').fill('{{shopBase}}/echo')
   await pingEditor.getByRole('tab', { name: /^Scripts/ }).click()
+  // 可用的 API: a link next to the phase hint opens the docs, one tab per phase.
+  await page.getByTestId('script-docs-open').click()
+  const scriptDocs = page.getByTestId('script-docs')
+  await scriptDocs.waitFor()
+  assert.equal(
+    await scriptDocs.getByRole('tab', { name: 'Pre-request' }).getAttribute('aria-selected'),
+    'true'
+  )
+  await scriptDocs.getByText('hachi.request.headers.get(name)', { exact: false }).first().waitFor()
+  await scriptDocs.getByRole('tab', { name: 'Post-response' }).click()
+  await scriptDocs.getByText('hachi.test(name, fn)').waitFor()
+  assert.ok((await scriptDocs.getByTestId('script-doc-entry').count()) > 10, 'documented entries')
+  await page.screenshot({ path: path.join(shots, '26-script-docs.png') })
+  await page.keyboard.press('Escape')
+  await scriptDocs.waitFor({ state: 'hidden' })
   await page.locator('[data-testid="script-editor"] .cm-content').click()
   await page.keyboard.insertText(
     "hachi.variables.set('stamp', 'from-pre'); hachi.request.headers.set('X-Stamp', '{{stamp}}'); console.log('pre ran')"

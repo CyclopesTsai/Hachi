@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import {
   ASSERTION_OPERATOR_LABELS,
@@ -21,6 +21,7 @@ import { Button } from '@renderer/components/ui/button'
 import { NativeSelect } from '@renderer/components/ui/native-select'
 import { VariableInput } from '@renderer/components/variable-input'
 import { cn } from '@renderer/lib/utils'
+import { ScriptDocsDialog } from './ScriptDocsDialog'
 
 type Phase = 'preRequest' | 'postResponse'
 
@@ -28,75 +29,6 @@ const PHASES: { id: Phase; label: string }[] = [
   { id: 'preRequest', label: 'Pre-request' },
   { id: 'postResponse', label: 'Post-response' }
 ]
-
-const SNIPPETS: Record<Phase, [string, string][]> = {
-  preRequest: [
-    ['讀取變數', "hachi.variables.get('token')"],
-    ['設定暫存變數', "hachi.variables.set('ts', Date.now())"],
-    ['設定環境變數', "hachi.environment.set('requestedAt', new Date().toISOString())"],
-    ['修改 Header', "hachi.request.headers.set('X-Signature', sig)"],
-    [
-      'HMAC 簽章',
-      "const sig = CryptoJS.HmacSHA256(hachi.request.body ?? '', hachi.variables.get('secret')).toString()"
-    ]
-  ],
-  postResponse: [
-    ['測試狀態碼', "hachi.test('200 OK', () => hachi.expect(hachi.response.status).toBe(200))"],
-    ['讀取 JSON', 'const body = hachi.response.json()'],
-    ['存下 token', "hachi.variables.set('token', hachi.response.json().token)"],
-    ['Postman 寫法', "pm.test('ok', () => pm.response.to.have.status(200))"],
-    ['輸出到 Console', "console.log(hachi.response.headers.get('content-type'))"]
-  ]
-}
-
-function ScriptHelp({ phase }: { phase: Phase }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="text-xs text-muted-foreground">
-      <button
-        type="button"
-        className="flex items-center gap-1 hover:text-foreground"
-        onClick={() => setOpen(!open)}
-      >
-        {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        可用的 API
-      </button>
-      {open && (
-        <div className="mt-1.5 flex flex-col gap-1.5 rounded-md bg-muted/60 p-2">
-          <p>
-            <code>hachi.variables</code>（暫存變數，優先順序最高）、<code>hachi.environment</code>、
-            <code>hachi.collectionVariables</code>：<code>get / set / unset / has / toObject</code>
-            ；
-            {phase === 'preRequest' ? (
-              <>
-                <code>hachi.request</code>：
-                <code>method / url / body / headers.get·set·remove</code>
-                （修改後才替換變數並發送）。
-              </>
-            ) : (
-              <>
-                <code>hachi.response</code>：
-                <code>status / headers.get / time / size / text() / json()</code>。
-              </>
-            )}
-            <code>hachi.test(name, fn)</code> 搭配 <code>hachi.expect(x).toBe(…)</code>
-            ；也支援常用的 <code>pm.*</code>（Postman）、<code>CryptoJS</code>、
-            <code>btoa / atob</code>、<code>console.log</code>。
-            沙箱中沒有檔案、網路與計時器，每次最多執行 5 秒。
-          </p>
-          <ul className="flex flex-col gap-0.5 font-mono">
-            {SNIPPETS[phase].map(([label, code]) => (
-              <li key={label} className="break-all">
-                <span className="font-sans text-muted-foreground">{label}：</span>
-                <span className="text-foreground select-text">{code}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  )
-}
 
 export function ScriptsTab({
   scripts,
@@ -114,6 +46,7 @@ export function ScriptsTab({
   /** Extra controls above the editor (the collection's script order). */
   children?: ReactNode
 }) {
+  const [docsOpen, setDocsOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>(
     scripts.preRequest.trim() === '' && scripts.postResponse.trim() !== ''
       ? 'postResponse'
@@ -151,7 +84,16 @@ export function ScriptsTab({
               ? '發送前執行'
               : '收到回應、擷取變數之後執行（斷言在最後）'}
         </span>
+        <button
+          type="button"
+          className="text-xs text-primary underline-offset-2 hover:underline"
+          data-testid="script-docs-open"
+          onClick={() => setDocsOpen(true)}
+        >
+          可用的 API
+        </button>
       </div>
+      <ScriptDocsDialog open={docsOpen} onOpenChange={setDocsOpen} phase={phase} />
       {children}
       {inheritedFrom.length > 0 && (
         <p className="text-xs text-muted-foreground" data-testid="inherited-scripts">
@@ -159,7 +101,6 @@ export function ScriptsTab({
           設定）
         </p>
       )}
-      <ScriptHelp phase={phase} />
       <div className="min-h-0 flex-1 overflow-hidden rounded-md border" data-testid="script-editor">
         <CodeEditor
           key={phase}
