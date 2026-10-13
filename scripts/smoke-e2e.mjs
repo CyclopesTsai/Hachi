@@ -782,6 +782,18 @@ try {
     await page.keyboard.insertText(text)
   }
   const responseText = () => page.getByTestId('response-body').innerText()
+  // 可用的變數: a link right of 自動換行 lists variables, dynamic ones and $file.
+  const docsLink = page.getByTestId('variable-docs-open')
+  const wrapBox = await page.getByTestId('body-tools').getByText('自動換行').boundingBox()
+  const linkBox = await docsLink.boundingBox()
+  assert.ok(linkBox.x > wrapBox.x + wrapBox.width - 1, '可用的變數 right of 自動換行')
+  await docsLink.click()
+  const variableDocs = page.getByTestId('variable-docs')
+  await variableDocs.getByText('{{$file:base64:路徑}}', { exact: true }).waitFor()
+  await variableDocs.getByText('{{$guid}}', { exact: true }).waitFor()
+  await page.screenshot({ path: path.join(shots, '29-variable-docs.png') })
+  await page.keyboard.press('Escape')
+  await variableDocs.waitFor({ state: 'hidden' })
   // Inside the Workspace folder: read and sent as base64 right away.
   await setBody('{"img":"{{$file:base64:files/pixel.bin}}"}')
   await re.getByRole('button', { name: '發送' }).click()

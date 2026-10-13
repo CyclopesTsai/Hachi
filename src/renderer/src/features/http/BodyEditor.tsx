@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { FileUp, Wand2 } from 'lucide-react'
 import { VARIABLE_PATTERN } from '@shared/variables'
 import {
@@ -16,6 +17,7 @@ import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-sele
 import { unwrap } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
 import { useVariables } from '@renderer/lib/variables'
+import { VariableDocsDialog } from './VariableDocsDialog'
 
 const MODE_LABELS: Record<BodyMode, string> = {
   none: 'none',
@@ -94,6 +96,7 @@ export function BodyEditor({
   onChange: (body: HttpBody) => void
 }) {
   const [wrap, setWrap] = useWrapPreference('requestBodyWrap')
+  const [docsOpen, setDocsOpen] = useState(false)
   const variables = useVariables()
   const set = (patch: Partial<HttpBody>) => onChange({ ...body, ...patch })
   // `{{variables}}` may stand for numbers / objects, so check the JSON with them filled in.
@@ -161,8 +164,17 @@ export function BodyEditor({
             <CheckboxLabel checked={wrap} onChange={(e) => setWrap(e.target.checked)}>
               自動換行
             </CheckboxLabel>
+            <button
+              type="button"
+              className="text-xs text-primary underline-offset-2 hover:underline"
+              data-testid="variable-docs-open"
+              onClick={() => setDocsOpen(true)}
+            >
+              可用的變數
+            </button>
           </div>
         )}
+        <VariableDocsDialog open={docsOpen} onOpenChange={setDocsOpen} />
       </div>
 
       {body.mode === 'none' && <p className="text-sm text-muted-foreground">這個請求不帶 Body。</p>}
