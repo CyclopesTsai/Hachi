@@ -132,7 +132,12 @@ function Settings({
   const [delayText, setDelayText] = useState(String(f.delayMs))
 
   return (
-    <fieldset disabled={running} className="flex flex-col gap-4 p-4" data-testid="runner-settings">
+    // min-w-0: a fieldset is otherwise as wide as its widest content (the examples below).
+    <fieldset
+      disabled={running}
+      className="flex min-w-0 flex-col gap-4 p-4"
+      data-testid="runner-settings"
+    >
       <Field
         label={`請求（${requests.filter((r) => !excluded.has(r.id)).length} / ${requests.length}）`}
       >

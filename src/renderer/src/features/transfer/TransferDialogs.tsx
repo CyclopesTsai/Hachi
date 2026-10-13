@@ -123,7 +123,7 @@ function ExportForm({ collectionId }: { collectionId: string }) {
         <DialogTitle>匯出 Collection</DialogTitle>
         <DialogDescription className="truncate">{name}</DialogDescription>
       </DialogHeader>
-      <fieldset className="flex flex-col gap-1" data-testid="export-formats">
+      <fieldset className="flex min-w-0 flex-col gap-1" data-testid="export-formats">
         <legend className="sr-only">格式</legend>
         {(Object.keys(EXPORT_FORMAT_LABELS) as ExportFormat[]).map((f) => (
           <label

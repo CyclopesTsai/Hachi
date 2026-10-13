@@ -1430,6 +1430,12 @@ try {
   const dataExample = runnerView.getByTestId('runner-data-example')
   await dataExample.locator('summary').click()
   assert.ok((await dataExample.innerText()).includes('username,password'), 'data file example')
+  // The open examples must not widen the settings column (its inputs would be cut off).
+  const settingsFit = await runnerView.getByTestId('runner-settings').evaluate((el) => {
+    const pane = el.parentElement
+    return el.getBoundingClientRect().width <= pane.clientWidth + 0.5
+  })
+  assert.ok(settingsFit, 'runner settings fit their column with the examples open')
   // Ping has unsaved edits from the Phase 5b checks: the saved version runs.
   await runnerView.getByText('Runner 使用的是已儲存的版本').waitFor()
   await runnerView.getByLabel('執行次數').fill('3')
