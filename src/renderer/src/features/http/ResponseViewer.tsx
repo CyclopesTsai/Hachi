@@ -1,4 +1,12 @@
-import { AlertTriangle, Download, Eye, Loader2, Send } from 'lucide-react'
+import {
+  AlertTriangle,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Download,
+  Eye,
+  Loader2,
+  Send
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import {
   formatBytes,
@@ -16,6 +24,8 @@ import type { RequestTab } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useWrapPreference } from '@renderer/hooks/use-wrap-preference'
 import { testSummary } from '@shared/scripts'
+import { JsonTree } from './JsonTree'
+import { ALL_COLLAPSED, ALL_EXPANDED, type TreeExpansion } from './json-tree-expansion'
 import { ConsolePanel, TestsPanel } from './ScriptResults'
 import { TlsDiagnosisView } from './TlsDiagnosisView'
 
@@ -49,15 +59,23 @@ function languageFor(contentType: string): CodeLanguage {
   return 'text'
 }
 
-function prettyJson(text: string): string | null {
+/** The parsed body when it is JSON, whatever the Content-Type says. */
+function parseJson(text: string): { value: unknown } | null {
   try {
-    return JSON.stringify(JSON.parse(text), null, 2)
+    return { value: JSON.parse(text) as unknown }
   } catch {
     return null
   }
 }
 
-type BodyView = 'pretty' | 'raw' | 'preview'
+type BodyView = 'pretty' | 'raw' | 'tree' | 'preview'
+
+const VIEW_LABEL: Record<BodyView, string> = {
+  pretty: 'Pretty',
+  raw: 'Raw',
+  tree: 'Tree',
+  preview: 'Preview'
+}
 
 function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: string }) {
   const [wrap, setWrap] = useWrapPreference('responseBodyWrap')
@@ -65,15 +83,31 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
   const tabs = useTabsStore.getState()
   const showFullBody = (runId: string) => tabs.showFullBody(tabKey, runId)
   const downloadResponse = (runId: string) => tabs.downloadResponse(tabKey, runId)
+  // Every response starts in Pretty (decision 136).
   const [view, setView] = useState<BodyView>('pretty')
   const [busy, setBusy] = useState(false)
+  const [expansion, setExpansion] = useState<TreeExpansion>(ALL_EXPANDED)
 
   const text = result.body.kind === 'text' ? result.body.text : (fullBody ?? null)
   const isHtml = /html/i.test(result.contentType)
+  const parsed = useMemo(() => (text !== null ? parseJson(text) : null), [text])
+  const isTree = parsed !== null && parsed.value !== null && typeof parsed.value === 'object'
   const pretty = useMemo(
-    () => (text !== null && view === 'pretty' ? prettyJson(text) : null),
-    [text, view]
+    () => (parsed !== null && view === 'pretty' ? JSON.stringify(parsed.value, null, 2) : null),
+    [parsed, view]
   )
+  const views: BodyView[] = [
+    'pretty',
+    'raw',
+    ...(isTree ? ['tree' as const] : []),
+    ...(isHtml ? ['preview' as const] : [])
+  ]
+  const toggleNode = (path: string) =>
+    setExpansion((e) => {
+      const toggled = new Set(e.toggled)
+      if (!toggled.delete(path)) toggled.add(path)
+      return { base: e.base, toggled }
+    })
   const shown = view === 'pretty' && pretty !== null ? pretty : (text ?? '')
   const language: CodeLanguage =
     view === 'raw' ? 'text' : pretty !== null ? 'json' : languageFor(result.contentType)
@@ -93,7 +127,7 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
             role="radiogroup"
             aria-label="Body 檢視方式"
           >
-            {(['pretty', 'raw', ...(isHtml ? ['preview'] : [])] as BodyView[]).map((v) => (
+            {views.map((v) => (
               <button
                 key={v}
                 type="button"
@@ -107,12 +141,34 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                {v === 'pretty' ? 'Pretty' : v === 'raw' ? 'Raw' : 'Preview'}
+                {VIEW_LABEL[v]}
               </button>
             ))}
           </div>
         )}
         <div className="flex-1" />
+        {text !== null && view === 'tree' && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="json-expand-all"
+              onClick={() => setExpansion(ALL_EXPANDED)}
+            >
+              <ChevronsUpDown />
+              全部展開
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="json-collapse-all"
+              onClick={() => setExpansion(ALL_COLLAPSED)}
+            >
+              <ChevronsDownUp />
+              全部收合
+            </Button>
+          </>
+        )}
         {text !== null && view !== 'preview' && (
           <CheckboxLabel checked={wrap} onChange={(e) => setWrap(e.target.checked)}>
             自動換行
@@ -175,6 +231,8 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
             className="min-h-0 flex-1 rounded-md border bg-white"
             data-testid="html-preview"
           />
+        ) : view === 'tree' && parsed !== null ? (
+          <JsonTree value={parsed.value} expansion={expansion} onToggle={toggleNode} wrap={wrap} />
         ) : (
           <CodeEditor
             aria-label="Response Body"

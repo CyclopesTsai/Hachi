@@ -6,7 +6,7 @@
 ## 目前狀態
 
 - **目前階段**：原規格的 Phase 0–6 全部完成；之後依下方「待辦」逐項進行（每項先規劃、確認決策再實作）。由本機（macOS）的 Claude Code 桌面版開發
-- **目前版本**：**v0.7.0**（2026-10-13，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
+- **目前版本**：**v0.7.1**（2026-10-13，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
 - **最後更新**：2026-10-13
 
 ## Phase 進度
@@ -49,7 +49,7 @@
 - 移除 chokidar 檔案監聽；改為側欄「重新讀取」按鈕（整個 Workspace）與項目右鍵「重新讀取」（單一 Collection / 資料夾 / 請求，只重掃該子樹）
 - HTTP 發送引擎（main，`src/main/services/http/`）：undici；URL + Params、Headers / Auth 繼承（請求 > 資料夾 > Collection）、Body 五種模式（含 form-data 檔案）、timeout、取消、SSL 驗證開關、重新導向（次數上限在 Workspace 設定）、Proxy（none / system / custom + 排除清單 + 帳密）、解壓縮、100 MB 上限（含解壓後）、Set-Cookie 解析、回應暫存（最近 20 筆 / 300 MB）供「顯示」與「下載」
 - 請求編輯器：方法、URL（Params 不回寫 URL）、Params / Headers / Body / Auth / Settings 分頁；CodeMirror 6（JSON 格式化與錯誤提示、自動換行開關）；繼承的 Headers 與 Auth 以唯讀方式顯示來源
-- 回應檢視器：狀態碼、耗時、大小、重新導向次數；Body（Pretty / Raw / HTML Preview、自動換行開關、下載）、Headers、Cookies；超過 10 MB 顯示「顯示 / 下載」按鈕；網路錯誤分類顯示
+- 回應檢視器：狀態碼、耗時、大小、重新導向次數；Body（Pretty / Raw / JSON Tree / HTML Preview、自動換行開關、下載）、Headers、Cookies；超過 10 MB 顯示「顯示 / 下載」按鈕；網路錯誤分類顯示
 - Collection / 資料夾設定編輯器（共用 Headers、Auth）；Workspace 設定對話框（timeout、SSL、跟隨重新導向、最多次數）；App 設定對話框（Proxy，選單 Settings…）
 - 手動儲存：File → Save（CmdOrCtrl+S）與「儲存」按鈕；未儲存時樹上與編輯器顯示圓點；切換項目時詢問「儲存 / 不儲存 / 取消」；重新讀取時詢問是否放棄修改
 - 修正：zod `partial()` 會替未傳的欄位補預設值，導致切換一個「自動換行」會重設另一個 → IPC 改用不含預設值的 schema；每次載入文件重新建立編輯器，避免 Undo 跨請求
@@ -289,6 +289,7 @@
 | 133 | Mock Server                  | Workspace 的 `mocks/<名稱>.json`（可進 git），側欄「Mocks」分頁新增 / 改名 / 複製 / 刪除，可「從 Collection 建立」（每個請求的方法＋路徑一個路由，WebSocket 請求一個端點）。HTTP 路由依序比對（方法可為「任何」，路徑支援 `:id`、結尾 `*`），回應為**固定內容**（狀態碼、Headers、Body、延遲；不替換變數）；WebSocket 端點：連線時送出、依內容回覆（包含 / 完全相同 / 正規表示式，第一個符合的規則）、定時推送。預設只聽 127.0.0.1，可開「區網可連」；CORS 預設開。手動啟動 / 停止（啟動前先儲存），切換 Workspace / 結束 App 時停止；收到的請求即時列在「紀錄」（最多 500 筆）；分頁不記憶。不支援 HTTPS                                                                                                                                                                                          |
 | 134 | 檔案內容變數                 | `{{$file:base64:路徑}}`：送出時由 main 讀取檔案並換成 base64（只支援 base64，單檔上限 10 MB），可用在所有會替換變數的地方；路徑可為絕對路徑、`~` 開頭或相對於 Workspace 資料夾。Workspace 資料夾內的檔案一律可讀；**外部檔案要先允許**（第一次送出時詢問，只記在這台電腦 `app-config.json` 的 `fileAccess`，可在 Workspace 設定取消），避免匯入的 Collection 讀走例如 `~/.ssh` 的檔案。程式碼產生保留 `{{$file:…}}` 原樣；腳本沙箱仍不能讀檔                                                                                                                                                                                                                                                                                                                                                       |
 | 135 | 懸浮框直接改變數             | 滑鼠移到 `{{變數}}` 上（網址等單行欄位、CodeMirror 編輯器）顯示值與來源（環境「名稱」/ Collection / 暫存變數），**已存在的變數可直接修改**：Enter 或離開欄位儲存、Esc 取消，寫回它的來源（環境檔 / collection.json / 暫存）；機密變數預設遮住、按眼睛顯示，修改後仍只存在 `.hachi-secrets.json`。不存在的變數（紅色）、動態變數與 `$file` 只顯示說明、不能建立                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 136 | JSON 樹狀檢視                | 回應內容能解析成 JSON 物件或陣列時（不看 Content-Type），Body 的 Pretty / Raw 旁多一個「**Tree**」：物件與陣列可以逐一展開 / 收合（收合時顯示 `{…} 3 個 key`、`[…] 150 項`），一開始**全部展開**，工具列有「全部展開」「全部收合」（全部收合時根節點保持展開，看得到第一層的 key）；一個物件或陣列先顯示 100 項，其餘按「再顯示」；值的顏色用 `--code-*` token，跟隨「自動換行」。每個新回應都從 Pretty 開始（不記住上次的檢視）。不做搜尋、複製值 / 路徑                                                                                                                                                                                                                                                                                                                                          |
 
 ## 下一步
 
@@ -301,7 +302,7 @@
   - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
   - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
 - **v0.2.1 發佈**（2026-10-07）：Bruno YAML 與多個 Collection 匯入（決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
-- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）、**v0.7.0**（決策 134–135）：見下方「待辦」各項
+- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）、**v0.7.0**（決策 134–135）、**v0.7.1**（決策 136）：見下方「待辦」各項
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
 ## 待辦（使用者排定，2026-10-07）
@@ -329,6 +330,7 @@
    - **v0.6.5**（使用者要求）：編輯器的搜尋列（CodeMirror 內建）改用 Hachi 的配色與圓角、字級 12px，文字改中文（搜尋 / 下一個 / 上一個 / 取代 / 全部取代 / 關閉），拿掉「全部（選取所有符合）」按鈕與大小寫相符 / 規則運算式 / 全字相符三個選項（`code-theme.ts`）；之後依使用者要求換成自己的搜尋框（`search-panel.ts`）：像 Claude / VS Code 浮在編輯器右上角的卡片（圓角、陰影），一列是放大鏡＋搜尋欄、「3/12」計數（最多算到 1000，超過顯示「1000+」）、↑ ↓ ✕ 圖示按鈕；輸入時跳到最近的符合項目；可編輯的編輯器最左邊有箭頭，按下展開第二列（取代 / 全部取代）、再按收回，預設收合（參考 IntelliJ）；唯讀編輯器沒有箭頭。不再使用 CodeMirror 搜尋套件的 `.cm-search` 樣式（它的基本樣式會把關閉按鈕絕對定位）。另外原本程式碼引用了不存在的 `--popover` 顏色 token，改用 `--card`。Body 的「格式化」「自動換行」（Raw 的 Content-Type）移到 Body 類型那一列的右邊，編輯區變大。E2E 檢查文字、浮在右上角、按鈕不重疊、計數、展開 / 收合、字級、Body 工具同列，並截圖回應區（唯讀，只有搜尋）與請求 Body（可編輯，多了取代 / 全部取代；`25-search-request.png`），淺色、深色
    - **v0.7.0**（使用者要求）：Scripts 分頁原本展開式的「可用的 API」改成提示文字右邊的連結樣式按鈕，點擊開啟文件視窗（`ScriptDocsDialog.tsx`、內容在 `script-docs.ts`），Pre-request / Post-response 兩個頁籤（預設為正在編輯的那個），每個指令附說明與範例：修改請求 / 回應、測試、變數、送出其他請求與流程（sendRequest / runRequest / setNextRequest / sleep）、工具、Postman / Bruno 相容、限制。原本說明中「沒有網路與計時器、最多 5 秒」已過時，一併更正。E2E 開啟文件、切換頁籤並截圖（淺色、深色）
    - **v0.7.0 決策 134–135**：`{{$file:base64:…}}`（`src/main/services/http/file-variables.ts`、`FileTrustDialog.tsx`）、懸浮框改變數（`src/renderer/src/lib/variable-hover.ts`、IPC `variables:set`）。驗證：單元測試（路徑、信任、大小、格式、實際送出 base64）；E2E 新增 Workspace 內檔案直接送出、外部檔案允許後送出、懸浮框修改環境值並還原、機密值遮住 / 顯示 / Esc 不儲存、未定義變數唯讀（淺色、深色）。另修：腳本信任對話框「無法連網」的說明已過時。之後（使用者要求）：Body 工具列「自動換行」右邊加「可用的變數」連結，開啟文件視窗（`VariableDocsDialog.tsx`）：一般變數、所有動態變數（由 `DYNAMIC_VARIABLES` 產生，附範例）、`{{$file:base64:…}}`；文件區塊元件與腳本文件共用（`DocSection.tsx`）。Windows CI 發現：找 `{{$file:…}}` 時原本把請求轉成 JSON 文字再搜尋，Windows 路徑的反斜線被 JSON 變成兩個而對不上 → 改為逐一走訪請求中的字串（單元測試在 Windows 上驗證反斜線路徑）；E2E「Body 工具與類型同列」在 1024 寬的 CI 視窗會換行，改為有空間時才要求同列；E2E 結束時先關閉 App 再刪暫存資料夾（並重試），刪除失敗只警告，不再蓋掉真正失敗的檢查（Windows 上 App 還開著時會 EBUSY）
+   - **v0.7.1 決策 136**：回應 JSON 樹狀檢視（`src/renderer/src/features/http/JsonTree.tsx`）。驗證：E2E 用 text/plain 送出的 JSON 出現 Tree、巢狀節點全部展開、陣列 100 項後「再顯示」、單一節點收合、全部收合 / 全部展開、新回應回到 Pretty、HTML 回應沒有 Tree，截圖 `30-json-tree.png`（淺色、深色）。另修 E2E 清理：失敗時改為直接結束 App 程序（有未儲存分頁時正常關閉會停在詢問而卡住）
 5. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）

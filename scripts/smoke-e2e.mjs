@@ -55,6 +55,17 @@ const testServer = await new Promise((resolve) => {
       res.end(Buffer.alloc(BIG_SIZE, 97))
     } else if (url.pathname === '/slow') {
       setTimeout(() => res.end('late'), 5000)
+    } else if (url.pathname === '/tree') {
+      // JSON sent as text/plain: the Tree view goes by the content.
+      res.setHeader('content-type', 'text/plain')
+      res.end(
+        JSON.stringify({
+          ok: true,
+          user: { name: 'Hachi', tags: ['api', 'client'], address: null },
+          items: Array.from({ length: 150 }, (_, i) => i),
+          empty: {}
+        })
+      )
     } else if (url.pathname === '/html') {
       res.setHeader('content-type', 'text/html')
       res.end('<h1>Hello Hachi</h1><script>document.title = "ran"</script>')
@@ -148,8 +159,8 @@ if (process.platform === 'linux' && (process.getuid?.() === 0 || process.env.CI)
 
 /** The window of the latest launch, for a screenshot when a check fails. */
 let lastPage = null
-/** The latest launch, closed before cleaning up (Windows can't delete files it holds). */
-let lastApp = null
+/** Process of the latest launch, stopped before cleaning up (Windows can't delete files it holds). */
+let lastProcess = null
 
 async function launch() {
   const app = await electron.launch({
@@ -185,7 +196,7 @@ async function launch() {
     await page.emulateMedia({ colorScheme: process.env.SMOKE_COLOR_SCHEME })
   }
   lastPage = page
-  lastApp = app
+  lastProcess = app.process()
   return { app, page }
 }
 
@@ -898,7 +909,48 @@ try {
   await page.getByTestId('response-error').getByText('已取消請求').waitFor()
   step('a running request can be cancelled (button only, no keyboard shortcut)')
 
+  await sendTo('/tree')
+  const bodyViews = page.getByRole('radiogroup', { name: 'Body 檢視方式' })
+  await bodyViews.getByRole('radio', { name: 'Tree' }).click()
+  const tree = page.getByTestId('json-tree')
+  const treeNode = (p) => tree.locator(`[data-testid="json-node"][data-path="${p}"]`)
+  // Everything starts open; arrays show 100 items at a time.
+  assert.equal(await treeNode('user').getAttribute('aria-expanded'), 'true')
+  assert.equal(await treeNode('user.name').innerText(), '"name": "Hachi",')
+  assert.equal(await treeNode('user.address').innerText(), '"address": null')
+  assert.equal(await tree.locator('[data-path^="items["]').count(), 100)
+  await tree.getByRole('button', { name: '再顯示 50 項（共 150 項）' }).click()
+  assert.equal(await tree.locator('[data-path^="items["]').count(), 150)
+  await tree.getByRole('button', { name: '收合 items', exact: true }).click()
+  assert.equal(await treeNode('items').getAttribute('aria-expanded'), 'false')
+  assert.equal(await tree.locator('[data-path^="items["]').count(), 0)
+  assert.ok((await treeNode('items').innerText()).includes('[…] 150 項'))
+  await page.screenshot({ path: path.join(shots, '30-json-tree.png') })
+  await page.getByTestId('json-collapse-all').click()
+  assert.equal(await treeNode('user').getAttribute('aria-expanded'), 'false')
+  assert.ok(await treeNode('ok').isVisible(), 'root keys stay visible')
+  await page.getByTestId('json-expand-all').click()
+  assert.equal(await treeNode('user').getAttribute('aria-expanded'), 'true')
+  assert.equal(await treeNode('items').getAttribute('aria-expanded'), 'true')
+  await tree
+    .getByRole('button', { name: '展開 user', exact: true })
+    .count()
+    .then((n) => assert.equal(n, 0))
+  await tree.getByRole('button', { name: '收合 user', exact: true }).click()
+  assert.equal(await treeNode('user.name').count(), 0)
+  // A new response starts in Pretty again.
+  await sendButton().click()
+  await waitUntil(
+    async () =>
+      (await bodyViews.getByRole('radio', { name: 'Pretty' }).getAttribute('aria-checked')) ===
+      'true',
+    'Pretty after a new response'
+  )
+  await page.getByTestId('response-body').waitFor()
+  step('JSON responses (even text/plain) have a Tree view: open / close nodes, 全部展開 / 全部收合')
+
   await sendTo('/html')
+  assert.equal(await bodyViews.getByRole('radio', { name: 'Tree' }).count(), 0, 'no Tree for HTML')
   await page.getByRole('radio', { name: 'Preview' }).click()
   assert.equal(await page.getByTestId('html-preview').getAttribute('sandbox'), '')
   await page.getByRole('radio', { name: 'Pretty' }).click()
@@ -2462,7 +2514,13 @@ try {
   testServer.close()
   brokenChainServer.close()
   wsServer.close()
-  await lastApp?.close().catch(() => undefined)
+  // Killed, not closed: unsaved tabs would make a close wait for the save prompt.
+  const proc = lastProcess
+  if (proc && proc.exitCode === null && proc.signalCode === null) {
+    const exited = new Promise((resolve) => proc.once('exit', resolve))
+    proc.kill()
+    await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))])
+  }
   // A cleanup failure must not hide the error of the check that failed.
   await rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }).catch((error) =>
     console.warn(`Could not remove ${tmp}: ${error.message}`)
