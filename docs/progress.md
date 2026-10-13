@@ -320,6 +320,7 @@
    - 130：Runner「結束條件：持續時間」、匯出 HTML 報告（`runner-report.ts`）
    - 驗證：`npm run verify`（單元測試 509 個；Digest 用 RFC 2617 / 7616 範例、AWS 用官方 test suite 向量、OAuth2 用本機 Callback 的完整流程、Cookie Jar、Runner 持續時間 / 報告 / setNextRequest）；E2E 新增 Collection 腳本＋await sendRequest、OAuth 2.0 取得 Token 並送出、Cookies 對話框、Runner HTML 報告與持續時間模式、腳本總時間設定（淺色、深色都通過）
 4. **決策 131–133 ✅（2026-10-12，**v0.6.0 發佈**）**：改名全選、TLS 憑證鏈診斷（`src/main/services/http/tls-diagnosis.ts`、`TlsDiagnosisView.tsx`）、Mock Server（`src/main/services/mock/`、`src/renderer/src/features/mock/`）。驗證：單元測試 526 個（三層測試憑證鏈 fixture 驗證斷鏈 / 完整 / 根不受信任 / 自簽 / 網域 / 日期；Mock 路由比對、HTTP / CORS / WS 行為、檔案操作），E2E 新增改名全選、TLS 斷鏈診斷、從 Collection 建立 Mock 並以 HTTP / WebSocket 實際連線、側欄標題列寬度（淺色、深色都通過）。另修：Node 錯誤訊息中「--use-system-ca」的提示不再顯示（不適用於 Hachi）
+   - v0.6.0 之後修正（使用者回報）：Collection 名稱很長時「新增 Mock Server」對話框的欄位被撐出對話框 → 所有表單格線的欄改為 `minmax(0,1fr)`、下拉選單不超過容器寬度；E2E 以超長選項檢查欄位留在對話框內
 5. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）

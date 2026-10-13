@@ -12,7 +12,7 @@ const fromTri = (v: TriState): boolean | null => (v === 'default' ? null : v ===
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[9rem_1fr] items-start gap-3">
+    <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-start gap-3">
       <Label className="pt-2 text-muted-foreground">{label}</Label>
       <div className="flex min-h-8 flex-wrap items-center gap-3">{children}</div>
     </div>

@@ -45,7 +45,7 @@ function SaveAsForm({ tab }: { tab: RequestTab }) {
         <DialogTitle>儲存請求</DialogTitle>
         <DialogDescription>選擇要放進哪個 Collection / 資料夾。</DialogDescription>
       </DialogHeader>
-      <div className="grid grid-cols-[5rem_1fr] items-center gap-3">
+      <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3">
         <Label htmlFor="save-as-name">名稱</Label>
         <Input
           id="save-as-name"

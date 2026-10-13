@@ -138,7 +138,7 @@ function CommitDetail() {
             {body.join('\n').trim()}
           </p>
         )}
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
           <dt className="text-muted-foreground">作者</dt>
           <dd className="truncate">
             {detail.author} &lt;{detail.email}&gt;

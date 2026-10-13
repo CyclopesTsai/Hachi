@@ -51,7 +51,7 @@ function CertCard({
         {cert.badSignature && <Badge tone="bad">簽章對不上</Badge>}
         {hostProblem && <Badge tone="bad">網域不符</Badge>}
       </div>
-      <dl className="mt-1.5 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-0.5 text-muted-foreground select-text">
+      <dl className="mt-1.5 grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-muted-foreground select-text">
         <dt>簽發者</dt>
         <dd className="break-all text-foreground">{cert.issuerName}</dd>
         <dt>有效期間</dt>

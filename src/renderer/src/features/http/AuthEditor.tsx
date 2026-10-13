@@ -71,7 +71,7 @@ const defaultsFor = (type: Auth['type']): Auth => authSchema.parse({ type })
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[7rem_1fr] items-center gap-3">
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3">
       <Label className="text-muted-foreground">{label}</Label>
       {children}
     </div>

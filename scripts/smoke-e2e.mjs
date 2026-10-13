@@ -1536,6 +1536,20 @@ try {
   await page.getByTestId('sidebar-mocks').click()
   await page.getByTestId('mock-add').click()
   const mockDialog = page.getByTestId('mock-name-dialog')
+  // A very long Collection name must not push the fields out of the dialog.
+  const fitsDialog = await mockDialog.evaluate((dialog) => {
+    const select = dialog.querySelector('select')
+    const option = document.createElement('option')
+    option.textContent = `從 Collection「${'很長的名稱'.repeat(30)}」建立`
+    select.append(option)
+    const box = dialog.getBoundingClientRect()
+    const inside = [...dialog.querySelectorAll('input, select, button[type="submit"]')].every(
+      (el) => el.getBoundingClientRect().right <= box.right + 0.5
+    )
+    option.remove()
+    return inside
+  })
+  assert.ok(fitsDialog, 'mock dialog fields stay inside the dialog')
   await mockDialog.getByLabel('路由').selectOption({ label: '從 Collection「Shop」建立' })
   assert.equal(await mockDialog.getByLabel('名稱').inputValue(), 'Shop Mock')
   await mockDialog.getByRole('button', { name: '建立' }).click()

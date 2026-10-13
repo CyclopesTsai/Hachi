@@ -43,7 +43,7 @@ function Row({
   children: React.ReactNode
 }) {
   return (
-    <div className="grid grid-cols-[8rem_1fr] items-center gap-3">
+    <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3">
       <Label htmlFor={htmlFor} className="text-muted-foreground">
         {label}
       </Label>

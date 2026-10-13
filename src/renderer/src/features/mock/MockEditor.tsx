@@ -82,7 +82,7 @@ function RowButtons({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[5.5rem_1fr] items-center gap-2">
+    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
     </div>
@@ -101,7 +101,7 @@ function RouteDetail({ route, set }: { route: MockRoute; set: (r: MockRoute) => 
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3"
       data-testid="mock-route-detail"
     >
-      <div className="grid grid-cols-[7rem_1fr] gap-2">
+      <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
         <NativeSelect
           aria-label="方法"
           value={route.method}

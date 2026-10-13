@@ -253,7 +253,7 @@ function CreateForm({ onDone }: { onDone: () => void }) {
         <DialogTitle>新增 Mock Server</DialogTitle>
         <DialogDescription>存成 Workspace 的 mocks/ 資料夾中的檔案，可以進 git。</DialogDescription>
       </DialogHeader>
-      <div className="grid grid-cols-[6rem_1fr] items-center gap-3">
+      <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
         <NameField value={name} onChange={setName} />
         <Label htmlFor="mock-source">路由</Label>
         <NativeSelect
@@ -300,7 +300,7 @@ function RenameForm({ mock, onDone }: { mock: MockSummary; onDone: () => void })
       <DialogHeader>
         <DialogTitle>重新命名 Mock Server</DialogTitle>
       </DialogHeader>
-      <div className="grid grid-cols-[6rem_1fr] items-center gap-3">
+      <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
         <NameField value={name} onChange={setName} />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
