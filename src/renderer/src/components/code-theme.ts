@@ -93,17 +93,54 @@ export const editorTheme = EditorView.theme({
   },
   '.cm-panels': { backgroundColor: 'var(--card)', color: 'var(--card-foreground)' },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border)' },
-  // Search panel: Hachi's look, compact (12px) so it does not crowd the editor.
+  // Search panel (search-panel.ts): Hachi's look, compact (12px).
   '.cm-panel.cm-search': {
+    position: 'relative',
     display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: '4px 6px',
-    padding: '6px 28px 6px 8px',
+    alignItems: 'flex-start',
+    gap: '6px',
+    padding: '6px 32px 6px 8px',
     fontFamily: 'var(--font-sans)',
     fontSize: '12px'
   },
-  '.cm-panel.cm-search br': { flexBasis: '100%', height: '0', content: '""' },
+  '.cm-hachi-search-rows': {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    flex: '1',
+    minWidth: '0'
+  },
+  '.cm-hachi-search-row': { display: 'flex', alignItems: 'center', gap: '6px' },
+  '.cm-hachi-search-row[hidden]': { display: 'none' },
+  '.cm-hachi-search-field': { position: 'relative', display: 'inline-flex' },
+  '.cm-hachi-search-field svg': {
+    position: 'absolute',
+    left: '7px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: 'var(--muted-foreground)',
+    pointerEvents: 'none'
+  },
+  '.cm-search .cm-hachi-search-field .cm-textfield': { paddingLeft: '24px' },
+  '.cm-hachi-search-toggle': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: '0',
+    width: '24px',
+    height: '24px',
+    padding: '0',
+    color: 'var(--muted-foreground)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '6px'
+  },
+  '.cm-hachi-search-toggle:hover': {
+    color: 'var(--foreground)',
+    backgroundColor: 'var(--accent)'
+  },
+  '.cm-hachi-search-toggle svg': { transition: 'transform 120ms ease' },
+  '.cm-hachi-search-expanded .cm-hachi-search-toggle svg': { transform: 'rotate(90deg)' },
   '.cm-search .cm-textfield': {
     height: '24px',
     width: '13rem',
@@ -136,10 +173,6 @@ export const editorTheme = EditorView.theme({
   },
   '.cm-search .cm-button:hover': { backgroundColor: 'var(--accent)' },
   '.cm-search .cm-button:active': { backgroundImage: 'none' },
-  // "all" (select every match) is left out.
-  '.cm-search .cm-button[name="select"]': { display: 'none' },
-  // The match case / regexp / by word options are not offered either.
-  '.cm-search label': { display: 'none' },
   '.cm-search button[name="close"]': {
     position: 'absolute',
     top: '6px',

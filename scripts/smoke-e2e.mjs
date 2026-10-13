@@ -652,27 +652,31 @@ try {
   await page.keyboard.press('ControlOrMeta+f')
   const searchPanel = page.getByTestId('response-body').locator('.cm-search')
   await searchPanel.waitFor()
-  // Hachi's look and texts; no "all" button and no match options (read-only: no replace).
-  assert.deepEqual(
-    await searchPanel.evaluate((el) => {
-      const visible = (q) =>
-        [...el.querySelectorAll(q)].filter((n) => getComputedStyle(n).display !== 'none')
-      return {
-        placeholder: el.querySelector('input[name="search"]').placeholder,
-        buttons: visible('.cm-button').map((b) => b.textContent),
-        options: visible('label').length,
-        replace: !!el.querySelector('input[name="replace"]'),
-        fontSize: getComputedStyle(el.querySelector('.cm-button')).fontSize
-      }
-    }),
-    {
-      placeholder: '搜尋',
-      buttons: ['下一個', '上一個'],
-      options: 0,
-      replace: false,
-      fontSize: '12px'
-    }
-  )
+  // Hachi's panel: magnifier, 下一個 / 上一個; read-only, so no replace arrow.
+  const searchState = (panel) =>
+    panel.evaluate((el) => ({
+      placeholder: el.querySelector('input[name="search"]').placeholder,
+      // The icon sits left of the text, not on top of it.
+      magnifier: (() => {
+        const svg = el.querySelector('.cm-hachi-search-field svg')
+        const input = el.querySelector('input[name="search"]')
+        if (!svg) return false
+        const pad = parseFloat(getComputedStyle(input).paddingLeft)
+        return svg.getBoundingClientRect().right <= input.getBoundingClientRect().left + pad
+      })(),
+      buttons: [...el.querySelectorAll('.cm-button')]
+        .filter((b) => b.checkVisibility())
+        .map((b) => b.textContent),
+      toggle: el.querySelector('button[name="toggle"]')?.getAttribute('aria-expanded') ?? null,
+      fontSize: getComputedStyle(el.querySelector('.cm-button')).fontSize
+    }))
+  assert.deepEqual(await searchState(searchPanel), {
+    placeholder: '搜尋',
+    magnifier: true,
+    buttons: ['下一個', '上一個'],
+    toggle: null,
+    fontSize: '12px'
+  })
   await page.keyboard.type('method')
   await page.screenshot({ path: path.join(shots, '24-search.png') })
   await page.keyboard.press('Escape')
@@ -684,17 +688,29 @@ try {
   await page.keyboard.press('ControlOrMeta+f')
   const requestSearch = bodyJson.locator('.cm-search')
   await requestSearch.waitFor()
-  assert.deepEqual(
-    await requestSearch.evaluate((el) => ({
-      buttons: [...el.querySelectorAll('.cm-button')]
-        .filter((b) => getComputedStyle(b).display !== 'none')
-        .map((b) => b.textContent),
-      replace: el.querySelector('input[name="replace"]')?.placeholder
-    })),
-    { buttons: ['下一個', '上一個', '取代', '全部取代'], replace: '取代' }
-  )
+  // Editable: collapsed at first; the arrow opens the replace row and closes it again.
+  assert.deepEqual(await searchState(requestSearch), {
+    placeholder: '搜尋',
+    magnifier: true,
+    buttons: ['下一個', '上一個'],
+    toggle: 'false',
+    fontSize: '12px'
+  })
+  const replaceToggle = requestSearch.locator('button[name="toggle"]')
+  await replaceToggle.click()
+  assert.deepEqual((await searchState(requestSearch)).buttons, [
+    '下一個',
+    '上一個',
+    '取代',
+    '全部取代'
+  ])
+  assert.equal(await replaceToggle.getAttribute('aria-expanded'), 'true')
+  await requestSearch.locator('input[name="search"]').click()
   await page.keyboard.type('n')
   await page.screenshot({ path: path.join(shots, '25-search-request.png') })
+  await replaceToggle.click()
+  assert.deepEqual((await searchState(requestSearch)).buttons, ['下一個', '上一個'])
+  await requestSearch.locator('input[name="search"]').click()
   await page.keyboard.press('Escape')
   await re.getByRole('tab', { name: 'Auth' }).click()
   for (const expected of [

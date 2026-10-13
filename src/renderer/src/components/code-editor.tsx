@@ -40,6 +40,7 @@ import {
   languageExtension,
   type CodeLanguage
 } from './code-theme'
+import { hachiSearch } from './search-panel'
 
 export type { CodeLanguage } from './code-theme'
 import { findVariableTokens, type VariableMap } from '@shared/variables'
@@ -68,6 +69,7 @@ const editorSetup: Extension = [
   crosshairCursor(),
   highlightActiveLine(),
   highlightSelectionMatches(),
+  hachiSearch,
   keymap.of([
     ...closeBracketsKeymap,
     ...defaultKeymap,
