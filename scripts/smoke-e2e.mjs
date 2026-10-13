@@ -676,6 +676,27 @@ try {
   await page.keyboard.type('method')
   await page.screenshot({ path: path.join(shots, '24-search.png') })
   await page.keyboard.press('Escape')
+  // An editable editor (the request body) also gets the replace row.
+  // The first Body tab is the request's (the response viewer has one too).
+  await re.getByRole('tab', { name: /^Body/ }).first().click()
+  const bodyJson = page.getByTestId('body-json')
+  await bodyJson.locator('.cm-content').click()
+  await page.keyboard.press('ControlOrMeta+f')
+  const requestSearch = bodyJson.locator('.cm-search')
+  await requestSearch.waitFor()
+  assert.deepEqual(
+    await requestSearch.evaluate((el) => ({
+      buttons: [...el.querySelectorAll('.cm-button')]
+        .filter((b) => getComputedStyle(b).display !== 'none')
+        .map((b) => b.textContent),
+      replace: el.querySelector('input[name="replace"]')?.placeholder
+    })),
+    { buttons: ['下一個', '上一個', '取代', '全部取代'], replace: '取代' }
+  )
+  await page.keyboard.type('n')
+  await page.screenshot({ path: path.join(shots, '25-search-request.png') })
+  await page.keyboard.press('Escape')
+  await re.getByRole('tab', { name: 'Auth' }).click()
   for (const expected of [
     '"method": "POST"',
     '/echo?q=1',
