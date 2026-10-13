@@ -81,6 +81,11 @@ export const scriptSettingsSchema = z.object({
 })
 export type ScriptSettings = z.infer<typeof scriptSettingsSchema>
 
+/** Workspaces allowed to read files outside their folder with {{$file:…}} (decision 134). */
+export const fileAccessSettingsSchema = z.object({
+  trustedWorkspaces: z.array(z.string().min(1)).max(1000).default([])
+})
+
 export const appConfigSchema = z.object({
   version: z.literal(APP_CONFIG_VERSION),
   theme: themeSchema.default('system'),
@@ -91,7 +96,8 @@ export const appConfigSchema = z.object({
   ui: uiSettingsSchema.prefault({}),
   history: historySettingsSchema.prefault({}),
   websocket: websocketSettingsSchema.prefault({}),
-  scripts: scriptSettingsSchema.prefault({})
+  scripts: scriptSettingsSchema.prefault({}),
+  fileAccess: fileAccessSettingsSchema.prefault({})
 })
 export type AppConfig = z.infer<typeof appConfigSchema>
 

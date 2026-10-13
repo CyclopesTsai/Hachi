@@ -128,6 +128,18 @@ export class ConfigService {
     return this.get().scripts.trustedWorkspaces.includes(workspacePath)
   }
 
+  /** Lets (or stops letting) a Workspace read files outside its folder (decision 134). */
+  setFileTrust(workspacePath: string, trusted: boolean): Promise<AppConfig> {
+    return this.update((c) => {
+      const others = c.fileAccess.trustedWorkspaces.filter((p) => p !== workspacePath)
+      c.fileAccess = { trustedWorkspaces: trusted ? [...others, workspacePath] : others }
+    })
+  }
+
+  isFileTrusted(workspacePath: string): boolean {
+    return this.get().fileAccess.trustedWorkspaces.includes(workspacePath)
+  }
+
   setWindowState(window: WindowState): Promise<AppConfig> {
     return this.update((c) => {
       c.window = window

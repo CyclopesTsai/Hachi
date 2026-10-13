@@ -157,7 +157,11 @@ async function bootstrap(): Promise<void> {
   const http = new HttpService({
     ...requestDeps,
     openBrowser: (url) => shell.openExternal(url),
-    cookieJar: () => cookies.current()
+    cookieJar: () => cookies.current(),
+    fileAccess: () => {
+      const ws = workspaces.getCurrent()
+      return { root: ws?.path ?? null, trustedOutside: !!ws && config.isFileTrusted(ws.path) }
+    }
   })
   const transfer = new TransferService(collections, environments, loadRedoc)
   // git asks for credentials through a dialog (decision 113). The helper runs this
@@ -460,6 +464,7 @@ async function bootstrap(): Promise<void> {
       gitPrompts.delete(id)
     },
     runtime,
+    variablesChanged,
     runner,
     cookies,
     mocks,

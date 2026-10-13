@@ -43,7 +43,8 @@ describe('ConfigService', () => {
       ui: { requestBodyWrap: false, responseBodyWrap: false, gitChangesTree: true },
       history: { maxEntries: 200 },
       websocket: { messageLimit: 100 },
-      scripts: { trustedWorkspaces: [] }
+      scripts: { trustedWorkspaces: [] },
+      fileAccess: { trustedWorkspaces: [] }
     })
     expect(await readDisk()).toEqual(config)
   })

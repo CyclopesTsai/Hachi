@@ -117,6 +117,7 @@ export const inputSchemas = {
   [INVOKE.workspaceGetSettings]: noInput,
   [INVOKE.workspaceSaveSettings]: workspaceSettingsSchema,
   [INVOKE.workspaceSetScriptTrust]: z.strictObject({ trusted: z.boolean() }),
+  [INVOKE.workspaceSetFileTrust]: z.strictObject({ trusted: z.boolean() }),
   [INVOKE.runnerStart]: z.strictObject({
     runId: runIdSchema,
     config: z.strictObject({
@@ -155,6 +156,13 @@ export const inputSchemas = {
   [INVOKE.runtimeList]: noInput,
   [INVOKE.runtimeDelete]: z.strictObject({ name: z.string().min(1).max(200) }),
   [INVOKE.runtimeClear]: noInput,
+  [INVOKE.variablesSet]: z.strictObject({
+    scope: z.enum(['runtime', 'environment', 'collection']),
+    /** Environment / Collection id (null for runtime variables). */
+    id: itemIdSchema.nullable(),
+    name: z.string().trim().min(1).max(1000),
+    value: z.string().max(10 * 1024 * 1024)
+  }),
   [INVOKE.dialogSelectDirectory]: z.strictObject({
     title: z.string().max(200).optional(),
     defaultPath: absolutePathSchema.optional()

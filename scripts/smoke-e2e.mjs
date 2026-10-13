@@ -309,6 +309,7 @@ try {
       'session',
       'transfer',
       'tree',
+      'variables',
       'workspace',
       'ws'
     ],
@@ -323,6 +324,7 @@ try {
       'removeRecent',
       'rename',
       'saveSettings',
+      'setFileTrust',
       'setScriptTrust'
     ]
   })
@@ -768,6 +770,41 @@ try {
   await page.screenshot({ path: path.join(shots, '6-request-editor.png') })
   step('send: request runs in main with params, inherited header / auth and JSON body')
 
+  // ---- Decision 134: {{$file:base64:…}} ----
+  await mkdir(path.join(wsDir, 'files'), { recursive: true })
+  await writeFile(path.join(wsDir, 'files', 'pixel.bin'), Buffer.from([0, 1, 2, 250, 255]))
+  const outsideFile = path.join(tmp, 'outside.txt')
+  await writeFile(outsideFile, 'outside')
+  await re.getByRole('tab', { name: /^Body/ }).first().click()
+  const setBody = async (text) => {
+    await page.getByTestId('body-json').locator('.cm-content').click()
+    await page.keyboard.press('ControlOrMeta+a')
+    await page.keyboard.insertText(text)
+  }
+  const responseText = () => page.getByTestId('response-body').innerText()
+  // Inside the Workspace folder: read and sent as base64 right away.
+  await setBody('{"img":"{{$file:base64:files/pixel.bin}}"}')
+  await re.getByRole('button', { name: '發送' }).click()
+  await waitUntil(async () => (await responseText()).includes('AAEC+v8='), 'file sent as base64')
+  // Outside it: asked once, then sent again.
+  await setBody(`{"out":"{{$file:base64:${outsideFile}}}"}`)
+  await re.getByRole('button', { name: '發送' }).click()
+  const fileTrust = page.getByTestId('file-trust-dialog')
+  await fileTrust.waitFor()
+  assert.ok((await fileTrust.innerText()).includes('outside.txt'), 'the outside file is listed')
+  await page.screenshot({ path: path.join(shots, '27-file-trust.png') })
+  await fileTrust.getByRole('button', { name: '允許並送出' }).click()
+  await waitUntil(
+    async () => (await responseText()).includes(Buffer.from('outside').toString('base64')),
+    'outside file sent after allowing'
+  )
+  assert.deepEqual((await readJson(path.join(userData, 'app-config.json'))).fileAccess, {
+    trustedWorkspaces: [wsDir]
+  })
+  await setBody('{"hello":"hachi"}')
+  await re.getByRole('tab', { name: 'Auth' }).click()
+  step('{{$file:base64:…}}: Workspace files sent as base64; files outside it after allowing once')
+
   assert.equal(await t.row('Get Users').getByLabel('有未儲存的修改').count(), 1)
   const tabByTitle = (title) => page.locator(`[data-testid="tab"][data-title="${title}"]`)
   await t.row('Live Feed').click()
@@ -1005,6 +1042,56 @@ try {
   assert.ok((await page.getByTestId('unresolved-variables').innerText()).includes('{{missing}}'))
   step(
     'unsaved "+" tab: {{env}} / secret / dynamic variables resolved in main; missing ones highlighted and reported'
+  )
+
+  // ---- Decision 135: hovering a variable shows its value, editable in place ----
+  const devFile = path.join(wsDir, 'environments', 'dev.json')
+  const devValue = async (key) =>
+    (await readJson(devFile)).variables.find((v) => v.key === key)?.value
+  const hoverVariable = async (container, name) => {
+    const box = await container.locator(`[data-name="${name}"]`).first().boundingBox()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.move(box.x + box.width / 2 + 1, box.y + box.height / 2)
+    const card = page.locator(`[data-testid="variable-card"][data-name="${name}"]`)
+    await card.waitFor()
+    return card
+  }
+  const originalBase = await devValue('baseUrl')
+  let card = await hoverVariable(urlBox, 'baseUrl')
+  assert.ok((await card.innerText()).includes('環境「dev」'), 'source shown')
+  const valueField = card.getByLabel('baseUrl 的值')
+  assert.equal(await valueField.inputValue(), originalBase)
+  await page.screenshot({ path: path.join(shots, '28-variable-hover.png') })
+  await valueField.fill('http://changed.invalid')
+  await valueField.press('Enter')
+  await card.waitFor({ state: 'hidden' })
+  await waitUntil(async () => (await devValue('baseUrl')) === 'http://changed.invalid', 'saved')
+  card = await hoverVariable(urlBox, 'baseUrl')
+  await card.getByLabel('baseUrl 的值').fill(originalBase)
+  await card.getByLabel('baseUrl 的值').press('Enter')
+  await waitUntil(async () => (await devValue('baseUrl')) === originalBase, 'restored')
+  // Secrets are masked until the eye is pressed; Esc leaves the value alone.
+  await draftEditor
+    .getByRole('tab', { name: /Headers/ })
+    .first()
+    .click()
+  card = await hoverVariable(draftEditor.getByTestId('headers-table'), 'token')
+  const secretField = card.getByLabel('token 的值')
+  assert.equal(await secretField.getAttribute('type'), 'password')
+  await card.getByRole('button', { name: '顯示值' }).click()
+  assert.equal(await secretField.getAttribute('type'), 'text')
+  assert.equal(await secretField.inputValue(), 's3cret-value')
+  await secretField.fill('not saved')
+  await secretField.press('Escape')
+  await card.waitFor({ state: 'hidden' })
+  // Unknown variables: only a note, nothing to edit.
+  card = await hoverVariable(urlBox, 'missing')
+  assert.ok((await card.innerText()).includes('找不到這個變數'))
+  assert.equal(await card.locator('input').count(), 0)
+  await page.mouse.move(5, 5)
+  await card.waitFor({ state: 'hidden' })
+  step(
+    'hovering {{variables}}: value and source, edited in place (secrets masked); unknown ones read-only'
   )
 
   await draftEditor.getByRole('button', { name: '儲存到…' }).click()

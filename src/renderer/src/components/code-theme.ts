@@ -208,8 +208,7 @@ export const editorTheme = EditorView.theme({
     color: 'var(--card-foreground)',
     border: '1px solid var(--border)',
     borderRadius: '6px'
-  },
-  '.cm-hachi-var-tip': { padding: '4px 8px', fontFamily: 'var(--font-mono)', fontSize: '11px' }
+  }
 })
 
 /** Texts of CodeMirror's own panels (search, go to line) in Chinese. */

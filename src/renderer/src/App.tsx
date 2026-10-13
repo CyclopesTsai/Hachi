@@ -10,6 +10,7 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 import { UnsavedChangesDialog } from '@renderer/features/http/UnsavedChangesDialog'
+import { FileTrustDialog } from '@renderer/features/http/FileTrustDialog'
 import { ScriptTrustDialog } from '@renderer/features/http/ScriptTrustDialog'
 import { WelcomeScreen } from '@renderer/features/onboarding/WelcomeScreen'
 import { AppSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
@@ -257,6 +258,7 @@ export function App() {
       <UnsavedChangesDialog />
       <SaveAsDialog />
       <ScriptTrustDialog />
+      <FileTrustDialog />
       <ShortcutsDialog />
       <CurlImportDialog />
       <ExportDialog />

@@ -25,7 +25,6 @@ import {
   highlightActiveLine,
   highlightActiveLineGutter,
   highlightSpecialChars,
-  hoverTooltip,
   keymap,
   lineNumbers,
   rectangularSelection,
@@ -45,6 +44,7 @@ import { hachiSearch } from './search-panel'
 export type { CodeLanguage } from './code-theme'
 import { findVariableTokens, type VariableMap } from '@shared/variables'
 import { cn } from '@renderer/lib/utils'
+import { attachVariableHover } from '@renderer/lib/variable-hover'
 import { describeVariable } from '@renderer/lib/variables'
 
 /**
@@ -105,27 +105,45 @@ function variableExtension(map: VariableMap | undefined): Extension {
     },
     { decorations: (v) => v.decorations }
   )
-  const tooltip = hoverTooltip((view, pos) => {
-    const line = view.state.doc.lineAt(pos)
-    for (const token of findVariableTokens(line.text)) {
-      const from = line.from + token.from
-      const to = line.from + token.to
-      if (pos < from || pos > to) continue
-      return {
-        pos: from,
-        end: to,
-        above: true,
-        create: () => {
-          const dom = document.createElement('div')
-          dom.className = 'cm-hachi-var-tip'
-          dom.textContent = `{{${token.name}}} = ${describeVariable(token.name, map).detail}`
-          return { dom }
-        }
+  const vars = map
+  // Hovering a variable shows its value, editable in place (decision 135).
+  const hover = ViewPlugin.fromClass(
+    class {
+      detach: () => void
+      constructor(view: EditorView) {
+        this.detach = attachVariableHover(view.contentDOM, {
+          map: () => vars,
+          tokenAt: (e) => {
+            const pos = view.posAtCoords({ x: e.clientX, y: e.clientY })
+            if (pos === null) return null
+            const line = view.state.doc.lineAt(pos)
+            for (const token of findVariableTokens(line.text)) {
+              const from = line.from + token.from
+              const to = line.from + token.to
+              if (pos < from || pos >= to) continue
+              const start = view.coordsAtPos(from)
+              const end = view.coordsAtPos(to, -1)
+              if (!start || !end) return null
+              return {
+                name: token.name,
+                rect: new DOMRect(
+                  start.left,
+                  start.top,
+                  Math.max(1, end.right - start.left),
+                  start.bottom - start.top
+                )
+              }
+            }
+            return null
+          }
+        })
+      }
+      destroy() {
+        this.detach()
       }
     }
-    return null
-  })
-  return [plugin, tooltip]
+  )
+  return [plugin, hover]
 }
 
 /**

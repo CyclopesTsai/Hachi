@@ -475,9 +475,19 @@ export interface InvokeMap {
   'workspace:getSettings': { input: void; output: WorkspaceSettings }
   'workspace:saveSettings': { input: WorkspaceSettings; output: WorkspaceSettings }
   'workspace:setScriptTrust': { input: ScriptTrustInput; output: AppConfig }
+  'workspace:setFileTrust': { input: ScriptTrustInput; output: AppConfig }
   'runtime:list': { input: void; output: RuntimeVariable[] }
   'runtime:delete': { input: { name: string }; output: RuntimeVariable[] }
   'runtime:clear': { input: void; output: RuntimeVariable[] }
+  'variables:set': {
+    input: {
+      scope: 'runtime' | 'environment' | 'collection'
+      id: string | null
+      name: string
+      value: string
+    }
+    output: void
+  }
   'runner:start': { input: RunnerStartInput; output: RunnerStartResult }
   'runner:cancel': { input: { runId: string }; output: boolean }
   'runner:rows': { input: RunnerRowsInput; output: { total: number; rows: RunnerRow[] } }
@@ -633,6 +643,8 @@ export interface HachiApi {
     saveSettings: InvokeFn<'workspace:saveSettings'>
     /** Trust the current Workspace's scripts on this computer (stored in app-config.json). */
     setScriptTrust: InvokeFn<'workspace:setScriptTrust'>
+    /** Lets the current Workspace read files outside its folder with {{$file:…}} (decision 134). */
+    setFileTrust: InvokeFn<'workspace:setFileTrust'>
   }
   runner: {
     /** Starts a Collection Runner run; progress arrives as `runner:event`. */
@@ -654,6 +666,10 @@ export interface HachiApi {
     list: InvokeFn<'runtime:list'>
     delete: InvokeFn<'runtime:delete'>
     clear: InvokeFn<'runtime:clear'>
+  }
+  variables: {
+    /** Changes an existing variable where it is defined (hover box, decision 135). */
+    set: InvokeFn<'variables:set'>
   }
   tree: {
     get: InvokeFn<'tree:get'>

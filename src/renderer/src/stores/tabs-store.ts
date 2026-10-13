@@ -64,6 +64,12 @@ export interface TrustPrompt {
   resolve(choice: TrustChoice): void
 }
 
+/** "允許讀取 Workspace 外的檔案？" for {{$file:…}} (decision 134). */
+export interface FileTrustPrompt {
+  files: string[]
+  resolve(allow: boolean): void
+}
+
 /** The "Save As" dialog for an unsaved request. */
 export interface SaveAsRequest {
   key: TabKey
@@ -76,6 +82,7 @@ interface TabsState {
   prompt: UnsavedPrompt | null
   saveAs: SaveAsRequest | null
   trustPrompt: TrustPrompt | null
+  fileTrustPrompt: FileTrustPrompt | null
   /** Full text of "large" bodies the user chose to display, by run id. */
   fullBodies: Record<string, string>
   /** Set once the session of the current Workspace was restored (enables saving it). */
@@ -340,6 +347,7 @@ export const useTabsStore = create<TabsState>()((set, get) => {
     prompt: null,
     saveAs: null,
     trustPrompt: null,
+    fileTrustPrompt: null,
     fullBodies: {},
     sessionReady: false,
 
@@ -347,12 +355,14 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       get().prompt?.resolve(false)
       get().saveAs?.resolve(false)
       get().trustPrompt?.resolve('cancel')
+      get().fileTrustPrompt?.resolve(false)
       set({
         tabs: [],
         activeKey: null,
         prompt: null,
         saveAs: null,
         trustPrompt: null,
+        fileTrustPrompt: null,
         fullBodies: {},
         sessionReady: false
       })
@@ -663,6 +673,10 @@ export const useTabsStore = create<TabsState>()((set, get) => {
           t.kind === 'request' && t.runId === runId ? { ...t, runId: null, result } : t
         )
       }))
+      // {{$file:…}} outside the Workspace: ask once, then send again (decision 134).
+      if (result.kind === 'error' && result.untrustedFiles?.length) {
+        if (await askFileTrust(result.untrustedFiles)) await get().send(key)
+      }
     },
 
     variablesChanged(event) {
@@ -803,6 +817,23 @@ useTreeStore.subscribe((state, prev) => {
 })
 
 export { isTabDirty }
+
+/** Asks to let this Workspace read files outside its folder; stores the answer if yes. */
+export async function askFileTrust(files: string[]): Promise<boolean> {
+  const allow = await new Promise<boolean>((resolve) =>
+    useTabsStore.setState({ fileTrustPrompt: { files, resolve } })
+  )
+  useTabsStore.setState({ fileTrustPrompt: null })
+  if (!allow) return false
+  try {
+    const config = await unwrap(window.hachi.workspace.setFileTrust({ trusted: true }))
+    useAppStore.getState().configChanged(config)
+    return true
+  } catch (error) {
+    useAppStore.getState().setNotice(errorMessage(error))
+    return false
+  }
+}
 
 /**
  * "信任這個 Workspace 的腳本？" (decision 84). "trust" stores the trust before resolving;

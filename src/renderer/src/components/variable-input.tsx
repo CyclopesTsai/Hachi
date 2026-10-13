@@ -1,12 +1,8 @@
-import { useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react'
 import { findVariableTokens } from '@shared/variables'
 import { cn } from '@renderer/lib/utils'
-import {
-  VARIABLE_CLASS,
-  describeVariable,
-  useVariables,
-  variablesTitle
-} from '@renderer/lib/variables'
+import { attachVariableHover } from '@renderer/lib/variable-hover'
+import { VARIABLE_CLASS, describeVariable, useVariables } from '@renderer/lib/variables'
 
 export interface VariableInputProps extends Omit<ComponentProps<'input'>, 'className' | 'value'> {
   value: string
@@ -21,7 +17,8 @@ export interface VariableInputProps extends Omit<ComponentProps<'input'>, 'class
 /**
  * Single-line input that colours `{{variables}}`: green = defined, blue = dynamic,
  * red = not found. The text is drawn by a layer behind a transparent <input>, so
- * editing, selection and IME behave like a normal input. Hover shows the values.
+ * editing, selection and IME behave like a normal input. Hovering a variable shows its
+ * value, editable in place (variable-hover.ts).
  */
 export function VariableInput({
   value,
@@ -36,6 +33,32 @@ export function VariableInput({
   const input = useRef<HTMLInputElement>(null)
   const layer = useRef<HTMLDivElement>(null)
   const tokens = findVariableTokens(value)
+  const mapRef = useRef(map)
+  useEffect(() => {
+    mapRef.current = map
+  })
+  // Hovering a variable shows (and edits) its value (decision 135).
+  useEffect(() => {
+    const el = input.current
+    if (!el) return
+    return attachVariableHover(el, {
+      map: () => mapRef.current,
+      tokenAt: (e) => {
+        for (const span of layer.current?.querySelectorAll<HTMLElement>('[data-name]') ?? []) {
+          const rect = span.getBoundingClientRect()
+          if (
+            e.clientX >= rect.left &&
+            e.clientX <= rect.right &&
+            e.clientY >= rect.top - 2 &&
+            e.clientY <= rect.bottom + 2
+          ) {
+            return { name: span.dataset.name as string, rect }
+          }
+        }
+        return null
+      }
+    })
+  }, [])
 
   const sync = () => {
     if (layer.current && input.current) layer.current.scrollLeft = input.current.scrollLeft
@@ -52,6 +75,7 @@ export function VariableInput({
         key={token.from}
         className={cn('rounded-sm', VARIABLE_CLASS[status])}
         data-variable={status}
+        data-name={token.name}
       >
         {value.slice(token.from, token.to)}
       </span>
@@ -78,7 +102,7 @@ export function VariableInput({
         ref={input}
         value={value}
         spellCheck={false}
-        title={title ?? variablesTitle(value, map)}
+        title={title}
         className={cn(
           'relative w-full min-w-0 bg-transparent text-transparent caret-foreground outline-none',
           'placeholder:text-muted-foreground/60 selection:bg-primary/25 selection:text-transparent',

@@ -72,6 +72,8 @@ export const HTTP_ERROR_CODES = [
   'SCRIPT',
   /** OAuth 2.0 token / AWS signing failed (decision 128). */
   'AUTH',
+  /** {{$file:…}}: a file outside the Workspace not allowed yet, too large, bad format (decision 134). */
+  'FILE_ACCESS',
   'UNKNOWN'
 ] as const
 export type HttpErrorCode = (typeof HTTP_ERROR_CODES)[number]
@@ -89,6 +91,8 @@ export interface HttpErrorData {
   scriptReport?: ScriptReport
   /** Certificate chain check after a TLS failure (editor sends only). */
   tls?: TlsDiagnosis
+  /** FILE_ACCESS: files outside the Workspace the request wants to read (decision 134). */
+  untrustedFiles?: string[]
 }
 
 export type HttpResult = HttpResponseData | HttpErrorData

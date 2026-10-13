@@ -41,6 +41,7 @@ export interface IpcContext {
   /** The renderer's answer to a credential prompt (askpass). */
   answerGitPrompt(id: string, value: string | null): void
   runtime: RuntimeVariables
+  variablesChanged(change: { environmentId: string | null; collectionId: string | null }): void
   runner: RunnerService
   cookies: CookieService
   mocks: MockStore
@@ -121,6 +122,8 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.workspaceSaveSettings]: (input) => ctx.workspaces.saveSettings(input),
     [INVOKE.workspaceSetScriptTrust]: (input) =>
       ctx.config.setScriptTrust(workspacePath(), input.trusted),
+    [INVOKE.workspaceSetFileTrust]: (input) =>
+      ctx.config.setFileTrust(workspacePath(), input.trusted),
     [INVOKE.runnerStart]: async (input) => {
       workspacePath()
       const started = await ctx.runner.start(input.runId, input.config)
@@ -172,6 +175,27 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.runtimeClear]: () => {
       ctx.runtime.clear(workspacePath())
       return ctx.runtime.list(workspacePath())
+    },
+    [INVOKE.variablesSet]: async (input) => {
+      const change = [{ name: input.name, value: input.value }]
+      const missing = () => new HachiError('NOT_FOUND', `找不到變數「${input.name}」`)
+      if (input.scope === 'runtime') {
+        if (!ctx.runtime.list(workspacePath()).some((v) => v.name === input.name)) throw missing()
+        ctx.runtime.apply(workspacePath(), change) // emits variables:changed itself
+        return
+      }
+      if (!input.id) throw new HachiError('VALIDATION_ERROR', 'id is required')
+      if (input.scope === 'environment') {
+        const env = await ctx.environments.get(input.id)
+        if (!env.variables.some((v) => v.key.trim() === input.name)) throw missing()
+        await ctx.environments.applyVariableChanges(input.id, change)
+        ctx.variablesChanged({ environmentId: input.id, collectionId: null })
+      } else {
+        const collection = await ctx.collections.getCollectionFor(input.id)
+        if (!collection?.variables.some((v) => v.key.trim() === input.name)) throw missing()
+        await ctx.collections.applyVariableChanges(collection.id, change)
+        ctx.variablesChanged({ environmentId: null, collectionId: collection.id })
+      }
     },
     [INVOKE.dialogSelectDirectory]: (input) => selectDirectory(ctx.getWindow(), input),
     [INVOKE.dialogSelectFile]: (input) => selectFile(ctx.getWindow(), input),

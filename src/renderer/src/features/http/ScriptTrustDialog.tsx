@@ -31,7 +31,7 @@ export function ScriptTrustDialog() {
           </DialogDescription>
         </DialogHeader>
         <ul className="list-disc pl-5 text-sm text-muted-foreground">
-          <li>腳本在沙箱中執行，無法讀寫檔案或連網。</li>
+          <li>腳本在沙箱中執行，無法讀寫檔案；可以用 sendRequest 送出其他請求。</li>
           <li>腳本可以讀取與修改變數（包含機密值），修改會顯示在回應的 Tests 分頁。</li>
           <li>選擇只記在這台電腦，之後可在 Workspace 設定取消。</li>
         </ul>

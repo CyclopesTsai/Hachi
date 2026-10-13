@@ -90,11 +90,14 @@
   },
   "scripts": {
     "trustedWorkspaces": ["/Users/me/Documents/Hachi/My API"] // 信任其腳本的 Workspace 資料夾（決策 84，只在這台電腦）
+  },
+  "fileAccess": {
+    "trustedWorkspaces": [] // 允許 {{$file:…}} 讀取資料夾外檔案的 Workspace（決策 134，只在這台電腦）
   }
 }
 ```
 
-`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3、`websocket` 於 Phase 4、`scripts` 於 Phase 5b 加入（新增欄位附預設值，不升版）。
+`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3、`websocket` 於 Phase 4、`scripts` 於 Phase 5b、`fileAccess` 於決策 134 加入（新增欄位附預設值，不升版）。
 
 ## ✅ `workspace.json`
 

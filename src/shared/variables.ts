@@ -34,6 +34,38 @@ export function isDynamicVariable(name: string): name is DynamicVariableName {
   return Object.hasOwn(DYNAMIC_VARIABLES, name)
 }
 
+/**
+ * `{{$file:base64:<path>}}` (decision 134): a file's content, read by main when sending.
+ * The path is absolute, starts with `~`, or is relative to the Workspace folder.
+ */
+export const FILE_VARIABLE_PREFIX = '$file:'
+export const FILE_VARIABLE_FORMATS = ['base64'] as const
+export type FileVariableFormat = (typeof FILE_VARIABLE_FORMATS)[number]
+/** Largest file a $file variable reads. */
+export const FILE_VARIABLE_MAX_BYTES = 10 * 1024 * 1024
+
+export function isFileVariable(name: string): boolean {
+  return name.startsWith(FILE_VARIABLE_PREFIX)
+}
+
+/** `$file:base64:/a/b.jpg` → { format, path }; null when it is not one, or malformed. */
+export function parseFileVariable(
+  name: string
+): { format: string; path: string; supported: boolean } | null {
+  if (!isFileVariable(name)) return null
+  const rest = name.slice(FILE_VARIABLE_PREFIX.length)
+  const colon = rest.indexOf(':')
+  if (colon <= 0) return null
+  const format = rest.slice(0, colon).trim()
+  const path = rest.slice(colon + 1).trim()
+  if (path === '') return null
+  return {
+    format,
+    path,
+    supported: (FILE_VARIABLE_FORMATS as readonly string[]).includes(format)
+  }
+}
+
 /** `runtime`: set by scripts / extractions, in memory only (decision 71). */
 export type VariableSource = 'runtime' | 'data' | 'environment' | 'collection'
 
@@ -41,6 +73,8 @@ export interface VariableLayer {
   source: VariableSource
   /** Environment or Collection name, for display. */
   sourceName: string
+  /** Environment / Collection id (editing from the hover box, decision 135). */
+  sourceId?: string
   variables: readonly Variable[]
 }
 
@@ -50,6 +84,7 @@ export interface ResolvedVariable {
   secret: boolean
   source: VariableSource
   sourceName: string
+  sourceId?: string
 }
 
 export type VariableMap = ReadonlyMap<string, ResolvedVariable>
@@ -66,7 +101,8 @@ export function buildVariableMap(layers: readonly VariableLayer[]): VariableMap 
         value: v.value,
         secret: v.secret,
         source: layer.source,
-        sourceName: layer.sourceName
+        sourceName: layer.sourceName,
+        ...(layer.sourceId !== undefined ? { sourceId: layer.sourceId } : {})
       })
     }
   }
@@ -125,6 +161,15 @@ export interface VariableToken {
 }
 
 /** Every `{{name}}` in a string (for highlighting). */
+/** Names of the `{{$file:…}}` variables in some texts (deduplicated, in order). */
+export function findFileVariables(texts: readonly string[]): string[] {
+  const names = new Set<string>()
+  for (const text of texts) {
+    for (const t of findVariableTokens(text)) if (isFileVariable(t.name)) names.add(t.name)
+  }
+  return [...names]
+}
+
 export function findVariableTokens(text: string): VariableToken[] {
   const tokens: VariableToken[] = []
   for (const m of text.matchAll(VARIABLE_PATTERN)) {
@@ -137,6 +182,11 @@ export function findVariableTokens(text: string): VariableToken[] {
 export interface ResolverOptions {
   /** Leave `{{name}}` of secret variables in place (e.g. generated code). Not "unresolved". */
   keepSecrets?: boolean
+  /**
+   * Contents of `{{$file:…}}` variables, by variable name (read beforehand by main).
+   * Without it they are left in place (generated code) and not reported as unresolved.
+   */
+  files?: ReadonlyMap<string, string>
 }
 
 /** Resolves strings against a variable map, collecting the names it could not resolve. */
@@ -168,6 +218,7 @@ export class VariableResolver {
         return this.expand(variable.value, [...stack, name])
       }
       if (isDynamicVariable(name)) return dynamicValue(name, this.dynamic)
+      if (isFileVariable(name)) return this.options.files?.get(name) ?? whole
       this.unresolved.add(name)
       return whole
     })

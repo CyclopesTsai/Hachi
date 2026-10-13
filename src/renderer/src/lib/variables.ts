@@ -3,8 +3,9 @@ import { findNode } from '@shared/tree'
 import {
   DYNAMIC_VARIABLES,
   buildVariableMap,
-  findVariableTokens,
   isDynamicVariable,
+  isFileVariable,
+  parseFileVariable,
   maskSecret,
   type VariableLayer,
   type VariableMap
@@ -47,17 +48,23 @@ export function useVariableMap(collectionId: string | null): VariableMap {
       })
     }
     if (active) {
-      layers.push({ source: 'environment', sourceName: active.name, variables: active.variables })
+      layers.push({
+        source: 'environment',
+        sourceName: active.name,
+        sourceId: active.id,
+        variables: active.variables
+      })
     }
     if (collectionVariables) {
       layers.push({
         source: 'collection',
         sourceName: collectionName ?? 'Collection',
+        sourceId: collectionId ?? undefined,
         variables: collectionVariables
       })
     }
     return buildVariableMap(layers)
-  }, [runtime, active, collectionVariables, collectionName])
+  }, [runtime, active, collectionVariables, collectionName, collectionId])
 }
 
 export type VariableStatus = 'defined' | 'dynamic' | 'missing'
@@ -86,21 +93,14 @@ export function describeVariable(name: string, map: VariableMap): VariableInfo {
   if (isDynamicVariable(name)) {
     return { name, status: 'dynamic', detail: `動態變數：${DYNAMIC_VARIABLES[name]}` }
   }
+  const file = parseFileVariable(name)
+  if (file?.supported) {
+    return { name, status: 'dynamic', detail: `送出時讀取檔案並轉成 base64：${file.path}` }
+  }
+  if (isFileVariable(name)) {
+    return { name, status: 'missing', detail: '格式應為 {{$file:base64:檔案路徑}}' }
+  }
   return { name, status: 'missing', detail: '找不到這個變數，會照原樣送出' }
-}
-
-/** Tooltip text listing the variables used in a string, or undefined if there are none. */
-export function variablesTitle(text: string, map: VariableMap): string | undefined {
-  const tokens = findVariableTokens(text)
-  if (tokens.length === 0) return undefined
-  const seen = new Set<string>()
-  return tokens
-    .filter((t) => !seen.has(t.name) && seen.add(t.name))
-    .map((t) => {
-      const info = describeVariable(t.name, map)
-      return `{{${t.name}}} = ${info.detail}`
-    })
-    .join('\n')
 }
 
 export const VARIABLE_CLASS: Record<VariableStatus, string> = {

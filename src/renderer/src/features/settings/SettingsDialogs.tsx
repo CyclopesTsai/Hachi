@@ -89,8 +89,13 @@ function WorkspaceSettingsForm({
     const path = s.currentWorkspace?.path
     return !!path && !!s.config?.scripts.trustedWorkspaces.includes(path)
   })
+  const initiallyFiles = useAppStore((s) => {
+    const path = s.currentWorkspace?.path
+    return !!path && !!s.config?.fileAccess.trustedWorkspaces.includes(path)
+  })
   const [value, setValue] = useState(initial)
   const [trusted, setTrusted] = useState(initiallyTrusted)
+  const [filesTrusted, setFilesTrusted] = useState(initiallyFiles)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -101,6 +106,10 @@ function WorkspaceSettingsForm({
       await save(value)
       if (trusted !== initiallyTrusted) {
         const config = await unwrap(window.hachi.workspace.setScriptTrust({ trusted }))
+        useAppStore.getState().configChanged(config)
+      }
+      if (filesTrusted !== initiallyFiles) {
+        const config = await unwrap(window.hachi.workspace.setFileTrust({ trusted: filesTrusted }))
         useAppStore.getState().configChanged(config)
       }
       onDone()
@@ -206,6 +215,20 @@ function WorkspaceSettingsForm({
           </CheckboxLabel>
           <span className="text-xs text-muted-foreground">
             只記在這台電腦；不信任時，發送含有腳本的請求前會先詢問。
+          </span>
+        </div>
+      </Row>
+      <Row label="外部檔案">
+        <div className="flex flex-col gap-1">
+          <CheckboxLabel
+            checked={filesTrusted}
+            data-testid="trust-files"
+            onChange={(e) => setFilesTrusted(e.target.checked)}
+          >
+            允許 {'{{$file:…}}'} 讀取 Workspace 以外的檔案
+          </CheckboxLabel>
+          <span className="text-xs text-muted-foreground">
+            只記在這台電腦；Workspace 資料夾內的檔案一律可以讀取。
           </span>
         </div>
       </Row>

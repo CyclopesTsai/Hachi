@@ -6,9 +6,15 @@ import type { ProxySettings } from '@shared/schemas/app-config'
 import type { Auth, OAuth2Auth } from '@shared/schemas/collection'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
-import { VariableResolver, buildVariableMap, type VariableLayer } from '@shared/variables'
+import {
+  VariableResolver,
+  buildVariableMap,
+  findFileVariables,
+  type VariableLayer
+} from '@shared/variables'
 import { signAwsSigV4 } from './auth/aws-sigv4'
 import { digestAuthorization, parseDigestChallenge } from './auth/digest'
+import { loadFileVariables, type FileAccess } from './file-variables'
 import { diagnoseTls } from './tls-diagnosis'
 import { OAuth2Error, OAuth2Service, type TokenRequest } from './auth/oauth2'
 import {
@@ -82,6 +88,8 @@ export interface HttpServiceDeps {
   openBrowser?: (url: string) => Promise<void>
   /** The current Workspace's cookie jar (decision 129); null = none open. */
   cookieJar?: () => CookieJar | null
+  /** Where {{$file:…}} may read (decision 134). */
+  fileAccess?: () => FileAccess
 }
 
 export interface SendInput {
@@ -136,7 +144,27 @@ export class HttpService {
       const chain = await this.deps.getContainerChain(input.parentId)
       const layers =
         input.layers ?? (await this.deps.getVariableLayers(input.parentId, input.environmentId))
-      const resolver = new VariableResolver(buildVariableMap(layers))
+      // {{$file:…}} contents are read first (the resolver itself is synchronous).
+      const fileNames = findFileVariables([
+        JSON.stringify(input.request),
+        JSON.stringify(chain),
+        ...layers.flatMap((l) => l.variables.map((v) => v.value))
+      ])
+      let files: Map<string, string> | undefined
+      if (fileNames.length > 0) {
+        const loaded = await loadFileVariables(
+          fileNames,
+          this.deps.fileAccess?.() ?? { root: null, trustedOutside: false }
+        )
+        if (!loaded.ok) {
+          const result = fail(loaded.code, loaded.message)
+          return loaded.untrusted.length > 0 && result.kind === 'error'
+            ? { ...result, untrustedFiles: loaded.untrusted }
+            : result
+        }
+        files = loaded.files
+      }
+      const resolver = new VariableResolver(buildVariableMap(layers), undefined, { files })
       const request = resolver.request(input.request)
       const inherited = resolver.inherited(this.deps.resolveInherited(chain))
       unresolved = [...resolver.unresolved].sort()
