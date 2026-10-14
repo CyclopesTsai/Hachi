@@ -55,6 +55,9 @@
   --git-lane-4: #b97a2a;
   --git-lane-5: #8a5f8f;
   --git-lane-6: #2f8a8a;
+  /* Thin scrollbars (Windows would otherwise show its classic wide ones with arrows). */
+  --scrollbar-thumb: rgb(76 86 106 / 0.35);
+  --scrollbar-thumb-hover: rgb(76 86 106 / 0.6);
 }
 
 .dark {
@@ -103,6 +106,8 @@
   --git-lane-4: #ebcb8b;
   --git-lane-5: #b48ead;
   --git-lane-6: #8fbcbb;
+  --scrollbar-thumb: rgb(216 222 233 / 0.25);
+  --scrollbar-thumb-hover: rgb(216 222 233 / 0.45);
 }
 
 @theme inline {
@@ -149,4 +154,44 @@
   textarea {
     @apply select-text;
   }
+}
+
+/*
+ * Scrollbars: a 6px rounded thumb in a 10px strip, no track, no arrow buttons, the same
+ * on every platform. (A `scrollbar-width` / `scrollbar-color` on an element would turn
+ * these off for it, so none is set.)
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-button {
+  display: none;
+}
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background: var(--scrollbar-thumb) content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover) content-box;
+}
+
+/* The tab strip: thinner, and only while the pointer is over it (TabBar.tsx sets data-pointer). */
+.tab-strip::-webkit-scrollbar {
+  height: 6px;
+}
+.tab-strip::-webkit-scrollbar-thumb {
+  border-width: 1px;
+  background: transparent;
+}
+.tab-strip[data-pointer]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb) content-box;
+}
+.tab-strip[data-pointer]::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover) content-box;
 }

@@ -158,6 +158,18 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   )
 }
 
+/**
+ * The thin scrollbar of the tab strip shows only while the pointer is over it. Chromium
+ * keeps a scrollbar's style until the scrollbar is rebuilt, so `:hover` alone never
+ * shows it: mark the strip and rebuild the scrollbar by toggling overflow.
+ */
+function pointerOver(el: HTMLElement, over: boolean) {
+  el.toggleAttribute('data-pointer', over)
+  el.style.overflowX = 'hidden'
+  void el.offsetWidth
+  el.style.overflowX = ''
+}
+
 /** Open tabs above the editor; "+" opens a new unsaved HTTP request. */
 export function TabBar() {
   const tabs = useTabsStore((s) => s.tabs)
@@ -167,7 +179,9 @@ export function TabBar() {
       <div
         role="tablist"
         aria-label="開啟的分頁"
-        className="flex min-w-0 overflow-x-auto [scrollbar-width:thin]"
+        className="tab-strip flex min-w-0 overflow-x-auto"
+        onMouseEnter={(e) => pointerOver(e.currentTarget, true)}
+        onMouseLeave={(e) => pointerOver(e.currentTarget, false)}
       >
         {tabs.map((tab) => (
           <TabButton key={tab.uid} tab={tab} active={tab.key === activeKey} />
