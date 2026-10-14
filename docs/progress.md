@@ -6,7 +6,7 @@
 ## 目前狀態
 
 - **目前階段**：原規格的 Phase 0–6 全部完成；之後依下方「待辦」逐項進行（每項先規劃、確認決策再實作）。由本機（macOS）的 Claude Code 桌面版開發
-- **目前版本**：**v0.7.1**（2026-10-13，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
+- **目前版本**：**v0.7.2**（2026-10-14，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
 - **最後更新**：2026-10-14
 
 ## Phase 進度
@@ -303,7 +303,7 @@
   - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
   - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
 - **v0.2.1 發佈**（2026-10-07）：Bruno YAML 與多個 Collection 匯入（決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
-- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）、**v0.7.0**（決策 134–135）、**v0.7.1**（決策 136）：見下方「待辦」各項
+- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）、**v0.7.0**（決策 134–135）、**v0.7.1**（決策 136）、**v0.7.2**（決策 137）：見下方「待辦」各項
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
 ## 待辦（使用者排定，2026-10-07）
@@ -333,7 +333,7 @@
    - **v0.7.0 決策 134–135**：`{{$file:base64:…}}`（`src/main/services/http/file-variables.ts`、`FileTrustDialog.tsx`）、懸浮框改變數（`src/renderer/src/lib/variable-hover.ts`、IPC `variables:set`）。驗證：單元測試（路徑、信任、大小、格式、實際送出 base64）；E2E 新增 Workspace 內檔案直接送出、外部檔案允許後送出、懸浮框修改環境值並還原、機密值遮住 / 顯示 / Esc 不儲存、未定義變數唯讀（淺色、深色）。另修：腳本信任對話框「無法連網」的說明已過時。之後（使用者要求）：Body 工具列「自動換行」右邊加「可用的變數」連結，開啟文件視窗（`VariableDocsDialog.tsx`）：一般變數、所有動態變數（由 `DYNAMIC_VARIABLES` 產生，附範例）、`{{$file:base64:…}}`；文件區塊元件與腳本文件共用（`DocSection.tsx`）。Windows CI 發現：找 `{{$file:…}}` 時原本把請求轉成 JSON 文字再搜尋，Windows 路徑的反斜線被 JSON 變成兩個而對不上 → 改為逐一走訪請求中的字串（單元測試在 Windows 上驗證反斜線路徑）；E2E「Body 工具與類型同列」在 1024 寬的 CI 視窗會換行，改為有空間時才要求同列；E2E 結束時先關閉 App 再刪暫存資料夾（並重試），刪除失敗只警告，不再蓋掉真正失敗的檢查（Windows 上 App 還開著時會 EBUSY）
    - **v0.7.1 決策 136**：回應 JSON 樹狀檢視（`src/renderer/src/features/http/JsonTree.tsx`）。驗證：E2E 用 text/plain 送出的 JSON 出現 Tree、巢狀節點全部展開、陣列 100 項後「再顯示」、單一節點收合、全部收合 / 全部展開、新回應回到 Pretty、HTML 回應沒有 Tree，截圖 `30-json-tree.png`（淺色、深色）。另修 E2E 清理：失敗時改為直接結束 App 程序（有未儲存分頁時正常關閉會停在詢問而卡住）
    - v0.7.1 之後（使用者要求檢查文件與提示文字）：快捷鍵一覽與 `docs/ipc.md`「畫面內的按鍵」補上搜尋框（Enter / Shift+Enter / Esc）與變數懸浮框（Enter / Esc）；Proxy 密碼說明拿掉「之後會改存 Keychain」（沒有排程）；決策 51、70 註明已被後來的決策取代；Phase 6 標題拿掉「待使用者確認」；Roadmap 拿掉「尚未在 Windows 實測」
-   - **決策 137**（GitHub issue #2）：History 單擊開成預覽分頁、雙擊固定（`tabs-store.ts` 的 `openHistoryEntry`、`HistoryPanel.tsx`）。驗證：單元測試（預覽的未儲存分頁會被下一個預覽取代）；E2E 單擊 A、單擊 B 重用同一個預覽分頁、再點 B 不新增、雙擊 B 固定、再點 A 開新的預覽分頁。另修偶發的單元測試失敗：Git 測試大量 commit 後，背景的 `git gc --auto` 還在寫 `.git/objects` 時測試就刪資料夾（ENOTEMPTY）→ 測試用的 git 設定關閉 gc.auto / maintenance.auto
+   - **v0.7.2 決策 137**（GitHub issue #2）：History 單擊開成預覽分頁、雙擊固定（`tabs-store.ts` 的 `openHistoryEntry`、`HistoryPanel.tsx`）。驗證：單元測試（預覽的未儲存分頁會被下一個預覽取代）；E2E 單擊 A、單擊 B 重用同一個預覽分頁、再點 B 不新增、雙擊 B 固定、再點 A 開新的預覽分頁。另修偶發的單元測試失敗：Git 測試大量 commit 後，背景的 `git gc --auto` 還在寫 `.git/objects` 時測試就刪資料夾（ENOTEMPTY）→ 測試用的 git 設定關閉 gc.auto / maintenance.auto
 5. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）
