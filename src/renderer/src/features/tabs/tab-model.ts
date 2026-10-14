@@ -32,6 +32,8 @@ interface TabBase {
   saveError: string | null
   /** Bumped whenever content is (re)loaded from disk; editors remount on change. */
   version: number
+  /** History entry an unsaved request was opened from (clicking it again reuses the tab). */
+  historyId?: string
 }
 
 export interface RequestTab extends TabBase {
@@ -219,22 +221,43 @@ export function createItemTab(node: TreeNode, preview: boolean): Tab {
 /** An unsaved request (from the "+" button or a history entry). */
 export function createDraftTab(
   request: HttpRequest,
-  options: { parentId: string | null; inherited?: InheritedSettings }
+  options: {
+    parentId: string | null
+    inherited?: InheritedSettings
+    preview?: boolean
+    historyId?: string
+  }
 ): RequestTab
 export function createDraftTab(
   request: WsRequest,
-  options: { parentId: string | null; inherited?: InheritedSettings }
+  options: {
+    parentId: string | null
+    inherited?: InheritedSettings
+    preview?: boolean
+    historyId?: string
+  }
 ): WsTab
 export function createDraftTab(
   request: AnyRequest,
-  options: { parentId: string | null; inherited?: InheritedSettings }
+  options: {
+    parentId: string | null
+    inherited?: InheritedSettings
+    preview?: boolean
+    historyId?: string
+  }
 ): RequestLikeTab
 export function createDraftTab(
   request: AnyRequest,
-  options: { parentId: string | null; inherited?: InheritedSettings }
+  options: {
+    parentId: string | null
+    inherited?: InheritedSettings
+    preview?: boolean
+    historyId?: string
+  }
 ): RequestLikeTab {
   const common = {
-    ...tabBase(`draft:${crypto.randomUUID()}`, false),
+    ...tabBase(`draft:${crypto.randomUUID()}`, options.preview ?? false),
+    ...(options.historyId ? { historyId: options.historyId } : {}),
     itemId: null,
     draftParentId: options.parentId,
     draftName: request.name,

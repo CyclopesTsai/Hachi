@@ -1199,17 +1199,39 @@ try {
     await page.getByTestId('history-usage').getAttribute('data-percent'),
     String(Math.round((total / 200) * 100))
   )
+  // Decision 137: a click opens a preview tab (reused by the next click), a double click pins it.
+  const previewTabs = page.locator('[data-testid="tab"][data-preview]')
   const tabsBefore = (await tabTitles()).length
-  await page.locator('[data-testid="history-row"][data-url^="{{baseUrl}}"]').first().click()
-  await waitUntil(async () => (await tabTitles()).length === tabsBefore + 1, 'history tab')
-  assert.equal(
-    await page.getByTestId('url-input').inputValue(),
-    '{{baseUrl}}/echo?id={{$randomInt}}&m={{missing}}'
-  )
+  const hadPreview = (await previewTabs.count()) > 0
+  const openHistoryRow = async (row) => {
+    const url = await row.getAttribute('data-url')
+    await row.click()
+    await waitUntil(
+      async () => (await page.getByTestId('url-input').inputValue()) === url,
+      'history tab'
+    )
+  }
+  const rowA = page.locator('[data-testid="history-row"][data-url^="{{baseUrl}}"]').first()
+  const urlA = await rowA.getAttribute('data-url')
+  const rowB = page.locator(`[data-testid="history-row"]:not([data-url="${urlA}"])`).first()
+  await openHistoryRow(rowA)
+  assert.equal(urlA, '{{baseUrl}}/echo?id={{$randomInt}}&m={{missing}}')
+  const tabsAfterA = (await tabTitles()).length
+  assert.equal(tabsAfterA, tabsBefore + (hadPreview ? 0 : 1))
+  assert.equal(await previewTabs.count(), 1)
+  await openHistoryRow(rowB)
+  await rowB.click()
+  assert.equal((await tabTitles()).length, tabsAfterA, 'the preview tab is reused')
+  await rowB.dblclick()
+  await waitUntil(async () => (await previewTabs.count()) === 0, 'double click pins the tab')
+  assert.equal((await tabTitles()).length, tabsAfterA)
+  await openHistoryRow(rowA)
+  assert.equal((await tabTitles()).length, tabsAfterA + 1)
+  assert.equal(await previewTabs.count(), 1)
   await page.screenshot({ path: path.join(shots, '8-history.png') })
   await page.getByTestId('sidebar-collections').click()
   step(
-    `history: ${total} entries with unresolved variables (no secrets, no bodies); usage ring; opening an entry adds a new unsaved tab`
+    `history: ${total} entries with unresolved variables (no secrets, no bodies); usage ring; a click previews an entry (reused tab), a double click pins it`
   )
 
   // ---- Phase 4: WebSocket ----

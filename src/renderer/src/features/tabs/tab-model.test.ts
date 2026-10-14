@@ -116,6 +116,16 @@ describe('dirty state', () => {
     expect(isTabDirty({ ...draft, saved: null })).toBe(true)
     expect(isTabDirty({ ...draft, draft: { ...draft.draft!, url: 'x' } })).toBe(true)
   })
+
+  it('opens history entries as preview drafts that replace the previous preview', () => {
+    const first = createDraftTab(request('A'), { parentId: null, preview: true, historyId: 'h1' })
+    expect(first).toMatchObject({ preview: true, historyId: 'h1' })
+    expect(isTabDirty(first)).toBe(false)
+    expect(createDraftTab(request('New'), { parentId: null })).not.toHaveProperty('historyId')
+    const second = createDraftTab(request('B'), { parentId: null, preview: true, historyId: 'h2' })
+    const tabs = insertTab(insertTab([loaded('r1')], first, 'item:r1'), second, first.key)
+    expect(tabs.map((t) => t.historyId ?? t.key)).toEqual(['item:r1', 'h2'])
+  })
 })
 
 describe('WebSocket tabs', () => {

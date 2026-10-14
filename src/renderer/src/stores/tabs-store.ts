@@ -106,7 +106,11 @@ interface TabsState {
   /** Opens a request (e.g. from a cURL import) as a new unsaved tab. */
   openDraft(request: HttpRequest): void
   /** Opens a history entry as a new unsaved request. */
-  openHistoryEntry(entry: HistoryEntry): Promise<void>
+  /**
+   * Opens a history entry as an unsaved request: a preview tab on a single click
+   * (decision 137), pinned with `preview: false` (double click). Reuses its tab.
+   */
+  openHistoryEntry(entry: HistoryEntry, options?: { preview?: boolean }): Promise<void>
   pin(key: TabKey): void
   /** Closes a tab, asking first if it has unsaved changes. Resolves false if cancelled. */
   close(key: TabKey): Promise<boolean>
@@ -436,14 +440,25 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       addTab(createDraftTab(request, { parentId: null }))
     },
 
-    async openHistoryEntry(entry) {
+    async openHistoryEntry(entry, options = {}) {
+      const preview = options.preview ?? true
+      const opened = () => get().tabs.find((t) => t.historyId === entry.id)
+      const reuse = (tab: Tab) => {
+        if (!preview) get().pin(tab.key)
+        setActive(tab.key)
+      }
+      const existing = opened()
+      if (existing) return reuse(existing)
       const source = entry.requestId ? findNode(tree(), entry.requestId) : undefined
       const parentId = source ? parentIdOf(tree(), entry.requestId as string) : null
       const inherited = await unwrap(window.hachi.request.getInherited({ parentId })).catch(
         () => undefined
       )
+      // A click while this was loading may have opened it already (double click).
+      const meanwhile = opened()
+      if (meanwhile) return reuse(meanwhile)
       const request = { ...entry.request, id: crypto.randomUUID() }
-      addTab(createDraftTab(request, { parentId, inherited }))
+      addTab(createDraftTab(request, { parentId, inherited, preview, historyId: entry.id }))
     },
 
     pin(key) {

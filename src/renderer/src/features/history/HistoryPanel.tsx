@@ -84,6 +84,9 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
         title={detail}
         className="group flex h-7 w-full items-center gap-1.5 rounded-sm pr-1 text-left text-xs hover:bg-accent/70"
         onClick={() => void useTabsStore.getState().openHistoryEntry(entry)}
+        onDoubleClick={() =>
+          void useTabsStore.getState().openHistoryEntry(entry, { preview: false })
+        }
       >
         <RequestBadge
           node={

@@ -111,7 +111,12 @@ const locator = { gitCandidates: () => [], gitUsable: async () => true }
 let isolatedConfig: string
 beforeAll(async () => {
   isolatedConfig = await mkdtemp(path.join(os.tmpdir(), 'hachi-gitconfig-'))
-  await writeFile(path.join(isolatedConfig, 'gitconfig'), '')
+  // No background `git gc --auto` / maintenance: it can still be writing .git/objects
+  // while a test removes its folder (ENOTEMPTY after committing many files).
+  await writeFile(
+    path.join(isolatedConfig, 'gitconfig'),
+    '[gc]\n\tauto = 0\n[maintenance]\n\tauto = false\n'
+  )
   vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1')
   vi.stubEnv('GIT_CONFIG_GLOBAL', path.join(isolatedConfig, 'gitconfig'))
 })
@@ -143,7 +148,7 @@ describe('GitService', () => {
   })
 
   afterEach(async () => {
-    await rm(tmp, { recursive: true, force: true })
+    await rm(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   })
 
   const repoStatus = async () => (await service.status(ws)) as GitRepoStatus
