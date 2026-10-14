@@ -1,18 +1,17 @@
 import { cn } from '@renderer/lib/utils'
+import appIcon from '@renderer/assets/app-icon.svg'
 
-/** Placeholder logo (text only). Replace once the official Hachi logo is available. */
+/** The app icon (from build/icon.svg via scripts/make-icon.mjs) and the name. */
 export function AppLogo({ className, size = 'md' }: { className?: string; size?: 'md' | 'lg' }) {
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <div
-        className={cn(
-          'flex items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground',
-          size === 'lg' ? 'size-12 text-2xl' : 'size-7 text-sm'
-        )}
-        aria-hidden
-      >
-        H
-      </div>
+      <img
+        src={appIcon}
+        alt=""
+        draggable={false}
+        className={cn('shrink-0', size === 'lg' ? 'size-12' : 'size-7')}
+        data-testid="app-logo"
+      />
       <span
         className={cn('font-semibold tracking-tight', size === 'lg' ? 'text-3xl' : 'text-base')}
       >

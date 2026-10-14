@@ -71,7 +71,7 @@ export default {
   copyright: info.copyright,
   directories: {
     output: 'release/${version}',
-    // build/icon.png: placeholder icon from scripts/make-icon.mjs (replace with the real one).
+    // build/icon.png (macOS) and icon-win.png (Windows, no margin) come from build/icon.svg.
     buildResources: 'build'
   },
   files: [
@@ -110,9 +110,10 @@ export default {
         })
   },
   // Windows (decision 123): x64 installer + portable exe, unsigned for now (SmartScreen
-  // asks "More info → Run anyway"). The .ico is made from build/icon.png.
+  // asks "More info → Run anyway"). The .ico is made from build/icon-win.png: the icon
+  // without the macOS margin (scripts/make-icon.mjs), Windows icons fill their square.
   win: {
-    icon: 'build/icon.png',
+    icon: 'build/icon-win.png',
     target: [
       { target: 'nsis', arch: ['x64'] },
       { target: 'portable', arch: ['x64'] }

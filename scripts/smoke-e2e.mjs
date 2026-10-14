@@ -204,6 +204,15 @@ function step(name) {
   console.log(`✔ ${name}`)
 }
 
+/** The app icon in the title bar / welcome screen has loaded (decision 138). */
+async function logoLoaded(page) {
+  return page
+    .getByTestId('app-logo')
+    .evaluate(
+      (img) => img.complete && img.naturalWidth > 0 && img.getBoundingClientRect().width > 0
+    )
+}
+
 async function exists(p) {
   try {
     await access(p)
@@ -286,11 +295,12 @@ try {
   await page.getByTestId('welcome-screen').waitFor()
   await page.setViewportSize({ width: 1280, height: 820 })
   await page.screenshot({ path: path.join(shots, '1-first-run.png') })
+  assert.ok(await logoLoaded(page), 'logo on the welcome screen')
   assert.equal(
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()),
     'Hachi'
   )
-  step('first launch shows onboarding, window title is "Hachi"')
+  step('first launch shows onboarding (with the app icon), window title is "Hachi"')
 
   const security = await page.evaluate(() => ({
     require: typeof window.require,
@@ -454,6 +464,7 @@ try {
   await page.getByTestId('workspace-shell').waitFor()
   assert.equal(await page.getByTestId('current-workspace-name').innerText(), 'Smoke API')
   await page.screenshot({ path: path.join(shots, '2-workspace.png') })
+  assert.ok(await logoLoaded(page), 'logo in the title bar')
   step('creating a Workspace from the onboarding form opens it')
 
   const wsDir = path.join(docs, 'Smoke API')
