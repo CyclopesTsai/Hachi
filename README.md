@@ -86,7 +86,7 @@ App 名稱、Bundle ID（`tw.com.cyclopes.hachi`）、版權字串集中在 **`s
 npm run dist:mac     # 產生 release/<version>/Hachi-<version>-arm64.dmg（Apple Silicon）與 -x64.dmg（Intel）
 ```
 
-- 圖示：原檔是 `build/icon.svg`；`build/icon.png`（1024×1024，macOS 比例：四周留透明邊界）由它匯出，electron-builder 會轉成 `.icns`。改了 `icon.svg` 後執行 `npx electron scripts/make-icon.mjs`，產生 Windows 用的 `build/icon-win.png`（裁掉邊界，轉成 `.ico`）與 App 內的 Logo（`src/renderer/src/assets/app-icon.svg`）。
+- 圖示：原檔是 `build/icon.svg`；`build/icon.png`（1024×1024，macOS 比例：四周留透明邊界）由它匯出，electron-builder 會轉成 `.icns`。改了 `icon.svg` 後執行 `npx electron scripts/make-icon.mjs`，產生 Windows 用的 `build/icon-win.png`（裁掉邊界，轉成 `.ico`）與 App 內的 Logo（`src/renderer/src/assets/app-logo.svg`：只有柴犬、加深色圓角輪廓）。
 - `app.asar` 只放 main process 執行時需要的套件（renderer 用的套件已由 Vite 打包進 JS），清單在打包時由 `electron-builder.config.mjs` 從 `out/main` 自動算出。
 - 打包後的 App 也能跑冒煙測試：`SMOKE_APP_PATH=release/<version>/mac-arm64/Hachi.app/Contents/MacOS/Hachi node scripts/smoke-e2e.mjs`。
 
