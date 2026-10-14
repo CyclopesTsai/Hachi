@@ -3,7 +3,7 @@
  * a 824×824 rounded square centered on a transparent 1024×1024 canvas):
  *
  * - src/renderer/src/assets/app-logo.svg: the logo inside the app (title bar, welcome
- *   screen): only the dog, without the blue square, with a dark rounded outline so the
+ *   screen): only the dog, without the blue square, with a soft dark shadow so the
  *   cream chin and light collar stand out on the light theme's white background.
  * - build/icon-win.png: Windows icon (1024×1024), cropped the same way: Windows does not
  *   leave the macOS margin, so the uncropped icon would look smaller than other apps.
@@ -29,24 +29,24 @@ const cropped = source
   .replace(/\s+width="\d+"\s+height="\d+"/, '')
 if (!cropped.includes(`viewBox="${CROP}"`)) throw new Error('build/icon.svg has no viewBox')
 
-// The dog's group: every shape is repeated behind it, filled and stroked with round
-// joins, so the outline follows the silhouette with rounded corners.
-const OUTLINE_COLOR = '#2E3440' // Nord 0: the dark theme's background, so it vanishes there
-const OUTLINE_WIDTH = 44 // in the group's units (scaled .88): about 1px at 28px
-const LOGO_CROP = '222 204 580 580'
+// A soft dark shadow around the dog (no hard edge): the silhouette is widened and
+// blurred, so the cream chin and light collar stand out on the light theme's white.
+const SHADOW_COLOR = '#2E3440' // Nord 0: the dark theme's background, so it vanishes there
+const LOGO_CROP = '212 194 600 600'
 const group = cropped.match(/<g transform="[^"]*">[\s\S]*<\/g>/)?.[0]
 if (!group) throw new Error('build/icon.svg: the dog group was not found')
-const outline = [...group.matchAll(/<polygon points="([^"]*)"/g)]
-  .map(
-    ([, points]) =>
-      `<polygon points="${points}" fill="${OUTLINE_COLOR}" stroke="${OUTLINE_COLOR}" stroke-width="${OUTLINE_WIDTH}" stroke-linejoin="round"/>`
-  )
-  .join('')
+const shadow = `<filter id="shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+<feMorphology in="SourceAlpha" operator="dilate" radius="6" result="wide"/>
+<feGaussianBlur in="wide" stdDeviation="9" result="blur"/>
+<feFlood flood-color="${SHADOW_COLOR}" flood-opacity="0.75"/>
+<feComposite in2="blur" operator="in" result="shadow"/>
+<feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>`
 const logo = cropped
   .replace(/<rect [^>]*fill="url\(#bg\)"[^>]*\/>/, '')
-  .replace(/<defs>[\s\S]*?<\/defs>/, '')
+  .replace(/<defs>[\s\S]*?<\/defs>/, `<defs>${shadow}</defs>`)
   .replace(`viewBox="${CROP}"`, `viewBox="${LOGO_CROP}"`)
-  .replace(/(<g transform="[^"]*">)/, `$1<g>${outline}</g>`)
+  .replace(group, `<g filter="url(#shadow)">${group}</g>`)
 const assets = path.join(root, 'src', 'renderer', 'src', 'assets')
 mkdirSync(assets, { recursive: true })
 writeFileSync(path.join(assets, 'app-logo.svg'), logo)

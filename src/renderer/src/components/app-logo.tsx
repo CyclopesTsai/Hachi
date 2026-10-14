@@ -1,7 +1,7 @@
 import { cn } from '@renderer/lib/utils'
 import appLogo from '@renderer/assets/app-logo.svg'
 
-/** The dog of the app icon with a dark outline (scripts/make-icon.mjs) and the name. */
+/** The dog of the app icon with a soft dark shadow (scripts/make-icon.mjs) and the name. */
 export function AppLogo({ className, size = 'md' }: { className?: string; size?: 'md' | 'lg' }) {
   return (
     <div className={cn('flex items-center gap-2', className)}>
@@ -9,7 +9,7 @@ export function AppLogo({ className, size = 'md' }: { className?: string; size?:
         src={appLogo}
         alt=""
         draggable={false}
-        className={cn('shrink-0', size === 'lg' ? 'size-12' : 'size-7')}
+        className={cn('shrink-0', size === 'lg' ? 'size-12' : 'size-[22px]')}
         data-testid="app-logo"
       />
       <span
