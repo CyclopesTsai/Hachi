@@ -6,3 +6,9 @@ release
 .DS_Store
 .vite
 coverage
+# Local-only docs, tracked by .git-docs (private repo CyclopesTsai/Hachi-docs)
+/CLAUDE.md
+/docs/progress.md
+/docs/ipc.md
+/docs/development.md
+/.git-docs/

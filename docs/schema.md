@@ -1,8 +1,6 @@
 # Hachi 資料結構（JSON Schema）
 
-> 版本：Phase 4。標示「✅ 已實作」的格式已定案並有 zod schema；標示「📝 草案」的格式會在對應 Phase 實作時定案，並同步更新本文件。
->
-> zod schema 位置：`src/shared/schemas/`
+> Hachi 寫入的所有 JSON 檔案格式（Workspace 與本機設定），zod schema 在 `src/shared/schemas/`。
 
 ## 通用規則
 
@@ -20,46 +18,46 @@
    - Workspace 資料夾用 `sanitizeFileName()`：保留大小寫與空白，例如 `My API`。
    - Collection / 資料夾 / 請求用 `slugify()`：轉小寫、空白換成 `-`、保留中文，例如「Get Users」→ `get-users`、「取得使用者」→ `取得使用者`。同一資料夾內重名（不分大小寫）時加上 `-2`、`-3`…。`collection.json`、`folder.json` 為保留檔名。
    - 顯示名稱存在 JSON 的 `name` 欄位；檔名只是方便閱讀，App 以 `id` 識別項目。
-7. **保留未知欄位**：Collection、資料夾、請求檔以 `looseObject` 驗證，App 改寫檔案（例如重新命名）時會保留它不認識的欄位，避免較新版本或後續 Phase 加入的欄位被刪掉。
+7. **保留未知欄位**：Collection、資料夾、請求檔以 `looseObject` 驗證，App 改寫檔案（例如重新命名）時會保留它不認識的欄位，避免較新版本加入的欄位被刪掉。
 
 ## 資料夾結構
 
 ```
 <userData>/                          # macOS: ~/Library/Application Support/Hachi
-├─ app-config.json                   ✅ App 設定
-├─ history-index.json                ✅ Phase 3：所有 Workspace 歷史紀錄的索引（共用筆數上限用）
-├─ sessions/<sha1(workspacePath)>.json  ✅ Phase 3：各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
-└─ cookies/<workspace id>.json       ✅ 決策 129：各 Workspace 的 Cookie Jar（只存在這台電腦，不進 git）
+├─ app-config.json                   App 設定
+├─ history-index.json                所有 Workspace 歷史紀錄的索引（共用筆數上限用）
+├─ sessions/<sha1(workspacePath)>.json  各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
+└─ cookies/<workspace id>.json       各 Workspace 的 Cookie Jar（只存在這台電腦，不進 git）
 
 <workspace>/                         # 預設 ~/Documents/Hachi/<名稱>/，可自選
-├─ workspace.json                    ✅（settings 於 Phase 2 擴充）
-├─ .gitignore                        ✅
-├─ history.json                      ✅ Phase 3：請求歷史（已列入 .gitignore）
-├─ .hachi-secrets.json               ✅ Phase 3：機密變數值（已列入 .gitignore；沒有機密變數時不建立）
+├─ workspace.json                    Workspace 名稱與設定
+├─ .gitignore
+├─ history.json                      請求歷史（已列入 .gitignore）
+├─ .hachi-secrets.json               機密變數值（已列入 .gitignore；沒有機密變數時不建立）
 ├─ environments/
-│  └─ <env>.json                     ✅ Phase 3（檔名為 slug）
+│  └─ <env>.json                     環境（檔名為 slug）
 ├─ mocks/
-│  └─ <mock>.json                    ✅ 決策 133：Mock Server（檔名為 slug，可進 git）
+│  └─ <mock>.json                    Mock Server（檔名為 slug，可進 git）
 └─ collections/
-   └─ <collection>/                  ✅ Phase 1（資料夾名為 slug）
-      ├─ collection.json             ✅ Phase 1
-      ├─ <request>.json              ✅ 共通欄位（Phase 1）；HTTP 完整欄位 ✅ Phase 2、WebSocket ✅ Phase 4
-      ├─ <request>.examples/         ✅ 決策 140：請求的儲存結果，每筆一個 <名稱>.json（不是資料夾；資料夾名稱不會以 .examples 結尾）
-      └─ <folder>/                   ✅ 可多層巢狀
-         ├─ folder.json              ✅ Phase 1
+   └─ <collection>/                  Collection（資料夾名為 slug）
+      ├─ collection.json             Collection 的設定
+      ├─ <request>.json              請求（HTTP 或 WebSocket）
+      ├─ <request>.examples/         請求的儲存結果，每筆一個 <名稱>.json（不是資料夾；資料夾名稱不會以 .examples 結尾）
+      └─ <folder>/                   可多層巢狀
+         ├─ folder.json              資料夾的設定
          └─ <request>.json
 ```
 
 ---
 
-## ✅ `app-config.json`
+## `app-config.json`
 
 位置：`app.getPath('userData')`。檔案損毀或版本過新時，會先改名為 `app-config.json.corrupt-<時間>` / `.newer-<時間>` 備份，再以預設值重建，確保 App 一定能啟動。
 
 ```jsonc
 {
   "version": 1,
-  "theme": "system", // "system" | "light" | "dark"（App 設定「外觀」，Phase 6）
+  "theme": "system", // "system" | "light" | "dark"（App 設定「外觀」）
   "recentWorkspaces": [
     // 最多 10 筆，最新在前
     {
@@ -69,7 +67,7 @@
     }
   ],
   "lastWorkspacePath": "/Users/me/Documents/Hachi/My API", // 啟動時自動開啟；null = 無
-  "window": null, // 視窗位置與大小（Phase 6，決策 94）：{ x, y, width, height, isMaximized, isFullScreen }；原本的螢幕不在時改為置中
+  "window": null, // 視窗位置與大小：{ x, y, width, height, isMaximized, isFullScreen }；原本的螢幕不在時改為置中
   "proxy": {
     // App 層級（每台電腦），不寫進 Workspace
     "mode": "none", // "none" | "system" | "custom"
@@ -81,7 +79,7 @@
   "ui": {
     "requestBodyWrap": false, // 請求 Body 編輯器自動換行（僅影響顯示）
     "responseBodyWrap": false, // 回應 Body 自動換行（僅影響顯示）
-    "gitChangesTree": true // Git Commit 畫面的變更以樹狀顯示（false = 清單，決策 122）
+    "gitChangesTree": true // Git Commit 畫面的變更以樹狀顯示（false = 清單）
   },
   "history": {
     "maxEntries": 200 // 歷史紀錄筆數上限，所有 Workspace 共用（50–1000）
@@ -90,17 +88,17 @@
     "messageLimit": 100 // 每個 WebSocket 分頁的訊息串最多保留幾則（10–5000），超過時刪除最舊的
   },
   "scripts": {
-    "trustedWorkspaces": ["/Users/me/Documents/Hachi/My API"] // 信任其腳本的 Workspace 資料夾（決策 84，只在這台電腦）
+    "trustedWorkspaces": ["/Users/me/Documents/Hachi/My API"] // 信任其腳本的 Workspace 資料夾（只在這台電腦）
   },
   "fileAccess": {
-    "trustedWorkspaces": [] // 允許 {{$file:…}} 讀取資料夾外檔案的 Workspace（決策 134，只在這台電腦）
+    "trustedWorkspaces": [] // 允許 {{$file:…}} 讀取資料夾外檔案的 Workspace（只在這台電腦）
   }
 }
 ```
 
-`proxy` 與 `ui` 於 Phase 2、`history` 於 Phase 3、`websocket` 於 Phase 4、`scripts` 於 Phase 5b、`fileAccess` 於決策 134 加入（新增欄位附預設值，不升版）。
+新增的欄位都附預設值，不升版。
 
-## ✅ `workspace.json`
+## `workspace.json`
 
 ```jsonc
 {
@@ -111,10 +109,10 @@
   "settings": {
     "timeoutMs": 30000, // 預設請求逾時，0 = 不限（上限 3600000）
     "validateSSL": true, // 預設 TLS 憑證驗證
-    "followRedirects": true, // 預設跟隨重新導向（Phase 2）
-    "maxRedirects": 3, // 最多跟隨次數，0–20（Phase 2）
-    "scriptTimeoutMs": 30000, // 每段腳本的總時間（含等待 sendRequest / sleep），1000–300000（決策 127）
-    "gitAutoFetch": false // 開啟 Workspace 時自動 git fetch（決策 113）
+    "followRedirects": true, // 預設跟隨重新導向
+    "maxRedirects": 3, // 最多跟隨次數，0–20
+    "scriptTimeoutMs": 30000, // 每段腳本的總時間（含等待 sendRequest / sleep），1000–300000
+    "gitAutoFetch": false // 開啟 Workspace 時自動 git fetch
   },
   "collectionOrder": [] // Collection 的 id，依顯示順序（規則同 collection.json 的 order）
 }
@@ -122,7 +120,7 @@
 
 建立 Workspace 時會依序寫入 `collections/`、`environments/`、`history.json`、`.gitignore`，**最後**才寫 `workspace.json`；因此有 `workspace.json` 就代表 Workspace 結構完整。開啟時若子資料夾遺失會自動補建。
 
-## ✅ `.gitignore`
+## `.gitignore`
 
 ```gitignore
 # Hachi — files that must not be committed
@@ -134,7 +132,7 @@ history.json
 *.tmp
 ```
 
-## ✅ `history.json`（Phase 3）
+## `history.json`
 
 每個 Workspace 一份，**新的在前**。只存未替換變數的請求（`{{token}}` 不會變成實際值）與回應摘要，**不存回應 Body**。檔案已列入 `.gitignore`。
 
@@ -159,7 +157,7 @@ history.json
       // 或 { "kind": "error", "code": "TIMEOUT", "message": "…", "timeMs": 30000 }
     },
     {
-      // Phase 4：一次 WebSocket 連線（從開始連線到關閉），不存訊息內容
+      // 一次 WebSocket 連線（從開始連線到關閉），不存訊息內容
       "id": "…",
       "type": "websocket",
       "sentAt": "…", // 開始連線的時間
@@ -199,7 +197,7 @@ history.json
 
 ---
 
-## ✅ 共用型別（schema 於 Phase 1 定義，編輯介面在 Phase 2）
+## 共用型別
 
 ```jsonc
 // KeyValue：Query Params、Headers、form 欄位、變數共用
@@ -211,7 +209,6 @@ history.json
 { "type": "basic", "username": "…", "password": "…" }
 { "type": "apiKey", "key": "X-API-Key", "value": "…", "in": "header" }   // in: "header" | "query"
 { "type": "inherit" }   // 沿用上層 folder / collection
-// 決策 128
 { "type": "digest", "username": "…", "password": "…" }
 { "type": "awsSigV4", "accessKeyId": "…", "secretAccessKey": "…", "sessionToken": "", "region": "us-east-1", "service": "execute-api" }
 {
@@ -230,9 +227,9 @@ history.json
 }
 ```
 
-所有欄位都可用 `{{變數}}`。OAuth 2.0 的 Token 不寫入任何檔案（只在記憶體，決策 128）。
+所有欄位都可用 `{{變數}}`。OAuth 2.0 的 Token 不寫入任何檔案（只在記憶體）。
 
-## ✅ `collection.json`
+## `collection.json`
 
 ```jsonc
 {
@@ -242,13 +239,13 @@ history.json
   "headers": [], // KeyValue[]，共用 Headers
   "auth": { "type": "none" }, // Auth
   "variables": [], // Variable[]：KeyValue + "secret": boolean；機密變數的 value 一律留空（值在 .hachi-secrets.json）
-  "scripts": { "preRequest": "", "postResponse": "" }, // 決策 126，會執行
+  "scripts": { "preRequest": "", "postResponse": "" }, // 會執行
   "scriptFlow": "sequential", // sequential（依序）| sandwich（三明治：Post-response 由內而外）
   "order": ["9a2e…", "c41d…"] // 子項目（資料夾 / 請求）的 id，依顯示順序
 }
 ```
 
-## ✅ `folder.json`
+## `folder.json`
 
 ```jsonc
 {
@@ -257,12 +254,12 @@ history.json
   "name": "Admin",
   "headers": [], // 可覆寫上層的共用 Headers
   "auth": { "type": "inherit" }, // 預設沿用上層
-  "scripts": { "preRequest": "", "postResponse": "" }, // 決策 126；順序依 Collection 的 scriptFlow
+  "scripts": { "preRequest": "", "postResponse": "" }, // 順序依 Collection 的 scriptFlow
   "order": []
 }
 ```
 
-Collection / 資料夾的 Headers 與 Auth 在 Phase 2 有編輯介面（點選 Collection 或資料夾）。Collection 的 `auth` 不可為 `inherit`（存檔時改為 `none`）。Collection 變數於 Phase 3 加入（Collection 設定的 Variables 分頁）；同名時環境變數優先。複製 Collection 時機密值一併複製。
+Collection / 資料夾的 Headers 與 Auth 在它們的設定分頁編輯（點選 Collection 或資料夾）。Collection 的 `auth` 不可為 `inherit`（存檔時改為 `none`）。Collection 變數在 Collection 設定的 Variables 分頁；同名時環境變數優先。複製 Collection 時機密值一併複製。
 
 ### 排序規則（`order` 與 `collectionOrder`）
 
@@ -279,9 +276,9 @@ Collection / 資料夾的 Headers 與 Auth 在 Phase 2 有編輯介面（點選 
 | JSON 損毀、缺少必要欄位或 `version` 太新                             | 在樹上以錯誤圖示顯示（id 為 `invalid:<相對路徑>`），只能刪除，不會覆寫該檔 |
 | 以 `.` 開頭的檔案 / 資料夾、原子寫入暫存檔、非 `.json` 檔            | 忽略                                                                       |
 
-## ✅ 請求檔 `<request>.json`
+## 請求檔 `<request>.json`
 
-Phase 1 驗證所有請求共通的欄位：
+所有請求共通的欄位：
 
 | 欄位      | 型別                    | 說明                        |
 | --------- | ----------------------- | --------------------------- |
@@ -291,11 +288,11 @@ Phase 1 驗證所有請求共通的欄位：
 | `name`    | string（1–100）         | 顯示名稱                    |
 | `method`  | string（選填）          | HTTP 方法，樹狀清單的標籤用 |
 
-HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一律附預設值，不升版）。
+HTTP 與 WebSocket 的完整欄位見下面兩節（新增欄位一律附預設值，不升版）。
 
-### ✅ HTTP 請求（Phase 2 定案，`src/shared/schemas/http-request.ts`）
+### HTTP 請求（`src/shared/schemas/http-request.ts`）
 
-所有欄位都有預設值，Phase 1 建立的檔案可直接讀取。
+所有欄位都有預設值，舊版建立的檔案可直接讀取。
 
 ```jsonc
 {
@@ -325,14 +322,14 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
     "validateSSL": null, // null = 沿用 Workspace
     "followRedirects": null, // null = 沿用 Workspace（次數上限一律用 Workspace 的 maxRedirects）
     "useProxy": true, // false = 這個請求不使用 App 的 Proxy 設定
-    "useCookieJar": true // false = 不帶上、也不保存 Workspace Cookie Jar 的 Cookie（決策 129）
+    "useCookieJar": true // false = 不帶上、也不保存 Workspace Cookie Jar 的 Cookie
   },
   "scripts": {
-    "preRequest": "", // 發送前執行的 JavaScript（最多約 1 MB），見 docs/ipc.md「腳本」
+    "preRequest": "", // 發送前執行的 JavaScript（最多約 1 MB）；可用的 API 見 App 內 Scripts 分頁的「可用的 API」
     "postResponse": "" // 收到回應後執行的 JavaScript
   },
   "extractions": [
-    // 從回應擷取變數（決策 73 / 81），收到回應後、Post-response 腳本之前執行
+    // 從回應擷取變數，收到回應後、Post-response 腳本之前執行
     {
       "id": "…",
       "enabled": true,
@@ -343,7 +340,7 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
     }
   ],
   "assertions": [
-    // 斷言（決策 73），最後執行
+    // 斷言，最後執行
     {
       "id": "…",
       "enabled": true,
@@ -361,11 +358,11 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 - **比較規則**：依實際值的型別比較——字串直接比對；數字以 `Number(預期值)` 比較；布林 / null 比對文字 `true` / `false` / `null`；物件 / 陣列以 `JSON.parse(預期值)` 深度比較。`contains`：字串包含、陣列含有相等的元素、物件含有該 key。
 - **擷取的值**：字串照原樣，其他 JSON 值以 `JSON.stringify` 存成文字。
 
-`collection.json` / `folder.json` 也有同樣形狀的 `scripts`，會在請求的腳本之前（Post-response 依 `scriptFlow`）執行（決策 126，取代決策 70）。
+`collection.json` / `folder.json` 也有同樣形狀的 `scripts`，會在請求的腳本之前（Post-response 依 `scriptFlow`）執行。
 
-### ✅ WebSocket 請求（Phase 4 定案，`src/shared/schemas/ws-request.ts`）
+### WebSocket 請求（`src/shared/schemas/ws-request.ts`）
 
-所有欄位都有預設值；Phase 1 建立的檔案（含舊的 `autoReconnect` 等欄位）可直接讀取，不認識的欄位會保留。
+所有欄位都有預設值；舊版建立的檔案（含舊的 `autoReconnect` 等欄位）可直接讀取，不認識的欄位會保留。
 
 ```jsonc
 {
@@ -399,11 +396,11 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 }
 ```
 
-- 不提供自動重連（決策 54）。
-- 網址、Params、Headers、Auth、子協定的 `{{變數}}` 在連線時替換；訊息內容（含範本、文字心跳）在送出時替換（決策 52）。
+- 不提供自動重連。
+- 網址、Params、Headers、Auth、子協定的 `{{變數}}` 在連線時替換；訊息內容（含範本、文字心跳）在送出時替換。
 - 訊息紀錄只存在記憶體（每個分頁最多 `app-config.json` 的 `websocket.messageLimit` 則），需要時從畫面匯出成 JSON 或純文字。
 
-## ✅ `environments/<env>.json` 與 `.hachi-secrets.json`（Phase 3）
+## `environments/<env>.json` 與 `.hachi-secrets.json`
 
 ```jsonc
 // environments/dev.json（可提交；檔名為名稱的 slug，改名時一併改檔名）
@@ -431,7 +428,7 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 - 兩個環境檔的 `id` 相同（例如在 Finder 複製）時，依檔名排序後讀到的那個改用新的 id。
 - 之後若接 macOS Keychain，會作為另一種機密儲存後端（以 Workspace id + 變數 id 為 key），`.hachi-secrets.json` 保留為預設 / 後備。
 
-## ✅ `<userData>/sessions/<sha1(workspacePath)>.json`（Phase 3）
+## `<userData>/sessions/<sha1(workspacePath)>.json`
 
 每個 Workspace 在這台電腦上次開啟的分頁與目前環境。存在 userData（不進 Workspace / git）；損毀或遺失時當作沒有分頁。
 
@@ -448,9 +445,9 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 - 未儲存的新請求分頁不記錄；關閉前一定會詢問是否儲存，所以不保存未儲存的內容。
 - 已不存在的項目在還原時略過。刪除 Workspace 時一併刪除它的 session 檔。
 
-## ✅ 匯入 / 匯出（Phase 5a，`src/shared/transfer/`）
+## 匯入 / 匯出（`src/shared/transfer/`）
 
-匯入一律建立新的項目（所有 id 重新產生），不會覆寫既有檔案；Collection / 環境名稱已存在時加上 ` copy`（決策 15）。寫入途中失敗時刪除寫了一半的 Collection 資料夾。
+匯入一律建立新的項目（所有 id 重新產生），不會覆寫既有檔案；Collection / 環境名稱已存在時加上 ` copy`。寫入途中失敗時刪除寫了一半的 Collection 資料夾。
 
 ### Postman Collection（v2.0 / v2.1）→ Hachi
 
@@ -468,13 +465,13 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 | body `graphql`                                                                                                                                                                                                                                                                             | JSON Body `{ "query": …, "variables": … }`（Postman 也是這樣送出；提示）                                                                         |
 | body `file`                                                                                                                                                                                                                                                                                | none（提示）                                                                                                                                     |
 | `auth`：`noauth` / `inherit` / `bearer` / `basic` / `apikey`                                                                                                                                                                                                                               | None / 沿用上層 / Bearer / Basic / API Key（`in: query` → Query）；請求沒有 `auth` → 沿用上層；Collection 沒有 → None                            |
-| `auth`：`digest` / `awsv4`（`accessKey` / `secretKey` / `sessionToken` / `region` / `service`）                                                                                                                                                                                            | Digest / AWS Signature（決策 128）                                                                                                               |
+| `auth`：`digest` / `awsv4`（`accessKey` / `secretKey` / `sessionToken` / `region` / `service`）                                                                                                                                                                                            | Digest / AWS Signature                                                                                                                           |
 | `auth`：`oauth2`（`grant_type`：`client_credentials` / `password_credentials` / `authorization_code` / `authorization_code_with_pkce`；`accessTokenUrl`、`authUrl`、`redirect_uri`、`clientId`、`clientSecret`、`scope`、`username`、`password`、`client_authentication`、`headerPrefix`） | OAuth 2.0；`implicit` → None（提示）；Token 本身不匯入；`addTokenTo: queryParams` 改用 Header（提示）                                            |
 | 其他 auth（`ntlm`、`hawk`…）                                                                                                                                                                                                                                                               | None（提示）                                                                                                                                     |
 | `event[]` `prerequest` / `test`                                                                                                                                                                                                                                                            | `scripts.preRequest` / `scripts.postResponse`（停用的腳本不匯入）；Collection / 資料夾的腳本也會執行，Collection 的 `scriptFlow` 為 `sequential` |
 | `protocolProfileBehavior.disableStrictSSL` / `followRedirects: false`                                                                                                                                                                                                                      | `settings.validateSSL: false` / `settings.followRedirects: false`                                                                                |
 | `variable[]`                                                                                                                                                                                                                                                                               | Collection 變數（`type: "secret"` → 機密）                                                                                                       |
-| `response[]`（Examples）                                                                                                                                                                                                                                                                   | 儲存的結果（決策 140）：`originalRequest`（沒有時用項目自己的請求）、`code` / `status`、`header[]`、`body`；超過 1 MB 的略過（提示）             |
+| `response[]`（Examples）                                                                                                                                                                                                                                                                   | 儲存的結果：`originalRequest`（沒有時用項目自己的請求）、`code` / `status`、`header[]`、`body`；超過 1 MB 的略過（提示）                         |
 
 ### Postman Environment / Globals → Hachi
 
@@ -493,10 +490,10 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 | `scripts`                                             | `event[]`（`prerequest` / `test`）                                                                                               |
 | `settings.validateSSL` / `followRedirects` 為 `false` | `protocolProfileBehavior`；請求的 timeout 與「不使用 App 的 Proxy」無法對應（提示）                                              |
 | Collection 變數                                       | `variable[]`（`type: "string"`）；**機密變數的值留空**                                                                           |
-| 儲存的結果（決策 140）                                | `response[]`：`originalRequest`、`code`、`status`、`header[]`、`body`、`_postman_previewlanguage`；二進位內容不匯出 Body（提示） |
+| 儲存的結果                                            | `response[]`：`originalRequest`、`code`、`status`、`header[]`、`body`、`_postman_previewlanguage`；二進位內容不匯出 Body（提示） |
 | 損毀的項目                                            | 略過並列出                                                                                                                       |
 
-### Bruno → Hachi（`src/shared/transfer/bruno*.ts`、`bru-lang.ts`，決策 103 / 104 / 107）
+### Bruno → Hachi（`src/shared/transfer/bruno*.ts`、`bru-lang.ts`）
 
 來源：
 
@@ -522,7 +519,7 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（後續 Phase 新增欄位一
 | `assert`（`res.status: eq 200`…）                          | 斷言表格：`eq / neq / gt / gte / lt / lte / contains / notContains / matches`、`isDefined` → exists、`isString` 等 → isType、`startsWith / endsWith` → matches；其他（`length`、`between`…）略過（提示）                                                                                                                                                                                                                                                                                   |
 | `vars:pre-request`                                         | Pre-request 腳本開頭的 `bru.setVar(name, bru.interpolate(value))`                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `vars:post-response`                                       | 單純路徑（`res.body.a.b`、`res.headers.x`、`res.status`）→ 擷取表格（暫存變數）；其他運算式 → `bru.setVar(name, 運算式)` 腳本                                                                                                                                                                                                                                                                                                                                                              |
-| `script:pre-request` / `script:post-response`、`tests`     | `scripts.preRequest` / `scripts.postResponse`（`tests` 接在後面）；用到不支援的 API（`bru.cookies`、`process.env`、`bru.runner.skipRequest` 等）時提示；Collection / 資料夾的腳本也會執行，`scripts.flow` 對應 `scriptFlow`（沒寫時三明治，決策 126）                                                                                                                                                                                                                                      |
+| `script:pre-request` / `script:post-response`、`tests`     | `scripts.preRequest` / `scripts.postResponse`（`tests` 接在後面）；用到不支援的 API（`bru.cookies`、`process.env`、`bru.runner.skipRequest` 等）時提示；Collection / 資料夾的腳本也會執行，`scripts.flow` 對應 `scriptFlow`（沒寫時三明治）                                                                                                                                                                                                                                                |
 | `docs`                                                     | `docs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `environments/*.bru`                                       | 環境（`vars:secret` 只有名稱 → 空值的機密變數，提示重新輸入）                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
@@ -542,7 +539,7 @@ OpenCollection YAML 與 `.bru` 的對照（YAML 讀進同一個模型）：
 | `settings.timeout` / `followRedirects`                                                                                      | （`.bru` 沒有）→ 請求的逾時（0 = 用 Workspace 設定）/ 跟隨轉址                                                |
 | `docs`、`environments/*.yml`（`variables[]`，`secret: true` 只有名稱；值可為 `{ type, data }`）                             | `docs`、`environments/*.bru`                                                                                  |
 
-Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: {…} }` 區塊、YAML 的 `examples[]`、匯出 JSON 的 `examples[]`）↔ 儲存的結果（決策 140，`bruno-example.ts`）；匯出時二進位內容不寫 Body（提示）。
+Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: {…} }` 區塊、YAML 的 `examples[]`、匯出 JSON 的 `examples[]`）↔ 儲存的結果（`bruno-example.ts`）；匯出時二進位內容不寫 Body（提示）。
 
 不是 Bruno 的 `.yml`（沒有 `info` 或對應區段，例如 CI 設定）會略過；`.bru` Collection 不讀 `.yml`，YAML Collection 不讀 `.bru`。
 
@@ -552,7 +549,7 @@ Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: 
 
 `bruno.json`、`collection.bru`（Headers、Auth、Collection 變數）、每個資料夾的 `folder.bru`、每個 HTTP 請求一個 `<名稱>.bru`（檔名去掉不合法字元，重名加數字）、`environments/<環境>.bru`（Workspace 的所有環境；**機密變數只寫名稱**）。擷取表格 → `vars:post-response`（Regex 擷取改為整個 Body、存到環境的擷取變成暫存變數，提示）；斷言 → `assert`；腳本原樣寫出（用了 `hachi.*` 時提示）；請求的逾時 / SSL 設定無法對應（提示）。WebSocket 略過。
 
-### Hachi → OpenAPI 3.0（`src/shared/transfer/openapi.ts`，決策 105）
+### Hachi → OpenAPI 3.0（`src/shared/transfer/openapi.ts`）
 
 | Hachi                                                 | OpenAPI                                                                                                                                                                                |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -577,7 +574,7 @@ Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: 
 - URL 照原樣放進 URL 欄位（含 query）；請求名稱為「方法 + 網址（不含 scheme 與 query）」。沒有指定 Auth 時為「沿用上層」。
 - 不匯入、只提示：讀檔（`@file`、`<file`、`-T`）、Proxy（使用 App 設定）、`--digest` / `--ntlm` 等驗證、不認得的選項。`-L` 與輸出相關的選項（`-s`、`-o`、`-v`…）忽略。
 
-## ✅ Runner 結果匯出（Phase 5c）
+## Runner 結果匯出
 
 `runner:export` 寫出的 JSON（不在 Workspace 中，由使用者選擇位置）：
 
@@ -593,7 +590,7 @@ Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: 
   "message": null,
   "settings": {
     "iterations": 3, // 持續時間模式為 null
-    "durationSec": null, // 決策 130：持續時間模式的秒數
+    "durationSec": null, // 持續時間模式的秒數
     "concurrency": 2,
     "delayMs": 0,
     "stopOnFailure": false,
@@ -610,11 +607,11 @@ Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: 
 }
 ```
 
-`format: "html"` 時寫出同樣內容做成的單一離線 HTML 報告（決策 130；沒有 script、不連外）。
+`format: "html"` 時寫出同樣內容做成的單一離線 HTML 報告（沒有 script、不連外）。
 
 資料檔：CSV（RFC 4180，第一列為欄名，支援引號、`""`、CRLF 與 BOM）或 JSON（物件陣列，非字串的值存成 JSON 文字），上限 10 MB、10,000 列。
 
-## ✅ `<userData>/cookies/<workspace id>.json`（決策 129）
+## `<userData>/cookies/<workspace id>.json`
 
 Workspace 的 Cookie Jar，只存在這台電腦（不在 Workspace 資料夾，也不進 git）。回應的 `Set-Cookie` 保存後約 0.5 秒原子寫入，切換 Workspace / 結束 App 前會先寫完；檔案損壞時視為空的 Jar。
 
@@ -640,7 +637,7 @@ Workspace 的 Cookie Jar，只存在這台電腦（不在 Workspace 資料夾，
 
 規則（RFC 6265，沒有 Public Suffix List）：Domain 屬性必須符合請求主機且含有點；`Secure` Cookie 只能由 https（或 localhost）設定與送出；`Max-Age` 優先於 `Expires`，`Max-Age=0` / 過期即刪除；總數上限 3000、每個網域 180（超過時刪最舊的），每個 Cookie 4 KB。
 
-## ✅ `mocks/<mock>.json`（決策 133，`src/shared/schemas/mock.ts`）
+## `mocks/<mock>.json`（`src/shared/schemas/mock.ts`）
 
 ```jsonc
 {
@@ -680,7 +677,7 @@ Workspace 的 Cookie Jar，只存在這台電腦（不在 Workspace 資料夾，
 
 各清單上限 500 列。紀錄不寫入檔案（只在 App 執行中保留）。
 
-## ✅ `<request>.examples/<名稱>.json`（決策 140，`src/shared/schemas/example.ts`）
+## `<request>.examples/<名稱>.json`（`src/shared/schemas/example.ts`）
 
 請求的「儲存結果」：送出後在回應區按「儲存結果」，把這次的請求與回應存成唯讀檔案，放在請求檔旁邊的資料夾（`get-users.json` → `get-users.examples/`），一筆一個檔案，可以進 git。請求改名、搬移、複製、刪除時資料夾一起處理；最後一筆刪除時資料夾也移除。
 
