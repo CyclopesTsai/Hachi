@@ -219,6 +219,14 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     [INVOKE.itemDuplicate]: (input) => ctx.collections.duplicate(input.id),
     [INVOKE.itemDelete]: (input) => ctx.collections.delete(input.id),
     [INVOKE.itemMove]: (input) => ctx.collections.move(input.id, input.parentId, input.index),
+    [INVOKE.exampleSave]: (input) =>
+      ctx.collections.saveExample(
+        input.requestId,
+        ctx.http.savedResult(input.runId, input.name, new Date().toISOString())
+      ),
+    [INVOKE.exampleGet]: (input) => ctx.collections.getExample(input.id),
+    [INVOKE.exampleRename]: (input) => ctx.collections.renameExample(input.id, input.name),
+    [INVOKE.exampleDelete]: (input) => ctx.collections.deleteExample(input.id),
     [INVOKE.requestGet]: (input) => ctx.collections.getRequest(input.id),
     [INVOKE.requestSave]: (input) => ctx.collections.saveRequest(input.id, input.request),
     [INVOKE.requestSaveAs]: (input) =>

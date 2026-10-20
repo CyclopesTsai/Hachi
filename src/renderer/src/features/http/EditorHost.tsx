@@ -10,6 +10,7 @@ import { MockEditor } from '@renderer/features/mock/MockEditor'
 import { useMockStore } from '@renderer/stores/mock-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { ContainerEditor } from './ContainerEditor'
+import { ExampleView } from './ExampleView'
 import { RequestEditor } from './RequestEditor'
 import { RunnerView } from '@renderer/features/runner/RunnerView'
 
@@ -73,6 +74,8 @@ function TabContent({ tab }: { tab: Tab }) {
       return <RunnerView tab={tab} />
     case 'mock':
       return tab.draft ? <MockEditor key={key} tab={tab} title={title} /> : null
+    case 'example':
+      return <ExampleView key={key} tab={tab} title={title} />
   }
 }
 

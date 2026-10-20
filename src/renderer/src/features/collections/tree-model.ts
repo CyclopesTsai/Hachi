@@ -7,6 +7,7 @@ import {
   isContainer,
   isSelfOrDescendant,
   type ContainerNode,
+  type ExampleNode,
   type TreeNode,
   type WorkspaceTree
 } from '@shared/tree'
@@ -15,6 +16,8 @@ export interface FlatRow {
   node: TreeNode
   depth: number
   parentId: string | null
+  /** A saved result under `node` (an expanded request, decision 140). */
+  example?: ExampleNode
 }
 
 /**
@@ -32,6 +35,10 @@ export function flattenTree(
     rows.push({ node, depth, parentId })
     if (isContainer(node) && expanded.has(node.id)) {
       for (const child of node.children) visit(child, depth + 1, node.id)
+    } else if (node.kind === 'request' && node.examples && expanded.has(node.id)) {
+      for (const example of node.examples) {
+        rows.push({ node, depth: depth + 1, parentId: node.id, example })
+      }
     }
   }
   for (const c of tree.collections) visit(c, 0, null)
@@ -46,7 +53,8 @@ export function neighborRow(
   delta: 1 | -1,
   visible?: ReadonlySet<string> | null
 ): TreeNode | null {
-  const rows = flattenTree(tree, expanded, visible)
+  // Saved results are reached with the mouse / Tab, not ↑ / ↓.
+  const rows = flattenTree(tree, expanded, visible).filter((r) => !r.example)
   const index = rows.findIndex((r) => r.node.id === id)
   if (index < 0) return null
   return rows[index + delta]?.node ?? null

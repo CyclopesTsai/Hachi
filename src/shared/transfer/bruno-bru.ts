@@ -16,8 +16,10 @@ import {
   type BrunoFile,
   type BrunoItem,
   type BrunoPair,
+  type BrunoRequestItem,
   type BrunoRequestPart
 } from './bruno-model'
+import { bruExampleText, parseBruExample } from './bruno-example'
 
 const BODY_BLOCK_MODES: Record<string, string> = {
   'body:json': 'json',
@@ -156,6 +158,9 @@ export function readBruFile(path: string, text: string): BrunoFile {
     return { kind: 'environment', environment }
   }
   const { part, meta, type } = partFromBru(blocks)
+  const examples = blocks.flatMap((b) =>
+    b.kind === 'text' && b.name === 'example' ? [parseBruExample(b.text)] : []
+  )
   if (file === 'folder.bru') {
     const seq = Number(meta.seq)
     return {
@@ -171,7 +176,8 @@ export function readBruFile(path: string, text: string): BrunoFile {
       type,
       name: meta.name || file.replace(/\.bru$/, ''),
       seq: Number(meta.seq) || Number.MAX_SAFE_INTEGER,
-      request: part
+      request: part,
+      ...(examples.length > 0 ? { examples } : {})
     }
   }
 }
@@ -268,7 +274,7 @@ function commonBlocks(part: BrunoRequestPart): BruBlock[] {
   return blocks
 }
 
-function requestBru(item: BrunoItem & { request: BrunoRequestPart }): string {
+function requestBru(item: BrunoRequestItem): string {
   const part = item.request
   return serializeBru([
     {
@@ -299,7 +305,12 @@ function requestBru(item: BrunoItem & { request: BrunoRequestPart }): string {
     ),
     ...dictBlock('headers', part.headers),
     ...authBlocks(part.auth),
-    ...commonBlocks(part)
+    ...commonBlocks(part),
+    ...(item.examples ?? []).map((example): BruBlock => ({
+      kind: 'text',
+      name: 'example',
+      text: bruExampleText(example)
+    }))
   ])
 }
 

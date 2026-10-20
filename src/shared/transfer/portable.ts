@@ -6,6 +6,7 @@
 import type { Auth, KeyValue, ScriptFlow, Variable } from '../schemas/collection'
 import type { RequestScripts } from '../schemas/http-request'
 import type { AnyRequest } from '../schemas/request'
+import type { ExampleFile } from '../schemas/example'
 
 export interface PortableContainer {
   name: string
@@ -31,7 +32,15 @@ export interface PortableRequest {
   kind: 'request'
   /** `id` is ignored when importing: every imported item gets a new id. */
   request: AnyRequest
+  /** Saved results (decision 140), HTTP requests only. */
+  examples?: PortableExample[]
 }
+
+/** A saved result without its file identity (a new id is given when importing). */
+export type PortableExample = Pick<
+  ExampleFile,
+  'name' | 'savedAt' | 'request' | 'sent' | 'response'
+>
 
 export type PortableItem = PortableFolder | PortableRequest
 

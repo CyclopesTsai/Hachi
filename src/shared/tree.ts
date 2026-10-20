@@ -31,6 +31,18 @@ export interface RequestNode extends BaseNode {
   requestType: RequestType
   /** HTTP method for http requests. */
   method?: string
+  /** Saved results (decision 140), in name order; absent when there are none. */
+  examples?: ExampleNode[]
+}
+
+/** A saved result shown under its request; not part of TreeNode (no drag, no children). */
+export interface ExampleNode {
+  id: string
+  name: string
+  relPath: string
+  /** Status code of the saved response (absent when the file is unreadable). */
+  status?: number
+  error?: string
 }
 
 export type ContainerNode = CollectionNode | FolderNode
@@ -115,4 +127,21 @@ export function findRequestByPath(
     container = child
   }
   return null
+}
+
+/** The example with `id` and the request it belongs to. */
+export function findExample(
+  tree: WorkspaceTree,
+  id: string
+): { example: ExampleNode; request: RequestNode } | null {
+  let found: { example: ExampleNode; request: RequestNode } | null = null
+  walkTree(tree, (node) => {
+    if (node.kind !== 'request') return
+    const example = node.examples?.find((e) => e.id === id)
+    if (example) {
+      found = { example, request: node }
+      return false
+    }
+  })
+  return found
 }

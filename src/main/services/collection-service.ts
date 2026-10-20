@@ -22,8 +22,20 @@ import {
   type Variable
 } from '@shared/schemas/collection'
 import { mergeSecrets, splitSecrets } from '@shared/schemas/environment'
+import {
+  EXAMPLES_DIR_SUFFIX,
+  EXAMPLE_VERSION,
+  exampleFormat,
+  examplesDirOf,
+  type ExampleFile
+} from '@shared/schemas/example'
 import { requestScriptsSchema, type RequestScripts } from '@shared/schemas/http-request'
-import type { PortableCollection, PortableContainer, PortableItem } from '@shared/transfer/portable'
+import type {
+  PortableCollection,
+  PortableContainer,
+  PortableExample,
+  PortableItem
+} from '@shared/transfer/portable'
 import { anyRequestFormat, type AnyRequest } from '@shared/schemas/request'
 import { parseVersioned } from '@shared/schemas/versioned'
 import { WORKSPACE_FILE, WORKSPACE_LAYOUT, workspaceFormat } from '@shared/schemas/workspace'
@@ -35,6 +47,7 @@ import {
   type ChildNode,
   type CollectionNode,
   type ContainerNode,
+  type ExampleNode,
   type ItemKind,
   type RequestNode,
   type TreeNode,
@@ -60,9 +73,17 @@ interface IndexEntry {
   invalid: boolean
 }
 
+/** A saved result (decision 140): its file and the request it belongs to. */
+interface ExampleIndexEntry {
+  absPath: string
+  requestId: string
+  invalid: boolean
+}
+
 interface ScanContext {
   root: string
   index: Map<string, IndexEntry>
+  examples: Map<string, ExampleIndexEntry>
   seenIds: Set<string>
 }
 
@@ -79,6 +100,24 @@ const hasScripts = (s: RequestScripts) => s.preRequest.trim() !== '' || s.postRe
 
 function isHidden(name: string): boolean {
   return name.startsWith('.') || isTempFileName(name)
+}
+
+/** `<request>.examples` folders hold a request's saved results; they are not folders. */
+function isExamplesDir(name: string): boolean {
+  return name.toLowerCase().endsWith(EXAMPLES_DIR_SUFFIX)
+}
+
+/** Folder slug that never ends in ".examples" (that suffix marks saved results). */
+function containerSlug(name: string): string {
+  const slug = slugify(name)
+  return isExamplesDir(slug) ? `${slug.slice(0, -EXAMPLES_DIR_SUFFIX.length)}-examples` : slug
+}
+
+function exists(p: string): Promise<boolean> {
+  return access(p).then(
+    () => true,
+    () => false
+  )
 }
 
 function toRelPath(root: string, absPath: string): string {
@@ -142,6 +181,7 @@ export class CollectionService {
   private tree: WorkspaceTree = EMPTY_TREE
   private treeJson = JSON.stringify(EMPTY_TREE)
   private index = new Map<string, IndexEntry>()
+  private examples = new Map<string, ExampleIndexEntry>()
   private queue: Promise<unknown> = Promise.resolve()
   private readonly listeners = new Set<(tree: WorkspaceTree) => void>()
 
@@ -375,7 +415,7 @@ export class CollectionService {
         const collectionsDir = path.join(root, WORKSPACE_LAYOUT.collectionsDir)
         const dir = path.join(
           collectionsDir,
-          await this.uniqueName(collectionsDir, slugify(name), '')
+          await this.uniqueName(collectionsDir, containerSlug(name), '')
         )
         await mkdir(dir, { recursive: true })
         await writeJsonAtomic(path.join(dir, COLLECTION_FILE), newCollectionFile(id, name))
@@ -391,7 +431,7 @@ export class CollectionService {
         if (input.kind === 'folder') {
           const dir = path.join(
             parent.absPath,
-            await this.uniqueName(parent.absPath, slugify(name), '')
+            await this.uniqueName(parent.absPath, containerSlug(name), '')
           )
           await mkdir(dir, { recursive: true })
           await writeJsonAtomic(path.join(dir, FOLDER_FILE), newFolderFile(id, name))
@@ -428,7 +468,7 @@ export class CollectionService {
       await mkdir(collectionsDir, { recursive: true })
       const dir = path.join(
         collectionsDir,
-        await this.uniqueName(collectionsDir, slugify(name), '')
+        await this.uniqueName(collectionsDir, containerSlug(name), '')
       )
       const id = this.newId()
       try {
@@ -495,8 +535,14 @@ export class CollectionService {
       const dir = path.dirname(entry.absPath)
       const ext = entry.kind === 'request' ? '.json' : ''
       const current = path.basename(entry.absPath)
-      const target = await this.uniqueName(dir, slugify(name), ext, current)
-      if (target !== current) await rename(entry.absPath, path.join(dir, target))
+      const slug = entry.kind === 'request' ? slugify(name) : containerSlug(name)
+      const target = await this.uniqueName(dir, slug, ext, current)
+      if (target !== current) {
+        await rename(entry.absPath, path.join(dir, target))
+        if (entry.kind === 'request') {
+          await this.moveExamples(entry.absPath, path.join(dir, target))
+        }
+      }
       return this.rescan()
     })
   }
@@ -519,8 +565,9 @@ export class CollectionService {
         const raw = await readRawObject(entry.absPath)
         const file = path.join(dir, await this.uniqueName(dir, slugify(name), '.json'))
         await writeJsonAtomic(file, { ...raw, id: newId, name })
+        await this.copyExamples(examplesDirOf(entry.absPath), examplesDirOf(file))
       } else {
-        const target = path.join(dir, await this.uniqueName(dir, slugify(name), ''))
+        const target = path.join(dir, await this.uniqueName(dir, containerSlug(name), ''))
         newId = await this.copyContainer(entry.absPath, target, entry.kind, name)
         if (entry.kind === 'collection') {
           await copySecrets(this.requireRoot(), 'collections', id, newId)
@@ -542,6 +589,9 @@ export class CollectionService {
       const collectionsDir = path.join(root, WORKSPACE_LAYOUT.collectionsDir)
       if (!entry.absPath.startsWith(collectionsDir + path.sep)) {
         throw new HachiError('FORBIDDEN', 'Refusing to delete outside the collections folder')
+      }
+      if (entry.kind === 'request' && (await exists(examplesDirOf(entry.absPath)))) {
+        await this.trash(examplesDirOf(entry.absPath))
       }
       await this.trash(entry.absPath)
       if (entry.parentId === null || !this.index.get(entry.parentId)?.invalid) {
@@ -600,6 +650,7 @@ export class CollectionService {
           await this.uniqueName(target.absPath, base, ext)
         )
         await rename(entry.absPath, destination)
+        if (entry.kind === 'request') await this.moveExamples(entry.absPath, destination)
         if (entry.parentId !== null && !this.index.get(entry.parentId)?.invalid) {
           await this.writeOrder(
             entry.parentId,
@@ -608,6 +659,60 @@ export class CollectionService {
         }
       }
       await this.writeOrder(parentId, insert(this.childIds(parentId)))
+      return this.rescan()
+    })
+  }
+
+  // ------------------------------------------------------- saved results
+
+  /** A saved result (decision 140). */
+  getExample(id: string): Promise<ExampleFile> {
+    return this.run(() => readVersionedJson(this.requireExample(id).absPath, exampleFormat))
+  }
+
+  /** Saves a result under an HTTP request; the name gets a unique file name. */
+  saveExample(
+    requestId: string,
+    example: PortableExample
+  ): Promise<{ id: string; tree: WorkspaceTree }> {
+    return this.run(async () => {
+      const entry = this.requireValid(requestId)
+      if (entry.kind !== 'request') {
+        throw new HachiError('INVALID_OPERATION', 'Results can only be saved under a request')
+      }
+      const id = await this.writeExample(examplesDirOf(entry.absPath), example)
+      return { id, tree: await this.rescan() }
+    })
+  }
+
+  renameExample(id: string, nameInput: string): Promise<WorkspaceTree> {
+    return this.run(async () => {
+      const entry = this.requireExample(id)
+      if (entry.invalid) throw new HachiError('INVALID_FILE', 'This file is unreadable')
+      const name = nameInput.trim()
+      await updateJsonAtomic(
+        entry.absPath,
+        () => readRawObject(entry.absPath),
+        (raw) => ({ ...raw, name })
+      )
+      const dir = path.dirname(entry.absPath)
+      const current = path.basename(entry.absPath)
+      const target = await this.uniqueName(dir, slugify(name), '.json', current)
+      if (target !== current) await rename(entry.absPath, path.join(dir, target))
+      return this.rescan()
+    })
+  }
+
+  /** Moves the file to the system trash (the folder too once it is empty). */
+  deleteExample(id: string): Promise<WorkspaceTree> {
+    return this.run(async () => {
+      const entry = this.requireExample(id)
+      await this.trash(entry.absPath)
+      const dir = path.dirname(entry.absPath)
+      const left = await readdir(dir).catch(() => ['?'])
+      if (left.filter((n) => !isHidden(n)).length === 0) {
+        await rm(dir, { recursive: true, force: true }).catch(() => undefined)
+      }
       return this.rescan()
     })
   }
@@ -637,6 +742,67 @@ export class CollectionService {
   locate(id: string): { kind: ItemKind; absPath: string } {
     const entry = this.requireEntry(id)
     return { kind: entry.kind, absPath: entry.absPath }
+  }
+
+  private requireExample(id: string): ExampleIndexEntry {
+    const entry = this.examples.get(id)
+    if (!entry) throw new HachiError('NOT_FOUND', 'Saved result not found')
+    return entry
+  }
+
+  /** Writes a saved result into `dir` (created if needed) with a new id; returns the id. */
+  private async writeExample(dir: string, example: PortableExample): Promise<string> {
+    await mkdir(dir, { recursive: true })
+    const id = this.newId()
+    const name = example.name.trim().slice(0, ITEM_NAME_MAX) || 'Example'
+    const file = path.join(dir, await this.uniqueName(dir, slugify(name), '.json'))
+    await writeJsonAtomic(file, { version: EXAMPLE_VERSION, id, ...example, name })
+    return id
+  }
+
+  /** Saved results of a request, for export (unreadable ones are left out). */
+  private async readExamples(node: RequestNode): Promise<PortableExample[]> {
+    const out: PortableExample[] = []
+    for (const example of node.examples ?? []) {
+      const entry = this.examples.get(example.id)
+      if (!entry || entry.invalid) continue
+      try {
+        const file = await readVersionedJson(entry.absPath, exampleFormat)
+        out.push({
+          name: file.name,
+          savedAt: file.savedAt,
+          request: file.request,
+          sent: file.sent,
+          response: file.response
+        })
+      } catch {
+        // unreadable: skipped
+      }
+    }
+    return out
+  }
+
+  /** Copies a request's saved results with new ids (duplicating the request or a folder). */
+  private async copyExamples(from: string, to: string): Promise<void> {
+    const entries = await readdir(from, { withFileTypes: true }).catch(() => null)
+    if (!entries) return
+    await mkdir(to, { recursive: true })
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json') || isHidden(entry.name)) continue
+      try {
+        const raw = await readRawObject(path.join(from, entry.name))
+        await writeJsonAtomic(path.join(to, entry.name), { ...raw, id: this.newId() })
+      } catch {
+        await copyFile(path.join(from, entry.name), path.join(to, entry.name))
+      }
+    }
+  }
+
+  /** Keeps a request's saved results next to it after its file was renamed / moved. */
+  private async moveExamples(oldFile: string, newFile: string): Promise<void> {
+    const from = examplesDirOf(oldFile)
+    if (from === examplesDirOf(newFile) || !(await exists(from))) return
+    await rename(from, examplesDirOf(newFile))
   }
 
   private requireEntry(id: string): IndexEntry {
@@ -702,7 +868,7 @@ export class CollectionService {
       const id = this.newId()
       ids.push(id)
       if (child.kind === 'folder') {
-        const sub = path.join(dir, await this.uniqueName(dir, slugify(child.name), ''))
+        const sub = path.join(dir, await this.uniqueName(dir, containerSlug(child.name), ''))
         await mkdir(sub)
         const order = await this.writePortableChildren(sub, child.children)
         await writeJsonAtomic(path.join(sub, FOLDER_FILE), {
@@ -716,6 +882,9 @@ export class CollectionService {
         const name = child.request.name
         const file = path.join(dir, await this.uniqueName(dir, slugify(name), '.json'))
         await writeJsonAtomic(file, { ...child.request, version: ITEM_VERSION, id, name })
+        for (const example of child.examples ?? []) {
+          await this.writeExample(examplesDirOf(file), example)
+        }
       }
     }
     return ids
@@ -739,7 +908,12 @@ export class CollectionService {
       }
       try {
         if (child.kind === 'request') {
-          children.push({ kind: 'request', request: await this.readRequest(entry.absPath) })
+          const examples = await this.readExamples(child)
+          children.push({
+            kind: 'request',
+            request: await this.readRequest(entry.absPath),
+            ...(examples.length > 0 ? { examples } : {})
+          })
         } else {
           const inner = await this.portableContainer(
             child,
@@ -777,7 +951,9 @@ export class CollectionService {
       if (isHidden(entry.name)) continue
       const from = path.join(source, entry.name)
       const to = path.join(target, entry.name)
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() && isExamplesDir(entry.name)) {
+        await this.copyExamples(from, to)
+      } else if (entry.isDirectory()) {
         const oldId = await readRawObject(path.join(from, FOLDER_FILE))
           .then((raw) => raw.id)
           .catch(() => undefined)
@@ -877,9 +1053,15 @@ export class CollectionService {
     if (!found) throw new HachiError('NOT_FOUND', 'Item not found')
 
     const index = new Map(this.index)
-    for (const old of subtreeIds(found.node)) index.delete(old)
-    const seenIds = new Set([...index.keys()].filter((k) => !k.startsWith(INVALID_ID_PREFIX)))
-    const ctx: ScanContext = { root, index, seenIds }
+    const removed = new Set(subtreeIds(found.node))
+    for (const old of removed) index.delete(old)
+    const examples = new Map(
+      [...this.examples].filter(([, example]) => !removed.has(example.requestId))
+    )
+    const seenIds = new Set(
+      [...index.keys(), ...examples.keys()].filter((k) => !k.startsWith(INVALID_ID_PREFIX))
+    )
+    const ctx: ScanContext = { root, index, examples, seenIds }
 
     let replacement: TreeNode | null = null
     const stillThere = await access(entry.absPath).then(
@@ -894,6 +1076,7 @@ export class CollectionService {
     }
     if (this.root !== root) return this.tree
     this.index = ctx.index
+    this.examples = ctx.examples
     this.setTree(replaceNode(this.tree, id, replacement))
     return this.tree
   }
@@ -904,10 +1087,11 @@ export class CollectionService {
     const root = this.root
     if (!root) {
       this.index = new Map()
+      this.examples = new Map()
       this.setTree(EMPTY_TREE)
       return this.tree
     }
-    const ctx: ScanContext = { root, index: new Map(), seenIds: new Set() }
+    const ctx: ScanContext = { root, index: new Map(), examples: new Map(), seenIds: new Set() }
     const collectionsDir = path.join(root, WORKSPACE_LAYOUT.collectionsDir)
     // Never create folders here: the Workspace may have just been deleted.
     const entries = await readdir(collectionsDir, { withFileTypes: true }).catch(() => [])
@@ -931,6 +1115,7 @@ export class CollectionService {
 
     if (this.root !== root) return this.tree // Workspace switched during the scan
     this.index = ctx.index
+    this.examples = ctx.examples
     this.setTree({
       workspaceId: this.workspaceId,
       collections: applyOrder(collections, collectionOrder)
@@ -996,7 +1181,9 @@ export class CollectionService {
     for (const entry of entries) {
       if (isHidden(entry.name)) continue
       const full = path.join(dir, entry.name)
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() && isExamplesDir(entry.name)) {
+        continue // a request's saved results (read with the request)
+      } else if (entry.isDirectory()) {
         children.push((await this.scanContainer(full, 'folder', id, ctx)) as ChildNode)
       } else if (
         entry.isFile() &&
@@ -1017,6 +1204,32 @@ export class CollectionService {
     return kind === 'collection' ? { kind, ...base } : { kind, ...base }
   }
 
+  private async scanExamples(
+    requestFile: string,
+    requestId: string,
+    ctx: ScanContext
+  ): Promise<ExampleNode[]> {
+    const dir = examplesDirOf(requestFile)
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+    const nodes: ExampleNode[] = []
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.json') || isHidden(entry.name)) continue
+      const file = path.join(dir, entry.name)
+      const relPath = toRelPath(ctx.root, file)
+      try {
+        const example = await readVersionedJson(file, exampleFormat)
+        const id = await this.claimId(example.id, file, ctx)
+        nodes.push({ id, name: example.name, relPath, status: example.response.status })
+        ctx.examples.set(id, { absPath: file, requestId, invalid: false })
+      } catch (e) {
+        const id = `${INVALID_ID_PREFIX}${relPath}`
+        nodes.push({ id, name: path.basename(entry.name, '.json'), relPath, error: errorText(e) })
+        ctx.examples.set(id, { absPath: file, requestId, invalid: true })
+      }
+    }
+    return nodes.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   private async scanRequest(
     file: string,
     parentId: string,
@@ -1035,6 +1248,8 @@ export class CollectionService {
         requestType: request.type,
         ...(request.type === 'http' ? { method: (request.method ?? 'GET').toUpperCase() } : {})
       }
+      const examples = await this.scanExamples(file, id, ctx)
+      if (examples.length > 0) node.examples = examples
     } catch (e) {
       node = {
         kind: 'request',

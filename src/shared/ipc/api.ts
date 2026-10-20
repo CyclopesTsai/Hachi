@@ -33,6 +33,7 @@ import type { HistoryEntry } from '../schemas/history'
 import type { AnyRequest } from '../schemas/request'
 import type { WsMessageFormat, WsRequest } from '../schemas/ws-request'
 import type { HttpRequest } from '../schemas/http-request'
+import type { ExampleFile } from '../schemas/example'
 import type { WsEventPayload } from '../ws'
 import type {
   GitBranch,
@@ -449,6 +450,13 @@ export interface RunIdInput {
   runId: string
 }
 
+/** 儲存結果 (decision 140): the response of `runId` (still in the store) under `requestId`. */
+export interface ExampleSaveInput {
+  requestId: string
+  runId: string
+  name: string
+}
+
 export interface ItemMutationResult {
   /** Id of the created / duplicated item. */
   id: string
@@ -504,6 +512,10 @@ export interface InvokeMap {
   'item:duplicate': { input: ItemIdInput; output: ItemMutationResult }
   'item:delete': { input: ItemIdInput; output: WorkspaceTree }
   'item:move': { input: ItemMoveInput; output: WorkspaceTree }
+  'example:save': { input: ExampleSaveInput; output: ItemMutationResult }
+  'example:get': { input: ItemIdInput; output: ExampleFile }
+  'example:rename': { input: ItemRenameInput; output: WorkspaceTree }
+  'example:delete': { input: ItemIdInput; output: WorkspaceTree }
   'request:get': { input: ItemIdInput; output: RequestData }
   'request:save': { input: RequestSaveInput; output: RequestSaveResult }
   'request:saveAs': { input: RequestSaveAsInput; output: RequestSaveAsResult }
@@ -821,6 +833,14 @@ export interface HachiApi {
     /** Moves the item to the system trash. */
     delete: InvokeFn<'item:delete'>
     move: InvokeFn<'item:move'>
+  }
+  /** Saved results under requests (decision 140). */
+  example: {
+    save: InvokeFn<'example:save'>
+    get: InvokeFn<'example:get'>
+    rename: InvokeFn<'example:rename'>
+    /** Moves the file to the system trash. */
+    delete: InvokeFn<'example:delete'>
   }
   dialog: {
     /** Returns the chosen absolute path, or `null` if cancelled. */

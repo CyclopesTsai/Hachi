@@ -14,9 +14,11 @@ import {
   readOAuth2,
   type BrunoCollectionData,
   type BrunoEnvironment,
+  type BrunoExample,
   type BrunoFile,
   type BrunoItem,
   type BrunoPair,
+  type BrunoRequestItem,
   type BrunoRequestPart,
   type Json
 } from './bruno-model'
@@ -157,6 +159,41 @@ function readDefaults(raw: unknown, missingAuth: string): BrunoRequestPart {
   return part
 }
 
+/** `examples` of a request file (response examples, decision 140). */
+function readExamples(list: unknown): BrunoExample[] {
+  return asArray(list)
+    .filter(isObject)
+    .map((raw): BrunoExample => {
+      const req = isObject(raw.request) ? raw.request : {}
+      const res = isObject(raw.response) ? raw.response : {}
+      const part = emptyPart()
+      readBody(req.body, part)
+      const body = isObject(res.body) ? res.body : null
+      return {
+        name: asString(raw.name),
+        description: textOf(raw.description),
+        request: {
+          url: asString(req.url),
+          method: asString(req.method).toUpperCase() || 'GET',
+          headers: pairs(req.headers),
+          params: asArray(req.params)
+            .filter(isObject)
+            .map((p) => ({
+              ...pairs([p])[0]!,
+              type: asString(p.type) === 'path' ? ('path' as const) : ('query' as const)
+            })),
+          body: part.body
+        },
+        response: {
+          status: Number(res.status) || 200,
+          statusText: asString(res.statusText),
+          headers: pairs(res.headers),
+          body: body ? { type: asString(body.type) || 'text', content: asString(body.data) } : null
+        }
+      }
+    })
+}
+
 function readRequest(doc: Json, fallbackName: string): BrunoFile {
   const info = isObject(doc.info) ? doc.info : {}
   const type = asString(info.type) || 'http'
@@ -195,13 +232,15 @@ function readRequest(doc: Json, fallbackName: string): BrunoFile {
         : {})
     }
   }
+  const examples = readExamples(doc.examples)
   return {
     kind: 'request',
     item: {
       type,
       name: asString(info.name) || fallbackName,
       seq: typeof info.seq === 'number' ? info.seq : Number.MAX_SAFE_INTEGER,
-      request: part
+      request: part,
+      ...(examples.length > 0 ? { examples } : {})
     }
   }
 }
@@ -422,7 +461,39 @@ function defaultsOut(part: BrunoRequestPart | null): Json | undefined {
   }
 }
 
-function requestYaml(item: BrunoItem & { request: BrunoRequestPart }): string {
+function examplesOut(examples: readonly BrunoExample[] | undefined): Json[] | undefined {
+  if (!examples || examples.length === 0) return undefined
+  return examples.map((ex) =>
+    compact({
+      name: ex.name,
+      description: ex.description || undefined,
+      request: compact({
+        url: ex.request.url,
+        method: ex.request.method,
+        headers: pairsOut(ex.request.headers),
+        params: ex.request.params
+          .filter((p) => p.name.trim() !== '')
+          .map((p) => ({
+            name: p.name,
+            value: p.value,
+            type: p.type,
+            ...(p.enabled ? {} : { disabled: true })
+          })),
+        body: bodyOut(ex.request.body)
+      }),
+      response: compact({
+        status: ex.response.status,
+        statusText: ex.response.statusText || undefined,
+        headers: ex.response.headers.map((h) => ({ name: h.name, value: h.value })),
+        body: ex.response.body
+          ? { type: ex.response.body.type, data: ex.response.body.content }
+          : undefined
+      })
+    })
+  )
+}
+
+function requestYaml(item: BrunoRequestItem): string {
   const part = item.request
   const runtime = runtimeOut(part)
   return toYaml(
@@ -453,7 +524,8 @@ function requestYaml(item: BrunoItem & { request: BrunoRequestPart }): string {
               : {})
           }
         : undefined,
-      docs: part.docs.trim() === '' ? undefined : part.docs
+      docs: part.docs.trim() === '' ? undefined : part.docs,
+      examples: examplesOut(item.examples)
     })
   )
 }

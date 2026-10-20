@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { RequestType } from '@shared/schemas/collection'
-import { findNode, type ItemKind, type WorkspaceTree } from '@shared/tree'
+import { findExample, findNode, type ItemKind, type WorkspaceTree } from '@shared/tree'
 import { allContainerIds, ancestorIds, searchTree } from '@renderer/features/collections/tree-model'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 
@@ -53,6 +53,14 @@ interface TreeState {
   duplicate(id: string): Promise<string | null>
   remove(id: string): Promise<void>
   move(id: string, parentId: string | null, index: number): Promise<void>
+
+  /**
+   * 儲存結果 (decision 140): saves the stored response of `runId` under the request and
+   * shows it in the tree. Resolves the new id; throws so the dialog can show the error.
+   */
+  saveExample(requestId: string, runId: string, name: string): Promise<string>
+  renameExample(id: string, name: string): Promise<void>
+  removeExample(id: string): Promise<void>
 }
 
 export const useTreeStore = create<TreeState>()((set, get) => {
@@ -219,6 +227,29 @@ export const useTreeStore = create<TreeState>()((set, get) => {
     async remove(id) {
       await attempt(async () => {
         get().applyTree(await unwrap(window.hachi.item.delete({ id })))
+      })
+    },
+
+    async saveExample(requestId, runId, name) {
+      const result = await unwrap(window.hachi.example.save({ requestId, runId, name }))
+      get().applyTree(result.tree)
+      expandAll([...ancestorIds(result.tree, requestId), requestId])
+      get().select(result.id)
+      return result.id
+    },
+
+    async renameExample(id, name) {
+      set({ editingId: null })
+      const current = findExample(get().tree, id)?.example
+      if (!current || current.name === name.trim() || name.trim() === '') return
+      await attempt(async () => {
+        get().applyTree(await unwrap(window.hachi.example.rename({ id, name })))
+      })
+    },
+
+    async removeExample(id) {
+      await attempt(async () => {
+        get().applyTree(await unwrap(window.hachi.example.delete({ id })))
       })
     },
 

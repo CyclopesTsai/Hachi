@@ -331,6 +331,7 @@ export class RequestExecutor {
     const result = await this.deps.http.send({
       ...input,
       request: sending,
+      source: request,
       layers: await scope.layers(),
       cookies: scope.cookies
     })

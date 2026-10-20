@@ -15,6 +15,12 @@ export function fileIndex(tree: WorkspaceTree): Map<string, FileLabel> {
     const names = [...trail, node.name]
     if (!isContainer(node)) {
       index.set(node.relPath, { title: names.join(' / '), itemId: node.id })
+      for (const example of node.examples ?? []) {
+        index.set(example.relPath, {
+          title: `${names.join(' / ')}（結果：${example.name}）`,
+          itemId: null
+        })
+      }
       return
     }
     const meta = node.kind === 'collection' ? 'collection.json' : 'folder.json'

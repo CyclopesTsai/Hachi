@@ -38,7 +38,14 @@ export function buildChangeTree(
     if (isContainer(node)) {
       dirNames.set(node.relPath, node.name)
       node.children.forEach(visit)
-    } else fileNames.set(node.relPath, node.name)
+    } else {
+      fileNames.set(node.relPath, node.name)
+      // Saved results (decision 140): `<request>.examples/` under the request's name.
+      if (node.examples?.length) {
+        dirNames.set(node.relPath.replace(/\.json$/i, '.examples'), `${node.name}（儲存的結果）`)
+      }
+      for (const example of node.examples ?? []) fileNames.set(example.relPath, example.name)
+    }
   }
   tree.collections.forEach(visit)
 

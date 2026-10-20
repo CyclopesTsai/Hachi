@@ -26,7 +26,7 @@ import {
   X
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { findNode, isContainer, type TreeNode } from '@shared/tree'
+import { findNode, isContainer, type ExampleNode, type TreeNode } from '@shared/tree'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +72,7 @@ import {
 } from './tree-model'
 import { MockActions, MockPanel } from '@renderer/features/mock/MockPanel'
 import { selectRenameInput } from './rename-input'
+import { ExampleRow } from './ExampleRow'
 import { TreeRow, type DropIndicator } from './TreeRow'
 
 const AUTO_EXPAND_DELAY_MS = 600
@@ -85,6 +86,7 @@ const KIND_LABEL: Record<TreeNode['kind'], string> = {
 function DeleteDialog({ node, onClose }: { node: TreeNode | null; onClose: () => void }) {
   const remove = useTreeStore((s) => s.remove)
   const count = node ? countDescendants(node) : 0
+  const examples = node?.kind === 'request' ? (node.examples?.length ?? 0) : 0
   return (
     <AlertDialog open={node !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent data-testid="delete-item-dialog">
@@ -94,6 +96,7 @@ function DeleteDialog({ node, onClose }: { node: TreeNode | null; onClose: () =>
           </AlertDialogTitle>
           <AlertDialogDescription>
             {count > 0 ? `其中的 ${count} 個項目也會一併刪除。` : ''}
+            {examples > 0 ? `${examples} 筆儲存的結果也會一併刪除。` : ''}
             檔案會移到系統垃圾桶，需要時可以從垃圾桶還原。
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -103,6 +106,40 @@ function DeleteDialog({ node, onClose }: { node: TreeNode | null; onClose: () =>
             variant="destructive"
             onClick={() => {
               if (node) void remove(node.id)
+              onClose()
+            }}
+          >
+            刪除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+/** Deleting a saved result (decision 140). */
+function DeleteExampleDialog({
+  example,
+  onClose
+}: {
+  example: ExampleNode | null
+  onClose: () => void
+}) {
+  return (
+    <AlertDialog open={example !== null} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent data-testid="delete-example-dialog">
+        <AlertDialogHeader>
+          <AlertDialogTitle>刪除儲存的結果「{example?.name}」？</AlertDialogTitle>
+          <AlertDialogDescription>
+            檔案會移到系統垃圾桶，需要時可以從垃圾桶還原。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => {
+              if (example) void useTreeStore.getState().removeExample(example.id)
               onClose()
             }}
           >
@@ -450,6 +487,7 @@ function CollectionTree() {
   const search = useMemo(() => searchTree(tree, query), [tree, query])
   const rows = useMemo(() => flattenTree(tree, expanded, search?.visible), [tree, expanded, search])
   const [pendingDelete, setPendingDelete] = useState<TreeNode | null>(null)
+  const [pendingExampleDelete, setPendingExampleDelete] = useState<ExampleNode | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [drop, setDrop] = useState<DropIndicator | null>(null)
   const expandTimer = useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | null>(null)
@@ -543,9 +581,18 @@ function CollectionTree() {
           onDragEnd={onDragEnd}
           onDragCancel={finishDrag}
         >
-          {rows.map((row) => (
-            <TreeRow key={row.node.id} row={row} drop={drop} onRequestDelete={setPendingDelete} />
-          ))}
+          {rows.map((row) =>
+            row.example ? (
+              <ExampleRow
+                key={row.example.id}
+                example={row.example}
+                depth={row.depth}
+                onRequestDelete={setPendingExampleDelete}
+              />
+            ) : (
+              <TreeRow key={row.node.id} row={row} drop={drop} onRequestDelete={setPendingDelete} />
+            )
+          )}
           <DragOverlay dropAnimation={null}>
             {dragging && (
               <div className="flex h-7 items-center gap-1.5 rounded-sm border bg-card px-2 text-sm shadow-md">
@@ -570,6 +617,10 @@ function CollectionTree() {
       )}
 
       <DeleteDialog node={pendingDelete} onClose={() => setPendingDelete(null)} />
+      <DeleteExampleDialog
+        example={pendingExampleDelete}
+        onClose={() => setPendingExampleDelete(null)}
+      />
     </>
   )
 }

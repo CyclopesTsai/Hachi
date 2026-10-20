@@ -1,4 +1,15 @@
-import { AlertTriangle, Folder, Globe, Layers, Plus, Radio, Server, X, Play } from 'lucide-react'
+import {
+  AlertTriangle,
+  Bookmark,
+  Folder,
+  Globe,
+  Layers,
+  Plus,
+  Radio,
+  Server,
+  X,
+  Play
+} from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { findNode } from '@shared/tree'
 import {
@@ -51,6 +62,7 @@ function TabIcon({ tab }: { tab: Tab }) {
   if (tab.kind === 'environments') return <Globe className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'runner') return <Play className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'mock') return <Server className="size-3.5 shrink-0 text-primary" />
+  if (tab.kind === 'example') return <Bookmark className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'request') {
     return (
       <RequestBadge node={{ requestType: 'http', method: tab.draft?.method }} className="w-auto" />

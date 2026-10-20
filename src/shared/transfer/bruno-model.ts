@@ -140,6 +140,22 @@ export interface BrunoRequestItem {
   name: string
   seq: number
   request: BrunoRequestPart
+  /** Response examples (Hachi: saved results, decision 140). */
+  examples?: BrunoExample[]
+}
+
+/** A Bruno response example: the request it was made with and the response. */
+export interface BrunoExample {
+  name: string
+  description: string
+  request: Pick<BrunoRequestPart, 'url' | 'method' | 'headers' | 'params' | 'body'>
+  response: {
+    status: number
+    statusText: string
+    headers: BrunoPair[]
+    /** type: json | text | xml | html | binary. */
+    body: { type: string; content: string } | null
+  }
 }
 
 export interface BrunoFolderItem {

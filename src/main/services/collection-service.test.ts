@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:f
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TreeNode, WorkspaceTree } from '@shared/tree'
+import { exampleResponseSchema } from '@shared/schemas/example'
+import { httpRequestSchema } from '@shared/schemas/http-request'
+import type { PortableExample } from '@shared/transfer/portable'
+import { walkTree, type RequestNode, type TreeNode, type WorkspaceTree } from '@shared/tree'
 import { CollectionService, applyOrder } from './collection-service'
 import { ConfigService } from './config-service'
 import { WorkspaceService } from './workspace-service'
@@ -780,5 +783,139 @@ describe('createRequest (save as)', () => {
     await expect(service.createRequest('nope', 'X', created.request)).rejects.toMatchObject({
       code: 'NOT_FOUND'
     })
+  })
+})
+
+describe('saved results (decision 140)', () => {
+  const example = (name: string, status = 200): PortableExample => ({
+    name,
+    savedAt: '2026-10-20T10:00:00.000Z',
+    request: httpRequestSchema.parse({ version: 1, id: 'r', type: 'http', name: 'Get' }),
+    sent: null,
+    response: exampleResponseSchema.parse({ status, body: { data: '{"ok":true}' } })
+  })
+  const requestNode = (tree: WorkspaceTree, name: string) => {
+    let found: RequestNode | undefined
+    const visit = (n: TreeNode): void => {
+      if (n.kind === 'request' && n.name === name) found = n
+      if ('children' in n) n.children.forEach(visit)
+    }
+    tree.collections.forEach(visit)
+    return found
+  }
+
+  async function setup() {
+    const c = await service.create({ parentId: null, kind: 'collection', name: 'API' })
+    const f = await service.create({ parentId: c.id, kind: 'folder', name: 'Users' })
+    const r = await service.create({
+      parentId: c.id,
+      kind: 'request',
+      name: 'Get',
+      requestType: 'http'
+    })
+    return { c: c.id, f: f.id, r: r.id }
+  }
+
+  it('saves results next to the request and lists them under it, by name', async () => {
+    const { r } = await setup()
+    await service.saveExample(r, example('成功', 200))
+    const { id, tree } = await service.saveExample(r, example('Not found', 404))
+    expect(requestNode(tree, 'Get')?.examples).toEqual([
+      {
+        id,
+        name: 'Not found',
+        relPath: 'collections/api/get.examples/not-found.json',
+        status: 404
+      },
+      expect.objectContaining({ name: '成功', relPath: 'collections/api/get.examples/成功.json' })
+    ])
+    expect(await readJson(col('api/get.examples/not-found.json'))).toMatchObject({
+      version: 1,
+      id,
+      name: 'Not found',
+      response: { status: 404 }
+    })
+    // The examples folder is not a folder of the collection.
+    expect(shape(tree)).toEqual([['API', [['Users', []], 'Get']]])
+    expect(await service.getExample(id)).toMatchObject({ name: 'Not found' })
+  })
+
+  it('renames and deletes results (the folder goes once it is empty)', async () => {
+    const { r } = await setup()
+    const { id } = await service.saveExample(r, example('One'))
+    let tree = await service.renameExample(id, 'Two')
+    expect(requestNode(tree, 'Get')?.examples?.[0]).toMatchObject({ id, name: 'Two' })
+    expect(await readdir(col('api/get.examples'))).toEqual(['two.json'])
+    tree = await service.deleteExample(id)
+    expect(requestNode(tree, 'Get')?.examples).toBeUndefined()
+    expect(trashed.at(-1)).toBe(col('api/get.examples/two.json'))
+    expect(await readdir(col('api'))).not.toContain('get.examples')
+  })
+
+  it('keeps results with their request when it is renamed, moved, duplicated or deleted', async () => {
+    const { f, r } = await setup()
+    const { id } = await service.saveExample(r, example('Saved'))
+    let tree = await service.rename(r, 'List')
+    expect(requestNode(tree, 'List')?.examples?.[0]?.id).toBe(id)
+    expect(await readdir(col('api/list.examples'))).toEqual(['saved.json'])
+
+    tree = await service.move(r, f, 0)
+    expect(requestNode(tree, 'List')?.examples?.[0]?.relPath).toBe(
+      'collections/api/users/list.examples/saved.json'
+    )
+
+    const copy = await service.duplicate(r)
+    const copied = requestNode(copy.tree, 'List copy')?.examples?.[0]
+    expect(copied).toMatchObject({ name: 'Saved' })
+    expect(copied?.id).not.toBe(id)
+
+    tree = await service.delete(r)
+    expect(trashed).toContain(col('api/users/list.examples'))
+    expect(requestNode(tree, 'List copy')?.examples).toHaveLength(1)
+  })
+
+  it('copies results when a folder or collection is duplicated, with new ids', async () => {
+    const { c, r } = await setup()
+    const { id } = await service.saveExample(r, example('Saved'))
+    const { tree } = await service.duplicate(c)
+    const copies: string[] = []
+    walkTree(tree, (n) => {
+      if (n.kind === 'request') copies.push(...(n.examples ?? []).map((e) => e.id))
+    })
+    expect(copies).toHaveLength(2)
+    expect(new Set(copies).size).toBe(2)
+    expect(copies).toContain(id)
+    expect(await readdir(col('api-copy'))).toContain('get.examples')
+    expect(await readdir(col('api-copy'))).not.toContain('folder.json')
+  })
+
+  it('never names a folder "*.examples", and flags unreadable result files', async () => {
+    const { c, r } = await setup()
+    await service.create({ parentId: c, kind: 'folder', name: 'old.examples' })
+    expect(await readdir(col('api'))).toContain('old-examples')
+    await mkdir(col('api/get.examples'), { recursive: true })
+    await writeFile(col('api/get.examples/broken.json'), '{ nope')
+    const tree = await service.refresh()
+    const [broken] = requestNode(tree, 'Get')?.examples ?? []
+    expect(broken).toMatchObject({ name: 'broken', error: expect.any(String) })
+    await expect(service.renameExample(broken!.id, 'x')).rejects.toMatchObject({
+      code: 'INVALID_FILE'
+    })
+    await service.deleteExample(broken!.id)
+    expect(r).toBeTruthy()
+  })
+
+  it('exports results with the collection and writes them back when importing', async () => {
+    const { c, r } = await setup()
+    await service.saveExample(r, example('Saved', 201))
+    const { collection } = await service.exportCollection(c)
+    const request = collection.children.find((ch) => ch.kind === 'request')
+    expect(request).toMatchObject({ examples: [{ name: 'Saved', response: { status: 201 } }] })
+    const { tree } = await service.importCollection(collection)
+    let imported = 0
+    walkTree(tree, (n) => {
+      if (n.kind === 'request') imported += n.examples?.length ?? 0
+    })
+    expect(imported).toBe(2)
   })
 })

@@ -321,6 +321,7 @@ try {
       'cookies',
       'dialog',
       'env',
+      'example',
       'git',
       'history',
       'http',
@@ -913,6 +914,8 @@ try {
   )
   await large.getByRole('button', { name: '顯示' }).click()
   await page.getByTestId('response-body').waitFor()
+  // Saved results keep bodies up to 1 MB only (decision 140).
+  assert.equal(await page.getByTestId('save-result').isDisabled(), true)
   step('responses over 10 MB: 顯示 / 下載 buttons; download writes the full body')
 
   await sendTo('/slow')
@@ -959,6 +962,66 @@ try {
   )
   await page.getByTestId('response-body').waitFor()
   step('JSON responses (even text/plain) have a Tree view: open / close nodes, 全部展開 / 全部收合')
+
+  // ---- Saved results (decision 140) ----
+  await sendTo('/json')
+  await page.getByTestId('response-status').waitFor()
+  const requestTabTitle = await page
+    .locator('[data-testid="tab"][aria-selected="true"]')
+    .getAttribute('data-title')
+  await page.getByTestId('save-result').click()
+  const saveResult = page.getByTestId('save-result-dialog')
+  const resultName = saveResult.getByLabel('名稱')
+  assert.match(await resultName.inputValue(), /^200 OK · \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/)
+  await resultName.fill('JSON 範例')
+  await saveResult.getByRole('button', { name: '儲存' }).click()
+  const exampleView = page.getByTestId('example-view')
+  await exampleView.waitFor()
+  assert.equal((await exampleView.getByTestId('example-status').innerText()).trim(), '200 OK')
+  const exampleRow = page.getByTestId('example-row')
+  assert.equal(await exampleRow.getAttribute('data-name'), 'JSON 範例')
+  /** Files in the `<request>.examples` folders of the Workspace. */
+  const savedResults = async (dir = path.join(wsDir, 'collections')) => {
+    const found = []
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (!entry.isDirectory()) continue
+      if (entry.name.endsWith('.examples')) {
+        found.push(...(await readdir(full)).map((f) => path.join(full, f)))
+      } else found.push(...(await savedResults(full)))
+    }
+    return found
+  }
+  const [resultFile] = await savedResults()
+  assert.ok(resultFile, 'saved result file')
+  const saved = await readJson(resultFile)
+  assert.equal(saved.response.status, 200)
+  assert.ok(saved.response.body.data.includes('"ok":true'))
+  assert.ok(
+    saved.response.headers.filter(([k]) => k === 'set-cookie').every(([, v]) => v === '（已隱藏）'),
+    'Set-Cookie hidden'
+  )
+  await page.screenshot({ path: path.join(shots, '31-saved-result.png') })
+
+  await exampleRow.click({ button: 'right' })
+  await page.getByTestId('example-context-menu').getByRole('menuitem', { name: '重新命名' }).click()
+  const exampleRename = page.getByTestId('tree-rename-input')
+  await exampleRename.fill('改名後')
+  await exampleRename.press('Enter')
+  await waitUntil(async () => (await exampleRow.getAttribute('data-name')) === '改名後', 'renamed')
+  await waitUntil(async () => (await savedResults())[0]?.endsWith('改名後.json'), 'file renamed')
+  await waitUntil(
+    async () => (await page.locator('[data-testid="tab"][data-title="改名後"]').count()) === 1,
+    'the tab follows the new name'
+  )
+  await exampleRow.click({ button: 'right' })
+  await page.getByTestId('example-context-menu').getByRole('menuitem', { name: '刪除…' }).click()
+  await page.getByTestId('delete-example-dialog').getByRole('button', { name: '刪除' }).click()
+  await waitUntil(async () => (await exampleRow.count()) === 0, 'saved result deleted')
+  assert.equal((await savedResults()).length, 0)
+  assert.equal(await exampleView.count(), 0, 'its tab closed')
+  await page.locator(`[data-testid="tab"][data-title="${requestTabTitle}"]`).click()
+  step('儲存結果: saved under the request (credentials hidden), shown read-only, renamed, deleted')
 
   await sendTo('/html')
   assert.equal(await bodyViews.getByRole('radio', { name: 'Tree' }).count(), 0, 'no Tree for HTML')

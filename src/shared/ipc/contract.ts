@@ -182,6 +182,14 @@ export const inputSchemas = {
   [INVOKE.itemRename]: z.strictObject({ id: itemIdSchema, name: itemNameSchema }),
   [INVOKE.itemDuplicate]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.itemDelete]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.exampleSave]: z.strictObject({
+    requestId: itemIdSchema,
+    runId: runIdSchema,
+    name: itemNameSchema
+  }),
+  [INVOKE.exampleGet]: z.strictObject({ id: itemIdSchema }),
+  [INVOKE.exampleRename]: z.strictObject({ id: itemIdSchema, name: itemNameSchema }),
+  [INVOKE.exampleDelete]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.itemMove]: z.strictObject({
     id: itemIdSchema,
     parentId: itemIdSchema.nullable(),

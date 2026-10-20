@@ -18,10 +18,12 @@ import {
   type HttpRequest,
   type RequestScripts
 } from '../schemas/http-request'
+import { EXAMPLE_BODY_MAX_BYTES, exampleResponseSchema } from '../schemas/example'
 import type {
   PortableCollection,
   PortableContainer,
   PortableEnvironment,
+  PortableExample,
   PortableItem
 } from './portable'
 import { TransferWarnings } from './warnings'
@@ -445,9 +447,6 @@ function parseRequest(
   const headers = keyValues(req.header, ctx)
   const { url, params } = parseUrl(req.url, ctx, where, warnings)
   const behavior = isObject(item.protocolProfileBehavior) ? item.protocolProfileBehavior : {}
-  if (Array.isArray(item.response) && item.response.length > 0) {
-    warnings.add('範例回應（Examples）不會匯入')
-  }
   return httpRequestSchema.parse({
     version: 1,
     id: ctx.newId(),
@@ -465,6 +464,59 @@ function parseRequest(
     },
     scripts: parseScripts(item.event, where, warnings) ?? {}
   })
+}
+
+const PREVIEW_CONTENT_TYPES: Record<string, string> = {
+  json: 'application/json',
+  xml: 'application/xml',
+  html: 'text/html',
+  text: 'text/plain'
+}
+
+/** Postman examples (`item.response`) → saved results (decision 140). */
+function parseExamples(
+  item: Json,
+  requestName: string,
+  where: string,
+  state: WalkState
+): PortableExample[] {
+  const examples: PortableExample[] = []
+  for (const raw of asArray(item.response)) {
+    if (!isObject(raw)) continue
+    const name = itemName(raw.name, 'Example')
+    const body = asString(raw.body)
+    if (new TextEncoder().encode(body).length > EXAMPLE_BODY_MAX_BYTES) {
+      state.warnings.add(`範例「${name}」的回應超過 1 MB，未匯入`, where)
+      continue
+    }
+    const headers = asArray(raw.header).flatMap((h): [string, string][] =>
+      isObject(h) ? [[asString(h.key), asString(h.value)]] : []
+    )
+    const contentType =
+      headers.find(([k]) => k.toLowerCase() === 'content-type')?.[1] ??
+      PREVIEW_CONTENT_TYPES[asString(raw._postman_previewlanguage)] ??
+      ''
+    // The example's own request ("originalRequest"), else the item's.
+    const source: Json = isObject(raw.originalRequest)
+      ? { request: raw.originalRequest }
+      : { request: item.request }
+    examples.push({
+      name,
+      savedAt: '',
+      request: parseRequest(source, requestName, where, state.ctx, new TransferWarnings()),
+      sent: null,
+      response: exampleResponseSchema.parse({
+        status: typeof raw.code === 'number' ? raw.code : 200,
+        statusText: asString(raw.status),
+        headers,
+        contentType,
+        body: { encoding: 'text', data: body },
+        bodyBytes: new TextEncoder().encode(body).length,
+        timeMs: typeof raw.responseTime === 'number' ? raw.responseTime : 0
+      })
+    })
+  }
+  return examples
 }
 
 interface WalkState {
@@ -506,9 +558,11 @@ function parseItems(
         children: parseItems(raw.item, [...path, name], depth + 1, state)
       })
     } else if ('request' in raw) {
+      const examples = parseExamples(raw, name, where, state)
       result.push({
         kind: 'request',
-        request: parseRequest(raw, name, where, state.ctx, state.warnings)
+        request: parseRequest(raw, name, where, state.ctx, state.warnings),
+        ...(examples.length > 0 ? { examples } : {})
       })
     } else {
       state.warnings.add('無法辨識的項目，已略過', where)
@@ -744,11 +798,51 @@ interface ExportState {
   skipped: string[]
 }
 
+/** Saved results (decision 140) as Postman examples (`item.response`). */
+function exportExamples(examples: readonly PortableExample[], where: string, state: ExportState) {
+  return examples.map((example): Json => {
+    const { request, response } = example
+    const header = exportKeyValues(request.headers)
+    const originalRequest: Json = {
+      method: request.method,
+      header,
+      url: toPostmanUrl(request.url, request.params)
+    }
+    const body = exportBody(request, header)
+    if (body) originalRequest.body = body
+    const binary = response.body.encoding === 'base64'
+    if (binary && response.body.data !== '') {
+      state.warnings.add(`結果「${example.name}」是二進位內容，Body 未匯出`, where)
+    }
+    const type = response.contentType
+    const preview = /json/i.test(type)
+      ? 'json'
+      : /html/i.test(type)
+        ? 'html'
+        : /xml/i.test(type)
+          ? 'xml'
+          : type
+            ? 'text'
+            : undefined
+    return {
+      name: example.name,
+      originalRequest,
+      status: response.statusText,
+      code: response.status,
+      ...(preview ? { _postman_previewlanguage: preview } : {}),
+      header: response.headers.map(([key, value]) => ({ key, value })),
+      cookie: [],
+      body: binary ? '' : response.body.data
+    }
+  })
+}
+
 function exportRequest(
   request: HttpRequest,
   inheritedHeaders: readonly KeyValue[],
   where: string,
-  state: ExportState
+  state: ExportState,
+  examples: readonly PortableExample[] = []
 ): Json {
   // Postman has no shared headers: copy the inherited ones into every request.
   const own = request.headers
@@ -774,6 +868,7 @@ function exportRequest(
   const auth = exportAuth(request.auth, 'item')
   if (auth) req.auth = auth
   const result: Json = { name: request.name, request: req }
+  if (examples.length > 0) result.response = exportExamples(examples, where, state)
   const event = exportScripts(request.scripts)
   if (event) result.event = event
   if (Object.keys(behavior).length > 0) result.protocolProfileBehavior = behavior
@@ -805,7 +900,7 @@ function exportItems(
         state.skipped.push(where)
         continue
       }
-      items.push(exportRequest(child.request, headers, where, state))
+      items.push(exportRequest(child.request, headers, where, state, child.examples))
     } else {
       const folder: Json = {
         name: child.name,

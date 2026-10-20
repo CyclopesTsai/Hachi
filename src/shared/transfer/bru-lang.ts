@@ -31,7 +31,7 @@ export class BruParseError extends Error {}
 export function isTextBlock(name: string): boolean {
   return (
     (name.startsWith('body:') && !['body:form-urlencoded', 'body:multipart-form'].includes(name)) ||
-    /^(script:|tests$|docs$)/.test(name)
+    /^(script:|tests$|docs$|example$)/.test(name)
   )
 }
 

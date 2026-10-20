@@ -11,11 +11,12 @@ import type {
   Variable
 } from '@shared/schemas/collection'
 import type { HttpRequest } from '@shared/schemas/http-request'
+import type { ExampleFile } from '@shared/schemas/example'
 import type { MockSettings } from '@shared/schemas/mock'
 import type { AnyRequest } from '@shared/schemas/request'
 import type { WsMessageFormat, WsRequest } from '@shared/schemas/ws-request'
 import type { SessionData, SessionTab } from '@shared/schemas/session'
-import { findNode, isContainer, type TreeNode, type WorkspaceTree } from '@shared/tree'
+import { findExample, findNode, isContainer, type TreeNode, type WorkspaceTree } from '@shared/tree'
 
 export type TabKey = string
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -123,8 +124,15 @@ export interface MockTab extends TabBase {
   draft: MockSettings | null
 }
 
+/** A saved result (decision 140): read-only, loaded from its file; not remembered. */
+export interface ExampleTab extends TabBase {
+  kind: 'example'
+  exampleId: string
+  data: ExampleFile | null
+}
+
 export type Tab =
-  RequestTab | ContainerTab | EnvironmentsTab | StaticTab | WsTab | RunnerTab | MockTab
+  RequestTab | ContainerTab | EnvironmentsTab | StaticTab | WsTab | RunnerTab | MockTab | ExampleTab
 
 /** Tabs that edit a request file (HTTP or WebSocket), saved or not. */
 export type RequestLikeTab = RequestTab | WsTab
@@ -139,6 +147,11 @@ export const EMPTY_INHERITED: InheritedSettings = { headers: [], auth: null, scr
 export const itemTabKey = (id: string): TabKey => `item:${id}`
 export const runnerTabKey = (id: string): TabKey => `runner:${id}`
 export const mockTabKey = (id: string): TabKey => `mock:${id}`
+export const exampleTabKey = (id: string): TabKey => `example:${id}`
+
+export function createExampleTab(exampleId: string, preview: boolean): ExampleTab {
+  return { ...tabBase(exampleTabKey(exampleId), preview), kind: 'example', exampleId, data: null }
+}
 
 export function createMockTab(mockId: string): MockTab {
   return { ...tabBase(mockTabKey(mockId), false), kind: 'mock', mockId, saved: null, draft: null }
@@ -160,7 +173,9 @@ export function createRunnerTab(targetId: string): RunnerTab {
 }
 
 export function tabItemId(tab: Tab): string | null {
-  return tab.kind === 'environments' || tab.kind === 'mock' ? null : tab.itemId
+  return tab.kind === 'environments' || tab.kind === 'mock' || tab.kind === 'example'
+    ? null
+    : tab.itemId
 }
 
 const tabBase = (key: TabKey, preview: boolean): TabBase => ({
@@ -287,7 +302,14 @@ export function createEnvironmentsTab(): EnvironmentsTab {
 }
 
 export function isTabDirty(tab: Tab): boolean {
-  if (tab.kind === 'static' || tab.kind === 'runner' || tab.status !== 'ready') return false
+  if (
+    tab.kind === 'static' ||
+    tab.kind === 'runner' ||
+    tab.kind === 'example' ||
+    tab.status !== 'ready'
+  ) {
+    return false
+  }
   if (isRequestLike(tab) && tab.saved === null) return true
   if (tab.draft === null) return false
   return JSON.stringify(tab.draft) !== JSON.stringify(tab.saved)
@@ -306,6 +328,9 @@ export function tabTitle(
   if (tab.kind === 'environments') return '環境'
   if (tab.kind === 'mock') return `Mock：${mocks.find((m) => m.id === tab.mockId)?.name ?? ''}`
   if (tab.kind === 'runner') return `執行：${findNode(tree, tab.itemId)?.node.name ?? ''}`
+  if (tab.kind === 'example') {
+    return findExample(tree, tab.exampleId)?.example.name ?? tab.data?.name ?? ''
+  }
   if (isRequestLike(tab) && tab.itemId === null) return tab.draftName
   const id = tabItemId(tab)
   return (id && findNode(tree, id)?.node.name) ?? (isRequestLike(tab) ? tab.draftName : '')
@@ -364,6 +389,7 @@ export function nextActiveKey(tabs: readonly Tab[], key: TabKey, activeKey: TabK
  */
 export function syncTabsWithTree(tabs: readonly Tab[], tree: WorkspaceTree): Tab[] {
   return tabs.flatMap((tab): Tab[] => {
+    if (tab.kind === 'example') return findExample(tree, tab.exampleId) ? [tab] : []
     const id = tabItemId(tab)
     if (!id) return [tab]
     const node = findNode(tree, id)?.node
@@ -393,7 +419,9 @@ export function toSession(
   activeEnvironmentId: string | null
 ): SessionData {
   // Unsaved requests and Runner tabs are not remembered.
-  const kept = tabs.filter((t) => !isDraftTab(t) && t.kind !== 'runner' && t.kind !== 'mock')
+  const kept = tabs.filter(
+    (t) => !isDraftTab(t) && t.kind !== 'runner' && t.kind !== 'mock' && t.kind !== 'example'
+  )
   const sessionTabs = kept.map((t): SessionTab =>
     t.kind === 'environments'
       ? { kind: 'environments' }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { exampleResponseSchema } from '../schemas/example'
 import { httpRequestSchema, type HttpRequest } from '../schemas/http-request'
 import type { PortableCollection, PortableFolder, PortableRequest } from './portable'
 import {
@@ -174,7 +175,13 @@ describe('importPostmanCollection', () => {
     expect(get.auth).toEqual({ type: 'inherit' })
     expect(get.settings).toMatchObject({ validateSSL: false, followRedirects: false })
     expect(get.scripts).toEqual({ preRequest: '', postResponse: 'pm.test("ok", () => {\n})' })
-    expect(warnings).toContain('範例回應（Examples）不會匯入')
+    // Examples become saved results (decision 140), with the item's request when the
+    // example has no request of its own.
+    expect(warnings.join()).not.toContain('Examples')
+    const getItem = users.children[0] as PortableRequest
+    expect(getItem.examples).toMatchObject([
+      { name: 'example', sent: null, request: { method: 'GET' }, response: { status: 200 } }
+    ])
   })
 
   it('maps bodies and auth types, warning about what does not fit', () => {
@@ -430,5 +437,66 @@ describe('exportPostmanCollection', () => {
         '機密變數的值不會匯出（已留空）'
       ])
     )
+  })
+})
+
+describe('Postman examples ↔ saved results (decision 140)', () => {
+  it('exports results as examples (originalRequest, code, headers, body) and reads them back', () => {
+    const request = httpRequestSchema.parse({
+      version: 1,
+      id: 'r',
+      type: 'http',
+      name: 'Get',
+      url: '{{baseUrl}}/users?page=2'
+    })
+    const collection: PortableCollection = {
+      name: 'Shop',
+      headers: [],
+      auth: { type: 'none' },
+      scripts: null,
+      variables: [],
+      children: [
+        {
+          kind: 'request',
+          request,
+          examples: [
+            {
+              name: 'Page 2',
+              savedAt: '',
+              request,
+              sent: null,
+              response: exampleResponseSchema.parse({
+                status: 200,
+                statusText: 'OK',
+                headers: [['Content-Type', 'application/json']],
+                contentType: 'application/json',
+                body: { encoding: 'text', data: '[]' },
+                bodyBytes: 2
+              })
+            }
+          ]
+        }
+      ]
+    }
+    const { json, warnings } = exportPostmanCollection(collection, 'pid')
+    const item = (json.item as Record<string, unknown>[])[0] as Record<string, unknown>
+    expect(item.response).toEqual([
+      expect.objectContaining({
+        name: 'Page 2',
+        code: 200,
+        status: 'OK',
+        _postman_previewlanguage: 'json',
+        header: [{ key: 'Content-Type', value: 'application/json' }],
+        body: '[]',
+        originalRequest: expect.objectContaining({ method: 'GET' })
+      })
+    ])
+    expect(warnings).toEqual([])
+    const again = importPostmanCollection(json).collection.children[0] as PortableRequest
+    expect(again.examples?.[0]).toMatchObject({
+      name: 'Page 2',
+      request: { url: '{{baseUrl}}/users', params: [{ key: 'page', value: '2' }] },
+      response: { status: 200, contentType: 'application/json', body: { data: '[]' } }
+    })
   })
 })

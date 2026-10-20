@@ -1,13 +1,5 @@
-import {
-  AlertTriangle,
-  ChevronsDownUp,
-  ChevronsUpDown,
-  Download,
-  Eye,
-  Loader2,
-  Send
-} from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { AlertTriangle, Download, Eye, Loader2, Send } from 'lucide-react'
+import { useState } from 'react'
 import {
   formatBytes,
   formatDuration,
@@ -15,17 +7,15 @@ import {
   type HttpResponseData,
   type HttpResult
 } from '@shared/http'
-import { CodeEditor, type CodeLanguage } from '@renderer/components/code-editor'
 import { Button } from '@renderer/components/ui/button'
-import { CheckboxLabel } from '@renderer/components/ui/native-select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { cn } from '@renderer/lib/utils'
+import { statusColor } from '@renderer/lib/status-color'
 import type { RequestTab } from '@renderer/features/tabs/tab-model'
 import { useTabsStore } from '@renderer/stores/tabs-store'
-import { useWrapPreference } from '@renderer/hooks/use-wrap-preference'
 import { testSummary } from '@shared/scripts'
-import { JsonTree } from './JsonTree'
-import { ALL_COLLAPSED, ALL_EXPANDED, type TreeExpansion } from './json-tree-expansion'
+import { HeadersTable, ResponseBody } from './ResponseBody'
+import { SaveResultButton } from './SaveResultDialog'
 import { ConsolePanel, TestsPanel } from './ScriptResults'
 import { TlsDiagnosisView } from './TlsDiagnosisView'
 
@@ -45,72 +35,13 @@ const ERROR_TITLES: Record<HttpErrorCode, string> = {
   UNKNOWN: '發送失敗'
 }
 
-function statusColor(status: number): string {
-  if (status >= 500) return 'bg-red-500/15 text-red-600 dark:text-red-400'
-  if (status >= 400) return 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-  if (status >= 300) return 'bg-sky-500/15 text-sky-700 dark:text-sky-400'
-  return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-}
-
-function languageFor(contentType: string): CodeLanguage {
-  if (/json/i.test(contentType)) return 'json'
-  if (/html/i.test(contentType)) return 'html'
-  if (/xml/i.test(contentType)) return 'xml'
-  return 'text'
-}
-
-/** The parsed body when it is JSON, whatever the Content-Type says. */
-function parseJson(text: string): { value: unknown } | null {
-  try {
-    return { value: JSON.parse(text) as unknown }
-  } catch {
-    return null
-  }
-}
-
-type BodyView = 'pretty' | 'raw' | 'tree' | 'preview'
-
-const VIEW_LABEL: Record<BodyView, string> = {
-  pretty: 'Pretty',
-  raw: 'Raw',
-  tree: 'Tree',
-  preview: 'Preview'
-}
-
 function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: string }) {
-  const [wrap, setWrap] = useWrapPreference('responseBodyWrap')
   const fullBody = useTabsStore((s) => s.fullBodies[result.runId])
   const tabs = useTabsStore.getState()
   const showFullBody = (runId: string) => tabs.showFullBody(tabKey, runId)
   const downloadResponse = (runId: string) => tabs.downloadResponse(tabKey, runId)
-  // Every response starts in Pretty (decision 136).
-  const [view, setView] = useState<BodyView>('pretty')
   const [busy, setBusy] = useState(false)
-  const [expansion, setExpansion] = useState<TreeExpansion>(ALL_EXPANDED)
-
   const text = result.body.kind === 'text' ? result.body.text : (fullBody ?? null)
-  const isHtml = /html/i.test(result.contentType)
-  const parsed = useMemo(() => (text !== null ? parseJson(text) : null), [text])
-  const isTree = parsed !== null && parsed.value !== null && typeof parsed.value === 'object'
-  const pretty = useMemo(
-    () => (parsed !== null && view === 'pretty' ? JSON.stringify(parsed.value, null, 2) : null),
-    [parsed, view]
-  )
-  const views: BodyView[] = [
-    'pretty',
-    'raw',
-    ...(isTree ? ['tree' as const] : []),
-    ...(isHtml ? ['preview' as const] : [])
-  ]
-  const toggleNode = (path: string) =>
-    setExpansion((e) => {
-      const toggled = new Set(e.toggled)
-      if (!toggled.delete(path)) toggled.add(path)
-      return { base: e.base, toggled }
-    })
-  const shown = view === 'pretty' && pretty !== null ? pretty : (text ?? '')
-  const language: CodeLanguage =
-    view === 'raw' ? 'text' : pretty !== null ? 'json' : languageFor(result.contentType)
 
   const download = async () => {
     setBusy(true)
@@ -119,69 +50,18 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 p-3">
-      <div className="flex items-center gap-2">
-        {text !== null && (
-          <div
-            className="flex rounded-md border p-0.5"
-            role="radiogroup"
-            aria-label="Body 檢視方式"
-          >
-            {views.map((v) => (
-              <button
-                key={v}
-                type="button"
-                role="radio"
-                aria-checked={view === v}
-                onClick={() => setView(v)}
-                className={cn(
-                  'rounded px-2 py-0.5 text-xs',
-                  view === v
-                    ? 'bg-accent font-medium'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {VIEW_LABEL[v]}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="flex-1" />
-        {text !== null && view === 'tree' && (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              data-testid="json-expand-all"
-              onClick={() => setExpansion(ALL_EXPANDED)}
-            >
-              <ChevronsUpDown />
-              全部展開
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              data-testid="json-collapse-all"
-              onClick={() => setExpansion(ALL_COLLAPSED)}
-            >
-              <ChevronsDownUp />
-              全部收合
-            </Button>
-          </>
-        )}
-        {text !== null && view !== 'preview' && (
-          <CheckboxLabel checked={wrap} onChange={(e) => setWrap(e.target.checked)}>
-            自動換行
-          </CheckboxLabel>
-        )}
-        {result.body.kind !== 'empty' && (
+    <ResponseBody
+      text={text}
+      contentType={result.contentType}
+      actions={
+        result.body.kind !== 'empty' && (
           <Button variant="outline" size="sm" disabled={busy} onClick={() => void download()}>
             <Download />
             下載
           </Button>
-        )}
-      </div>
-
+        )
+      }
+    >
       {result.body.kind === 'empty' && (
         <p className="text-sm text-muted-foreground">（回應沒有內容）</p>
       )}
@@ -220,48 +100,7 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
           </div>
         </div>
       )}
-
-      {text !== null &&
-        (view === 'preview' ? (
-          // No scripts, no same-origin access; the app's CSP also blocks external resources.
-          <iframe
-            title="HTML 預覽"
-            sandbox=""
-            srcDoc={text}
-            className="min-h-0 flex-1 rounded-md border bg-white"
-            data-testid="html-preview"
-          />
-        ) : view === 'tree' && parsed !== null ? (
-          <JsonTree value={parsed.value} expansion={expansion} onToggle={toggleNode} wrap={wrap} />
-        ) : (
-          <CodeEditor
-            aria-label="Response Body"
-            data-testid="response-body"
-            className="flex-1"
-            readOnly
-            wrap={wrap}
-            language={language}
-            value={shown}
-          />
-        ))}
-    </div>
-  )
-}
-
-function HeadersPanel({ headers }: { headers: [string, string][] }) {
-  return (
-    <div className="h-full overflow-auto p-3">
-      <table className="w-full table-fixed text-xs select-text" data-testid="response-headers">
-        <tbody>
-          {headers.map(([k, v], i) => (
-            <tr key={`${k}-${i}`} className="border-b align-top last:border-b-0">
-              <td className="w-[30%] py-1.5 pr-3 font-mono font-medium break-all">{k}</td>
-              <td className="py-1.5 font-mono break-all">{v}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    </ResponseBody>
   )
 }
 
@@ -444,13 +283,14 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
         {result.redirects > 0 && (
           <span className="text-xs text-muted-foreground">重新導向 {result.redirects} 次</span>
         )}
+        <SaveResultButton tab={tab} result={result} />
       </div>
       <UnresolvedNotice names={result.unresolvedVariables} />
       <TabsContent value="body" className="min-h-0 flex-1">
         <BodyPanel key={result.runId} result={result} tabKey={tab.key} />
       </TabsContent>
       <TabsContent value="headers" className="min-h-0 flex-1">
-        <HeadersPanel headers={result.headers} />
+        <HeadersTable headers={result.headers} />
       </TabsContent>
       <TabsContent value="cookies" className="min-h-0 flex-1">
         <CookiesPanel result={result} />

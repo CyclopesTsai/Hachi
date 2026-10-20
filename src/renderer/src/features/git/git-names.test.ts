@@ -23,7 +23,15 @@ const tree: WorkspaceTree = {
               name: 'Get user',
               relPath: 'collections/shop/users/get-user.json',
               requestType: 'http',
-              method: 'GET'
+              method: 'GET',
+              examples: [
+                {
+                  id: 'e',
+                  name: 'Found',
+                  relPath: 'collections/shop/users/get-user.examples/found.json',
+                  status: 200
+                }
+              ]
             }
           ]
         }
@@ -51,6 +59,13 @@ describe('git file labels', () => {
     expect(labelFor(index, 'environments/dev.json').title).toBe('環境檔 dev')
     expect(labelFor(index, 'collections/old/gone.json')).toEqual({
       title: 'gone.json',
+      itemId: null
+    })
+  })
+
+  it('names saved results after their request (decision 140)', () => {
+    expect(labelFor(index, 'collections/shop/users/get-user.examples/found.json')).toEqual({
+      title: 'Shop / Users / Get user（結果：Found）',
       itemId: null
     })
   })

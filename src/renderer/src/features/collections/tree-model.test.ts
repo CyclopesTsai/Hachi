@@ -195,3 +195,38 @@ describe('search and expand all (decisions 108 / 109)', () => {
     expect(neighborRow(tree, new Set(found?.expand), 'r3', 1, found?.visible)?.id).toBe('C2')
   })
 })
+
+describe('saved results in the tree (decision 140)', () => {
+  const withExamples: WorkspaceTree = {
+    workspaceId: 'w',
+    collections: [
+      collection('C', [
+        {
+          ...req('r'),
+          examples: [
+            { id: 'e1', name: 'Ok', relPath: 'r.examples/ok.json', status: 200 },
+            { id: 'e2', name: 'Bad', relPath: 'r.examples/bad.json', status: 400 }
+          ]
+        } as ChildNode,
+        req('s')
+      ])
+    ]
+  }
+
+  it('lists them under an expanded request, one level deeper', () => {
+    const closed = flattenTree(withExamples, new Set(['C']))
+    expect(closed.map((r) => r.example?.id ?? r.node.id)).toEqual(['C', 'r', 's'])
+    const open = flattenTree(withExamples, new Set(['C', 'r']))
+    expect(open.map((r) => [r.example?.id ?? r.node.id, r.depth])).toEqual([
+      ['C', 0],
+      ['r', 1],
+      ['e1', 2],
+      ['e2', 2],
+      ['s', 1]
+    ])
+  })
+
+  it('are skipped by ↑ / ↓', () => {
+    expect(neighborRow(withExamples, new Set(['C', 'r']), 'r', 1)?.id).toBe('s')
+  })
+})

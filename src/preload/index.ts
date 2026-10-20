@@ -166,6 +166,12 @@ const api: HachiApi = {
     delete: (input) => invoke(INVOKE.itemDelete, input),
     move: (input) => invoke(INVOKE.itemMove, input)
   },
+  example: {
+    save: (input) => invoke(INVOKE.exampleSave, input),
+    get: (input) => invoke(INVOKE.exampleGet, input),
+    rename: (input) => invoke(INVOKE.exampleRename, input),
+    delete: (input) => invoke(INVOKE.exampleDelete, input)
+  },
   dialog: {
     selectDirectory: (input) => invoke(INVOKE.dialogSelectDirectory, input),
     selectFile: (input) => invoke(INVOKE.dialogSelectFile, input),

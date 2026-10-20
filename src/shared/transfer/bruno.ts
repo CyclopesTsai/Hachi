@@ -25,6 +25,7 @@ import {
   type HttpRequest,
   type RequestScripts
 } from '../schemas/http-request'
+import { EXAMPLE_BODY_MAX_BYTES, exampleResponseSchema } from '../schemas/example'
 import { BruParseError } from './bru-lang'
 import { readBruFile, readCollectionBru, writeBruFiles } from './bruno-bru'
 import {
@@ -36,6 +37,7 @@ import {
   readAwsV4,
   readOAuth2,
   type BrunoCollectionData,
+  type BrunoExample,
   type BrunoFile,
   type BrunoFolderItem,
   type BrunoItem,
@@ -49,6 +51,7 @@ import type {
   PortableCollection,
   PortableContainer,
   PortableEnvironment,
+  PortableExample,
   PortableItem
 } from './portable'
 import { TransferError } from './postman'
@@ -154,13 +157,44 @@ function normalizeItems(list: unknown): BrunoItem[] {
           root: root ? normalizePart(root) : null
         }
       }
+      const examples = asArray(item.examples).filter(isObject).map(normalizeExample)
       return {
         type: asString(item.type) || 'http',
         name: asString(item.name),
         seq,
-        request: normalizePart(item.request)
+        request: normalizePart(item.request),
+        ...(examples.length > 0 ? { examples } : {})
       }
     })
+}
+
+/** A response example of Bruno's exported JSON. */
+function normalizeExample(raw: Json): BrunoExample {
+  const { url, method, headers, params, body } = normalizePart(raw.request)
+  const res = isObject(raw.response) ? raw.response : {}
+  const resBody = isObject(res.body) ? res.body : null
+  const content = resBody?.content
+  return {
+    name: asString(raw.name),
+    description: asString(raw.description),
+    request: { url, method, headers, params, body },
+    response: {
+      status: Number(res.status) || 200,
+      statusText: asString(res.statusText),
+      headers: pairs(res.headers),
+      body: resBody
+        ? {
+            type: asString(resBody.type) || 'text',
+            content:
+              typeof content === 'string'
+                ? content
+                : content === undefined
+                  ? ''
+                  : JSON.stringify(content, null, 2)
+          }
+        : null
+    }
+  }
 }
 
 /** `scripts.flow` of bruno.json / opencollection.yml / the exported JSON's brunoConfig. */
@@ -652,8 +686,68 @@ function mapItems(items: BrunoItem[], path: string[], ctx: Ctx): PortableItem[] 
         ]
       }
       const request = mapRequest(item as BrunoRequestItem, path, ctx)
-      return request ? [{ kind: 'request', request }] : []
+      if (!request) return []
+      const examples = ((item as BrunoRequestItem).examples ?? []).flatMap((ex) =>
+        exampleIn(ex, item as BrunoRequestItem, path, ctx)
+      )
+      return [{ kind: 'request', request, ...(examples.length > 0 ? { examples } : {}) }]
     })
+}
+
+const BODY_CONTENT_TYPES: Record<string, string> = {
+  json: 'application/json',
+  xml: 'application/xml',
+  html: 'text/html',
+  text: 'text/plain'
+}
+
+/** A Bruno response example → a saved result (decision 140). */
+function exampleIn(
+  ex: BrunoExample,
+  item: BrunoRequestItem,
+  path: string[],
+  ctx: Ctx
+): PortableExample[] {
+  const name = itemName(ex.name, 'Example')
+  const where = [...path, item.name, name].join(' / ')
+  // The example's request; its warnings were already given for the request itself.
+  const quiet: Ctx = { newId: ctx.newId, warnings: new TransferWarnings() }
+  const request = mapRequest(
+    { type: 'http', name: item.name, seq: 0, request: { ...emptyPart(), ...ex.request } },
+    path,
+    quiet
+  )
+  if (!request) return []
+  const body = ex.response.body
+  const binary = body?.type === 'binary'
+  const content = body?.content ?? ''
+  const bytes = binary
+    ? Math.floor((content.length * 3) / 4)
+    : new TextEncoder().encode(content).length
+  if (bytes > EXAMPLE_BODY_MAX_BYTES) {
+    ctx.warnings.add('範例的回應超過 1 MB，未匯入', where)
+    return []
+  }
+  const contentType =
+    ex.response.headers.find((h) => h.name.toLowerCase() === 'content-type')?.value ??
+    BODY_CONTENT_TYPES[body?.type ?? ''] ??
+    ''
+  return [
+    {
+      name,
+      savedAt: '',
+      request,
+      sent: null,
+      response: exampleResponseSchema.parse({
+        status: ex.response.status,
+        statusText: ex.response.statusText,
+        headers: ex.response.headers.map((h) => [h.name, h.value]),
+        contentType,
+        body: { encoding: binary ? 'base64' : 'text', data: content },
+        bodyBytes: bytes
+      })
+    }
+  ]
 }
 
 function mapCollection(data: BrunoCollectionData, newId: () => string): BrunoImport {
@@ -916,6 +1010,49 @@ function requestPart(
   return part
 }
 
+/** A saved result (decision 140) → a Bruno response example. */
+function exampleOut(
+  ex: PortableExample,
+  format: BrunoFileFormat,
+  where: string,
+  warnings: TransferWarnings
+): BrunoExample {
+  const { url, method, headers, params, body } = requestPart(
+    ex.request,
+    format,
+    where,
+    new TransferWarnings()
+  )
+  const { response } = ex
+  const binary = response.body.encoding === 'base64'
+  if (binary && response.body.data !== '') {
+    warnings.add(`結果「${ex.name}」是二進位內容，Body 未匯出`, where)
+  }
+  const type = response.contentType
+  return {
+    name: ex.name,
+    description: '',
+    request: { url, method, headers, params, body },
+    response: {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers.map(([name, value]) => ({ name, value, enabled: true })),
+      body: binary
+        ? null
+        : {
+            type: /json/i.test(type)
+              ? 'json'
+              : /xml/i.test(type)
+                ? 'xml'
+                : /html/i.test(type)
+                  ? 'html'
+                  : 'text',
+            content: response.body.data
+          }
+    }
+  }
+}
+
 /**
  * A Collection as a Bruno collection folder (`.bru` or OpenCollection `.yml` files),
  * with the Workspace environments (secret values left out, as in Bruno).
@@ -955,12 +1092,14 @@ export function exportBrunoCollection(
         skipped.push(where)
         return []
       }
+      const examples = (child.examples ?? []).map((ex) => exampleOut(ex, format, where, warnings))
       return [
         {
           type: 'http',
           name: child.request.name,
           seq: index + 1,
-          request: requestPart(child.request, format, where, warnings)
+          request: requestPart(child.request, format, where, warnings),
+          ...(examples.length > 0 ? { examples } : {})
         }
       ]
     })

@@ -31,11 +31,21 @@ import type { CookieJar } from './cookie-jar'
 import { sendHttp, type CookieHooks, type SendOutcome } from './http-client'
 import { resolveProxyUrl } from './proxy'
 import { decodeText, suggestFileName } from './response-utils'
+import {
+  SavedResultError,
+  exampleFromExchange,
+  secretValues,
+  sentBodyOf,
+  type Exchange
+} from './saved-result'
+import type { PortableExample } from '@shared/transfer/portable'
 
 interface StoredResponse {
   body: Buffer
   contentType: string
   url: string
+  /** What was sent, for "儲存結果" (decision 140). */
+  exchange?: Exchange
 }
 
 /** Keeps recent response bodies in memory so they can be shown in full or downloaded. */
@@ -99,6 +109,8 @@ export interface SendInput {
   environmentId: string | null
   /** As edited, saved or not, before variable substitution. */
   request: HttpRequest
+  /** The request as written when `request` was changed by Pre-request scripts. */
+  source?: HttpRequest
   /** Variable layers to use instead of the current ones (Collection Runner workers). */
   layers?: VariableLayer[]
   /** false: don't keep the body for "顯示 / 下載" (the Runner keeps its own). */
@@ -175,7 +187,8 @@ export class HttpService {
         }
         files = loaded.files
       }
-      const resolver = new VariableResolver(buildVariableMap(layers), undefined, { files })
+      const variables = buildVariableMap(layers)
+      const resolver = new VariableResolver(variables, undefined, { files })
       const request = resolver.request(input.request)
       const inherited = resolver.inherited(this.deps.resolveInherited(chain))
       unresolved = [...resolver.unresolved].sort()
@@ -265,7 +278,27 @@ export class HttpService {
         }
       }
       if (result.kind === 'response' && body && input.storeBody !== false) {
-        this.store.put(input.runId, { body, contentType: result.contentType, url: result.url })
+        const exchange: Exchange = {
+          source: input.source ?? input.request,
+          method: built.method,
+          url: result.url,
+          headers: result.requestHeaders,
+          body: sentBodyOf(built.body),
+          response: {
+            status: result.status,
+            statusText: result.statusText,
+            headers: result.headers,
+            contentType: result.contentType,
+            timeMs: result.timings.totalMs
+          },
+          secrets: secretValues(variables, (text) => resolver.resolve(text))
+        }
+        this.store.put(input.runId, {
+          body,
+          contentType: result.contentType,
+          url: result.url,
+          exchange
+        })
       }
       return { ...result, unresolvedVariables: unresolved }
     } finally {
@@ -453,6 +486,21 @@ export class HttpService {
   getBodyText(runId: string): string {
     const stored = this.requireStored(runId)
     return decodeText(stored.body, stored.contentType)
+  }
+
+  /** The example file content for a response still in the store (decision 140). */
+  savedResult(runId: string, name: string, savedAt: string): PortableExample {
+    const stored = this.requireStored(runId)
+    if (!stored.exchange) {
+      throw new HachiError('NOT_FOUND', '這個回應已不在暫存中，請重新送出後再儲存')
+    }
+    try {
+      return exampleFromExchange(stored.exchange, stored.body, name, savedAt)
+    } catch (error) {
+      if (error instanceof SavedResultError)
+        throw new HachiError('INVALID_OPERATION', error.message)
+      throw error
+    }
   }
 
   requireStored(runId: string): StoredResponse & { suggestedName: string } {

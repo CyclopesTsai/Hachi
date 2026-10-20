@@ -44,7 +44,7 @@ export interface DropIndicator {
   valid: boolean
 }
 
-function InlineRename({
+export function InlineRename({
   initial,
   onDone
 }: {
@@ -150,6 +150,8 @@ export function TreeRow({
     void create(...args).then((id) => id && tabs.openItem(id, { preview: false }))
   const container = isContainer(node)
   const broken = node.error !== undefined
+  // A request with saved results opens / closes them with its arrow (decision 140).
+  const hasExamples = node.kind === 'request' && (node.examples?.length ?? 0) > 0
 
   const drag = useDraggable({ id: node.id, disabled: editing || broken })
   const dropZone = useDroppable({ id: node.id })
@@ -216,7 +218,7 @@ export function TreeRow({
           aria-disabled={undefined}
           role="treeitem"
           aria-selected={selected}
-          aria-expanded={container ? expanded : undefined}
+          aria-expanded={container || hasExamples ? expanded : undefined}
           data-testid="tree-row"
           data-id={node.id}
           data-name={node.name}
@@ -251,8 +253,20 @@ export function TreeRow({
               style={{ left: 6 + depth * 14 }}
             />
           )}
-          <span className="flex size-4 shrink-0 items-center justify-center">
-            {container && (
+          <span
+            className="flex size-4 shrink-0 items-center justify-center"
+            data-testid={hasExamples ? 'tree-examples-toggle' : undefined}
+            onClick={
+              hasExamples
+                ? (e) => {
+                    e.stopPropagation()
+                    toggle(node.id)
+                  }
+                : undefined
+            }
+            onDoubleClick={hasExamples ? (e) => e.stopPropagation() : undefined}
+          >
+            {(container || hasExamples) && (
               <ChevronRight
                 className={cn(
                   'size-3.5 text-muted-foreground transition-transform',

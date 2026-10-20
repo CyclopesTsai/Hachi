@@ -13,7 +13,9 @@ import {
   contextParentId,
   createDraftTab,
   createEnvironmentsTab,
+  createExampleTab,
   createMockTab,
+  exampleTabKey,
   mockSettingsOf,
   mockTabKey,
   createItemTab,
@@ -32,6 +34,7 @@ import {
   type ContainerContent,
   type ContainerTab,
   type EnvironmentsTab,
+  type ExampleTab,
   type MockTab,
   type RequestLikeTab,
   type RequestTab,
@@ -103,6 +106,8 @@ interface TabsState {
   newRequest(type?: 'http' | 'websocket'): void
   /** Opens the Collection Runner for a Collection / folder (Phase 5c). */
   openRunner(targetId: string): void
+  /** Opens a saved result (decision 140); a single click gives a preview tab. */
+  openExample(id: string, options?: { preview?: boolean }): void
   /** Opens a request (e.g. from a cURL import) as a new unsaved tab. */
   openDraft(request: HttpRequest): void
   /** Opens a history entry as a new unsaved request. */
@@ -274,6 +279,9 @@ export const useTabsStore = create<TabsState>()((set, get) => {
           inherited: data.inherited,
           version: t.version + 1
         }))
+      } else if (tab.kind === 'example') {
+        const data = await unwrap(window.hachi.example.get({ id: tab.exampleId }))
+        patch<ExampleTab>(key, (t) => ({ ...t, status: 'ready', data, version: t.version + 1 }))
       } else if (tab.kind === 'mock') {
         const mock = await unwrap(window.hachi.mock.get({ id: tab.mockId }))
         const settings = mockSettingsOf(mock)
@@ -434,6 +442,17 @@ export const useTabsStore = create<TabsState>()((set, get) => {
       const tab = createRunnerTab(targetId)
       useRunnerStore.getState().open(tab.uid, targetId)
       addTab(tab)
+    },
+
+    openExample(id, options = {}) {
+      const preview = options.preview ?? true
+      const existing = find(exampleTabKey(id))
+      if (existing) {
+        if (!preview) get().pin(existing.key)
+        setActive(existing.key)
+        return
+      }
+      addTab(createExampleTab(id, preview))
     },
 
     openDraft(request) {
