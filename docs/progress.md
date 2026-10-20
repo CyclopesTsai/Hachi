@@ -6,8 +6,8 @@
 ## 目前狀態
 
 - **目前階段**：原規格的 Phase 0–6 全部完成；之後依下方「待辦」逐項進行（每項先規劃、確認決策再實作）。由本機（macOS）的 Claude Code 桌面版開發
-- **目前版本**：**v0.7.4**（2026-10-14，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
-- **最後更新**：2026-10-14
+- **目前版本**：**v0.8.0**（2026-10-20，macOS arm64 / x64、Windows x64；尚未簽章，決策 124 擱置）
+- **最後更新**：2026-10-20
 
 ## Phase 進度
 
@@ -306,7 +306,7 @@
   - 介面：Collection 右鍵「匯出…」對話框（四種格式＋OpenAPI 用的環境）；側欄「＋」選單（新增 Collection / HTTP 請求 / WebSocket / 資料夾、匯入檔案、匯入 Bruno 資料夾、匯入 cURL）；File → Import Bruno Collection…
   - 驗證：單元測試 420 個（`bruno.test.ts`、`openapi.test.ts`、engine / transfer-service 新增）；E2E 新增「＋」放進選取位置、OpenAPI HTML 匯出、Bruno 匯出 → 匯入（淺色、深色都通過）；實際用 Redoc bundle 產生的 HTML 離線開啟無錯誤
 - **v0.2.1 發佈**（2026-10-07）：Bruno YAML 與多個 Collection 匯入（決策 107，使用者回報：Bruno 3 的 `.yml` 資料夾、放很多 Collection 的上層資料夾）：單元測試 427 個（`bruno-yaml.test.ts`、`transfer-service.test.ts` 新增掃描 / 勾選 / 子資料夾）；E2E 改為 `.bru` 與 YAML 各匯出一次、再從上層資料夾勾選匯入
-- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）、**v0.7.0**（決策 134–135）、**v0.7.1**（決策 136）、**v0.7.2**（決策 137）、**v0.7.3**（決策 138）、**v0.7.4**（決策 139）：見下方「待辦」各項
+- **v0.2.2**（側欄搜尋等，決策 108–110）、**v0.3.0 / v0.3.1**（Git，決策 111–122）、**v0.4.0**（Windows，決策 123）、**v0.5.0**（決策 125–130）、**v0.6.0 – v0.6.5**（決策 131–133 與修正）、**v0.7.0**（決策 134–135）、**v0.7.1**（決策 136）、**v0.7.2**（決策 137）、**v0.7.3**（決策 138）、**v0.7.4**（決策 139）、**v0.8.0**（決策 140）：見下方「待辦」各項
 - 開始下面任何一項之前，先向使用者說明規劃並確認（同各 Phase 的流程）
 
 ## 待辦（使用者排定，2026-10-07）
@@ -339,7 +339,7 @@
    - **v0.7.2 決策 137**（GitHub issue #2）：History 單擊開成預覽分頁、雙擊固定（`tabs-store.ts` 的 `openHistoryEntry`、`HistoryPanel.tsx`）。驗證：單元測試（預覽的未儲存分頁會被下一個預覽取代）；E2E 單擊 A、單擊 B 重用同一個預覽分頁、再點 B 不新增、雙擊 B 固定、再點 A 開新的預覽分頁。另修偶發的單元測試失敗：Git 測試大量 commit 後，背景的 `git gc --auto` 還在寫 `.git/objects` 時測試就刪資料夾（ENOTEMPTY）→ 測試用的 git 設定關閉 gc.auto / maintenance.auto
    - **v0.7.3 決策 138**（使用者放了正式圖示）：`build/icon.svg` / `icon.png`；`scripts/make-icon.mjs` 產生 `build/icon-win.png` 與 `src/renderer/src/assets/app-logo.svg`；`electron-builder.config.mjs` 的 Windows 改用 `icon-win.png`；`app-logo.tsx` 改顯示圖示。驗證：E2E 檢查標題列與歡迎畫面的 Logo 圖片載入（淺色、深色截圖）；外觀先用預覽圖與實際 App 截圖給使用者確認，再跑完整驗證
    - **v0.7.4 決策 139**（使用者看了 Windows CI 截圖）：細捲軸（`styles.css`、`TabBar.tsx`）。外觀先用預覽圖與實際 App 截圖確認。注意：滑塊不能設 `min-height` / `min-width`（橫向捲軸會把它當成粗細而畫不出來）
-   - **決策 140**（GitHub issue #5，等使用者確認）：儲存結果（`src/shared/schemas/example.ts`、`src/main/services/http/saved-result.ts`、`collection-service.ts`、`ExampleRow.tsx`、`ExampleView.tsx`、`SaveResultDialog.tsx`、`bruno-example.ts`；IPC `example:save|get|rename|delete`）。Body 檢視抽成共用的 `ResponseBody.tsx`。外觀先用實際 App 截圖給使用者確認（拿掉「原始寫法」分頁、預設名稱加上年份）。驗證：單元測試（機密值與憑證 Header 遮罩、二進位、1 MB 上限、掃描、改名 / 搬移 / 複製 / 刪除帶著範例、資料夾名稱不以 .examples 結尾、匯出入 Collection、Postman / Bruno .bru / YAML / JSON 往返、樹狀列、Git 名稱）；E2E 儲存結果、Set-Cookie 隱藏、唯讀分頁、改名、刪除、超過 1 MB 時按鈕停用，截圖 `31-saved-result.png`（淺色、深色）
+   - **v0.8.0 決策 140**（GitHub issue #5）：儲存結果（`src/shared/schemas/example.ts`、`src/main/services/http/saved-result.ts`、`collection-service.ts`、`ExampleRow.tsx`、`ExampleView.tsx`、`SaveResultDialog.tsx`、`bruno-example.ts`；IPC `example:save|get|rename|delete`）。Body 檢視抽成共用的 `ResponseBody.tsx`。外觀先用實際 App 截圖給使用者確認（拿掉「原始寫法」分頁、預設名稱加上年份）。驗證：單元測試（機密值與憑證 Header 遮罩、二進位、1 MB 上限、掃描、改名 / 搬移 / 複製 / 刪除帶著範例、資料夾名稱不以 .examples 結尾、匯出入 Collection、Postman / Bruno .bru / YAML / JSON 往返、樹狀列、Git 名稱）；E2E 儲存結果、Set-Cookie 隱藏、唯讀分頁、改名、刪除、超過 1 MB 時按鈕停用，截圖 `31-saved-result.png`（淺色、深色）
 5. **既有功能的調整**：已完成第一批（v0.2.2，決策 108–110：側欄搜尋、定位 / 全部展開 / 全部收合、關閉視窗即結束），其他項目待使用者列出
 
 ## 之後可以做的事（Roadmap，尚未排程）

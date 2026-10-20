@@ -2,7 +2,7 @@
 
 Hachi 是一個類似 Postman / Bruno 的桌面 API 測試工具，支援 HTTP 與 WebSocket。所有資料都以 JSON 檔存在你自選的 Workspace 資料夾中，不需要登入、不使用資料庫，適合搭配 git 版本控制。
 
-> 目前版本：**v0.7.4**（macOS、Windows）（[Releases](https://github.com/CyclopesTsai/Hachi/releases)）。HTTP / WebSocket、環境變數、腳本與斷言（含 Collection / 資料夾腳本、`await`、`sendRequest`）、驗證（Bearer / Basic / API Key / OAuth 2.0 / Digest / AWS Signature）、`{{$file:base64:…}}` 檔案變數、Cookie Jar、TLS 憑證鏈診斷、Mock Server（HTTP / WebSocket）、Collection Runner（持續時間模式、HTML 報告）、Postman / Bruno / cURL 匯入匯出、OpenAPI 文件（HTML / JSON）匯出、回應 JSON 樹狀檢視、儲存結果（範例）、程式碼產生、Git（commit、Pull / Push、衝突處理、History）。開發進度與設計決策見 [docs/progress.md](docs/progress.md)。
+> 目前版本：**v0.8.0**（macOS、Windows）（[Releases](https://github.com/CyclopesTsai/Hachi/releases)）。HTTP / WebSocket、環境變數、腳本與斷言（含 Collection / 資料夾腳本、`await`、`sendRequest`）、驗證（Bearer / Basic / API Key / OAuth 2.0 / Digest / AWS Signature）、`{{$file:base64:…}}` 檔案變數、Cookie Jar、TLS 憑證鏈診斷、Mock Server（HTTP / WebSocket）、Collection Runner（持續時間模式、HTML 報告）、Postman / Bruno / cURL 匯入匯出、OpenAPI 文件（HTML / JSON）匯出、回應 JSON 樹狀檢視、儲存結果（範例）、程式碼產生、Git（commit、Pull / Push、衝突處理、History）。開發進度與設計決策見 [docs/progress.md](docs/progress.md)。
 
 ## 技術棧
 
