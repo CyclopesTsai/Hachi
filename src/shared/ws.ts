@@ -2,6 +2,7 @@
  * Types exchanged between renderer and main for WebSocket connections, plus pure
  * helpers for binary payloads (safe to import anywhere: no Buffer).
  */
+import type { TlsDiagnosis } from './http'
 
 export type WsStatus = 'connecting' | 'open' | 'closing' | 'closed' | 'error'
 
@@ -17,6 +18,8 @@ export interface WsConnState {
   closeReason?: string
   /** Error message when the connection failed. */
   error?: string
+  /** Certificate chain check after a TLS failure (decision 142). */
+  tls?: TlsDiagnosis
 }
 
 interface WsEntryBase {

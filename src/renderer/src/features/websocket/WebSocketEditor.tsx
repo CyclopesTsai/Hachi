@@ -1,4 +1,4 @@
-import { AlertTriangle, Plug, Save, Unplug, X } from 'lucide-react'
+import { AlertTriangle, Plug, Save, ShieldAlert, Unplug, X } from 'lucide-react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import type { WsRequest } from '@shared/schemas/ws-request'
 import { WS_CLOSE_CODE_NAMES, type WsConnState } from '@shared/ws'
@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { VariableInput } from '@renderer/components/variable-input'
 import { AuthEditor } from '@renderer/features/http/AuthEditor'
 import { HeadersEditor } from '@renderer/features/http/HeadersEditor'
+import { TlsCheckButton } from '@renderer/features/http/TlsCheckDialog'
+import { isPlainUrl, tlsCheckInput } from '@renderer/features/http/tls-check-input'
 import {
   collectionIdOf,
   contextParentId,
@@ -130,6 +132,7 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
               {tab.saveError}
             </span>
           )}
+          <TlsCheckButton input={() => tlsCheckInput(tab)} disabled={isPlainUrl(draft.url)} />
           <Button
             variant="outline"
             size="sm"
@@ -172,6 +175,20 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
               <p className="flex items-center gap-1 text-destructive" data-testid="ws-error">
                 <AlertTriangle className="size-3.5 shrink-0" />
                 {state.error}
+              </p>
+            )}
+            {state?.status === 'error' && state.tls && (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="ws-tls">
+                <span className="flex items-center gap-1">
+                  <ShieldAlert className="size-3.5 shrink-0" />
+                  憑證檢查：{state.tls.summary}
+                </span>
+                <TlsCheckButton
+                  input={() => tlsCheckInput(tab)}
+                  label="查看憑證鏈與各平台…"
+                  variant="link"
+                  data-testid="ws-tls-check"
+                />
               </p>
             )}
             {unresolved.length > 0 && (

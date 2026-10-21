@@ -119,6 +119,18 @@ const brokenChainServer = await new Promise((resolve) => {
     resolve({ url: `https://localhost:${server.address().port}/`, close: () => server.close() })
   )
 })
+// Decision 142: the same chain sent in full. Its root is trusted by Hachi only (through
+// NODE_EXTRA_CA_CERTS below), not by Mozilla's list or the OS: the TWCA CYBER Root CA case.
+const chainIntermediate = await readFile(path.join(chainDir, 'chain-intermediate.pem'))
+const fullChainServer = await new Promise((resolve) => {
+  const server = https.createServer(
+    { ...chainCert, cert: Buffer.concat([chainCert.cert, chainIntermediate]) },
+    (_req, res) => res.end('ok')
+  )
+  server.listen(0, '127.0.0.1', () =>
+    resolve({ url: `https://localhost:${server.address().port}/`, close: () => server.close() })
+  )
+})
 
 // Local WebSocket echo server for the Phase 4 checks.
 const wsSeen = []
@@ -172,6 +184,8 @@ async function launch() {
       ELECTRON_RENDERER_URL: '',
       // The menu of packaged builds (no Reload / Developer Tools).
       HACHI_PRODUCTION_MENU: '1',
+      // Hachi (not the OS) trusts the test root CA (decision 142).
+      NODE_EXTRA_CA_CERTS: path.join(chainDir, 'chain-root.pem'),
       // Git sees no user.name / email of this computer: the identity dialog is tested.
       GIT_CONFIG_GLOBAL: path.join(tmp, 'gitconfig'),
       GIT_CONFIG_NOSYSTEM: '1'
@@ -899,6 +913,52 @@ try {
   assert.equal(await page.getByTestId('tls-cert-name').first().innerText(), 'localhost')
   await page.screenshot({ path: path.join(shots, '22-tls.png') })
   step('TLS failure: the chain is read again and the missing intermediate is pointed out')
+
+  // Decision 142: check every platform from the failure, then by hand on a request that
+  // succeeds (Hachi trusts the root, Mozilla / macOS / iOS / Windows do not).
+  const tlsCheck = page.getByTestId('tls-check')
+  const trustRow = (source) =>
+    tlsCheck.locator(`[data-testid="tls-trust-row"][data-source="${source}"]`)
+  await page.getByTestId('tls-check-platforms').click()
+  await tlsCheck.getByTestId('tls-trust').waitFor({ timeout: 60_000 })
+  assert.equal(await trustRow('hachi').getAttribute('data-status'), 'fail')
+  await page.keyboard.press('Escape')
+  await tlsCheck.waitFor({ state: 'detached' })
+
+  await urlInput.fill(fullChainServer.url)
+  await sendButton().click()
+  await page.getByTestId('response-viewer').waitFor()
+  await page.getByTestId('tls-check-button').click()
+  await tlsCheck.getByTestId('tls-trust').waitFor({ timeout: 60_000 })
+  assert.equal(await trustRow('hachi').getAttribute('data-status'), 'pass')
+  assert.equal(await trustRow('mozilla').getAttribute('data-status'), 'fail')
+  const systemRow = trustRow('system')
+  if (process.platform === 'linux') {
+    assert.equal(await systemRow.getAttribute('data-status'), 'unsupported')
+  } else {
+    assert.equal(await systemRow.getAttribute('data-status'), 'fail')
+    assert.ok(
+      (await systemRow.innerText()).includes('根憑證不受信任：Hachi Test Root CA'),
+      await systemRow.innerText()
+    )
+  }
+  if (process.platform === 'darwin') {
+    assert.equal(await trustRow('apple').getAttribute('data-status'), 'fail')
+    assert.ok(
+      (await tlsCheck.getByTestId('tls-advice').innerText()).includes(
+        'macOS / iOS 不信任「Hachi Test Root CA」'
+      )
+    )
+  }
+  const checkItem = (id) =>
+    tlsCheck.locator(`[data-testid="tls-check-item"][data-id="${id}"]`).getAttribute('data-status')
+  assert.equal(await checkItem('versions'), 'pass')
+  assert.equal(await checkItem('root-sent'), 'pass')
+  assert.equal(await checkItem('apple-eku'), 'fail') // the test certificate has no EKU
+  await page.screenshot({ path: path.join(shots, '32-tls-check.png') })
+  await page.keyboard.press('Escape')
+  await tlsCheck.waitFor({ state: 'detached' })
+  step('certificate check: Hachi trusts the test CA, Mozilla / the OS / iOS do not (+ advice)')
 
   await sendTo('/big')
   const large = page.getByTestId('large-body')
@@ -2611,6 +2671,7 @@ try {
 } finally {
   testServer.close()
   brokenChainServer.close()
+  fullChainServer.close()
   wsServer.close()
   // Killed (SIGKILL), not closed: with unsaved tabs a close or SIGTERM waits for the save prompt.
   const proc = lastProcess

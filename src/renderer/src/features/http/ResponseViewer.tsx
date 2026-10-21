@@ -17,6 +17,8 @@ import { testSummary } from '@shared/scripts'
 import { HeadersTable, ResponseBody } from './ResponseBody'
 import { SaveResultButton } from './SaveResultDialog'
 import { ConsolePanel, TestsPanel } from './ScriptResults'
+import { TlsCheckButton } from './TlsCheckDialog'
+import { tlsCheckInput } from './tls-check-input'
 import { TlsDiagnosisView } from './TlsDiagnosisView'
 
 const ERROR_TITLES: Record<HttpErrorCode, string> = {
@@ -198,7 +200,20 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
           <p className="text-xs text-muted-foreground">
             {result.url} · {formatDuration(result.timings.totalMs)}
           </p>
-          {result.tls && <TlsDiagnosisView diagnosis={result.tls} />}
+          {result.tls && (
+            <TlsDiagnosisView
+              diagnosis={result.tls}
+              action={
+                <div>
+                  <TlsCheckButton
+                    input={() => tlsCheckInput(tab)}
+                    label="檢查各平台（macOS / iOS、Windows、Mozilla）…"
+                    data-testid="tls-check-platforms"
+                  />
+                </div>
+              }
+            />
+          )}
         </div>
         {result.scriptReport && (
           <Tabs defaultValue="console" className="flex min-h-0 flex-1 flex-col border-t">

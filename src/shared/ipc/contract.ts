@@ -229,6 +229,12 @@ export const inputSchemas = {
     request: httpRequestSchema,
     revealSecrets: z.boolean()
   }),
+  [INVOKE.httpCheckTls]: z.strictObject({
+    parentId: itemIdSchema.nullable(),
+    environmentId: itemIdSchema.nullable(),
+    url: z.string().max(64 * 1024),
+    useProxy: z.boolean()
+  }),
   [INVOKE.mockList]: noInput,
   [INVOKE.mockGet]: z.strictObject({ id: itemIdSchema }),
   [INVOKE.mockCreate]: z.strictObject({

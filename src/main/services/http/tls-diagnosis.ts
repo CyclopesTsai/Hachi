@@ -14,23 +14,35 @@ const DIAGNOSIS_TIMEOUT_MS = 10_000
 const MAX_CHAIN = 10
 
 let trustStore: X509Certificate[] | null = null
+let bundledStore: X509Certificate[] | null = null
+
+/** Certificates from PEM strings; ones that do not parse are skipped. */
+export function parseCertificates(pems: readonly string[]): X509Certificate[] {
+  return pems.flatMap((pem) => {
+    try {
+      return [new X509Certificate(pem)]
+    } catch {
+      return []
+    }
+  })
+}
 
 /** The roots TLS connections here trust (Electron: bundled + the system's). */
-function trusted(): X509Certificate[] {
+export function trusted(): X509Certificate[] {
   if (!trustStore) {
-    const pems =
+    trustStore = parseCertificates(
       typeof tls.getCACertificates === 'function'
         ? tls.getCACertificates('default')
         : tls.rootCertificates
-    trustStore = pems.flatMap((pem) => {
-      try {
-        return [new X509Certificate(pem)]
-      } catch {
-        return []
-      }
-    })
+    )
   }
   return trustStore
+}
+
+/** Node's bundled roots: Mozilla's list (decision 142). */
+export function bundledRoots(): X509Certificate[] {
+  bundledStore ??= parseCertificates(tls.rootCertificates)
+  return bundledStore
 }
 
 /** For tests: use these roots instead of the real ones. */
@@ -45,7 +57,7 @@ function field(dn: string, key: string): string | null {
   return null
 }
 
-const nameOf = (dn: string) =>
+export const nameOf = (dn: string) =>
   field(dn, 'CN') ?? field(dn, 'O') ?? dn.split('\n')[0] ?? '（沒有名稱）'
 
 function aiaIssuerUrl(cert: X509Certificate): string | null {
@@ -59,7 +71,8 @@ function info(
   cert: X509Certificate,
   source: TlsCertInfo['source'],
   issuer: X509Certificate | null,
-  now: number
+  now: number,
+  store: X509Certificate[]
 ): TlsCertInfo {
   const fingerprint = cert.fingerprint256
   return {
@@ -75,7 +88,7 @@ function info(
     fingerprint256: fingerprint,
     selfSigned: isSelfSigned(cert),
     source,
-    trusted: trusted().some((t) => t.fingerprint256 === fingerprint),
+    trusted: store.some((t) => t.fingerprint256 === fingerprint),
     expired: Date.parse(cert.validTo) < now,
     notYetValid: Date.parse(cert.validFrom) > now,
     badSignature: issuer !== null && !(cert.checkIssued(issuer) && cert.verify(issuer.publicKey))
@@ -83,7 +96,7 @@ function info(
 }
 
 /** Certificates as the server sent them, leaf first. */
-function sentChain(peer: DetailedPeerCertificate): X509Certificate[] {
+export function sentChain(peer: DetailedPeerCertificate): X509Certificate[] {
   const out: X509Certificate[] = []
   const seen = new Set<string>()
   for (let c: DetailedPeerCertificate | undefined = peer; c && out.length < MAX_CHAIN;) {
@@ -96,14 +109,15 @@ function sentChain(peer: DetailedPeerCertificate): X509Certificate[] {
 }
 
 /**
- * Judges a chain (leaf first, as sent). Pure apart from the trust store, so tests can
- * feed it certificates directly.
+ * Judges a chain (leaf first, as sent) against a list of trusted roots (Hachi's by
+ * default). Pure, so tests can feed it certificates directly.
  */
 export function analyzeChain(
   host: string,
   certs: X509Certificate[],
   opensslError: string | null,
-  now = Date.now()
+  now = Date.now(),
+  store: X509Certificate[] = trusted()
 ): Omit<TlsDiagnosis, 'host' | 'port'> {
   if (certs.length === 0) {
     return {
@@ -115,15 +129,15 @@ export function analyzeChain(
       opensslError
     }
   }
-  const chain = certs.map((c, i) => info(c, 'server', certs[i + 1] ?? null, now))
+  const chain = certs.map((c, i) => info(c, 'server', certs[i + 1] ?? null, now, store))
   const last = certs[certs.length - 1] as X509Certificate
   let missing: TlsDiagnosis['missing'] = null
   let anchored = chain[chain.length - 1]?.trusted ?? false
   if (!isSelfSigned(last)) {
     // The root is normally not sent: look for the issuer in the trusted list.
-    const root = trusted().find((t) => last.checkIssued(t) && last.verify(t.publicKey))
+    const root = store.find((t) => last.checkIssued(t) && last.verify(t.publicKey))
     if (root) {
-      chain.push(info(root, 'trust-store', null, now))
+      chain.push(info(root, 'trust-store', null, now, store))
       anchored = true
     } else {
       missing = { name: nameOf(last.issuer), aiaUrl: aiaIssuerUrl(last) }
@@ -204,14 +218,14 @@ function opensslCode(error: unknown): string | null {
       : String(error)
 }
 
-interface Route {
+export interface Route {
   /** http://host:port of an HTTP proxy, or null to connect directly. */
   proxyUrl: string | null
   proxyAuth: { username: string; password: string } | null
 }
 
 /** A TCP socket to the target, through the proxy's CONNECT when there is one. */
-function tunnel(
+export function tunnel(
   host: string,
   port: number,
   route: Route,
@@ -256,55 +270,105 @@ function tunnel(
   })
 }
 
-/** Connects without verifying and diagnoses the chain. Never throws. */
-export async function diagnoseTls(
-  url: string,
-  route: Route = { proxyUrl: null, proxyAuth: null }
-): Promise<TlsDiagnosis> {
+export const DIRECT: Route = { proxyUrl: null, proxyAuth: null }
+
+/** Host and port of an https: / wss: URL; null when it does not parse. */
+export function targetOf(url: string): { host: string; port: number } | null {
   let target: URL
   try {
     target = new URL(url)
   } catch {
-    return unavailable('', 0, '網址無效')
+    return null
   }
-  const host = target.hostname.replace(/^\[|\]$/g, '')
-  const port = Number(target.port || 443)
+  return { host: target.hostname.replace(/^\[|\]$/g, ''), port: Number(target.port || 443) }
+}
+
+export interface Handshake {
+  /** As the server sent them, leaf first. */
+  certs: X509Certificate[]
+  opensslError: string | null
+  /** e.g. TLSv1.3. */
+  protocol: string | null
+  /** The stapled OCSP response (only asked for with `requestOCSP`); null when none. */
+  ocsp: Buffer | null
+}
+
+/** One TLS handshake without verifying. Throws on failure, including the timeout. */
+export async function handshake(
+  host: string,
+  port: number,
+  route: Route,
+  options: tls.ConnectionOptions = {},
+  timeoutMs = DIAGNOSIS_TIMEOUT_MS
+): Promise<Handshake> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), DIAGNOSIS_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   let socket: TLSSocket | null = null
   try {
     const raw = await tunnel(host, port, route, controller.signal)
+    let ocsp: Buffer | null = null
     socket = await new Promise<TLSSocket>((resolve, reject) => {
-      const s = tls.connect({
-        socket: raw,
-        servername: net.isIP(host) ? undefined : host,
-        rejectUnauthorized: false
+      let s: TLSSocket
+      try {
+        s = tls.connect({
+          ...options,
+          socket: raw,
+          servername: net.isIP(host) ? undefined : host,
+          rejectUnauthorized: false
+        })
+      } catch (error) {
+        raw.destroy()
+        reject(error)
+        return
+      }
+      s.on('OCSPResponse', (response) => {
+        ocsp = response && response.length > 0 ? response : null
       })
       s.once('secureConnect', () => resolve(s))
       s.once('error', reject)
-      controller.signal.addEventListener('abort', () => {
+      const abort = () => {
         s.destroy()
         reject(new Error('逾時'))
-      })
+      }
+      if (controller.signal.aborted) abort()
+      else controller.signal.addEventListener('abort', abort)
     })
-    const peer = socket.getPeerCertificate(true)
-    const error = socket.authorizationError
-    const result = analyzeChain(host, sentChain(peer), opensslCode(error))
-    return { host, port, ...result }
-  } catch (error) {
-    return unavailable(host, port, error instanceof Error ? error.message : String(error))
+    return {
+      certs: sentChain(socket.getPeerCertificate(true)),
+      opensslError: opensslCode(socket.authorizationError),
+      protocol: socket.getProtocol(),
+      ocsp
+    }
   } finally {
     clearTimeout(timer)
     socket?.destroy()
   }
 }
 
-function unavailable(host: string, port: number, reason: string): TlsDiagnosis {
+/** Connects without verifying and diagnoses the chain. Never throws. */
+export async function diagnoseTls(url: string, route: Route = DIRECT): Promise<TlsDiagnosis> {
+  const target = targetOf(url)
+  if (!target) return unavailable('', 0, '網址無效')
+  const { host, port } = target
+  try {
+    const { certs, opensslError } = await handshake(host, port, route)
+    return { host, port, ...analyzeChain(host, certs, opensslError) }
+  } catch (error) {
+    return unavailable(host, port, error instanceof Error ? error.message : String(error))
+  }
+}
+
+export function unavailable(
+  host: string,
+  port: number,
+  reason: string,
+  summary = '無法再次連線讀取憑證鏈'
+): TlsDiagnosis {
   return {
     host,
     port,
     verdict: 'unavailable',
-    summary: '無法再次連線讀取憑證鏈',
+    summary,
     advice: reason,
     chain: [],
     missing: null,

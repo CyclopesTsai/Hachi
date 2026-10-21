@@ -26,8 +26,9 @@ import {
   type ContainerLevel
 } from '../http/build-request'
 import type { CookieJar } from '../http/cookie-jar'
-import { withJarCookies } from '../http/http-client'
+import { isTlsErrorCode, withJarCookies } from '../http/http-client'
 import { resolveProxyUrl } from '../http/proxy'
+import { diagnoseTls, type Route } from '../http/tls-diagnosis'
 
 export interface WsServiceDeps {
   /** Collections / folders from the collection down to `parentId`, outermost first. */
@@ -98,6 +99,10 @@ interface Connection {
   userClosed: boolean
   sent: number
   received: number
+  /** For the certificate diagnosis after a TLS failure (decision 142). */
+  route: Route
+  /** The diagnosis being made; the close waits for it. */
+  tls: Promise<void> | null
 }
 
 /** ws:// stays ws://; proxies and Chromium's proxy lookup think in http(s). */
@@ -139,12 +144,15 @@ export class WsService {
       startedAt: this.now(),
       userClosed: false,
       sent: 0,
-      received: 0
+      received: 0,
+      route: { proxyUrl: null, proxyAuth: null },
+      tls: null
     }
     this.connections.set(conn.id, conn)
 
     try {
-      const { url, headers, protocols, options } = await this.prepare(input, resolver)
+      const { url, headers, protocols, options, route } = await this.prepare(input, resolver)
+      conn.route = route
       conn.state = { status: 'connecting', url }
       this.log(conn, { kind: 'event', event: 'connecting', url })
       this.emitState(conn)
@@ -267,6 +275,13 @@ export class WsService {
     }
     return {
       url,
+      route: {
+        proxyUrl,
+        proxyAuth:
+          proxyUrl && proxySettings.username
+            ? { username: proxySettings.username, password: proxySettings.password }
+            : null
+      } satisfies Route,
       headers: headerObject,
       protocols,
       options: {
@@ -324,12 +339,22 @@ export class WsService {
       })
     })
     socket.on('error', (error) => {
-      conn.state = { ...conn.state, error: error.message }
-      this.log(conn, { kind: 'event', event: 'error', message: error.message })
+      // Node's hint about --use-system-ca does not apply: Hachi trusts the system's roots.
+      const message = error.message.replace(/; if the root CA is installed locally.*$/, '')
+      conn.state = { ...conn.state, error: message }
+      this.log(conn, { kind: 'event', event: 'error', message })
+      const code = (error as { code?: unknown }).code
+      if (typeof code === 'string' && isTlsErrorCode(code) && !conn.tls && !conn.userClosed) {
+        // Read the chain again and tell what is wrong, as for HTTP (decision 142).
+        conn.tls = diagnoseTls(asHttpUrl(conn.state.url), conn.route).then((tls) => {
+          conn.state = { ...conn.state, tls }
+        })
+      }
     })
     socket.on('close', (code, reasonBuffer) => {
       const reason = reasonBuffer.toString('utf8')
-      this.finish(conn, code, reason)
+      if (conn.tls) void conn.tls.then(() => this.finish(conn, code, reason))
+      else this.finish(conn, code, reason)
     })
   }
 
@@ -343,7 +368,8 @@ export class WsService {
       ...(conn.state.protocol ? { protocol: conn.state.protocol } : {}),
       ...(conn.state.openedAt ? { openedAt: conn.state.openedAt } : {}),
       ...(code !== null ? { closeCode: code, closeReason: reason } : {}),
-      ...(error ? { error } : {})
+      ...(error ? { error } : {}),
+      ...(error && conn.state.tls ? { tls: conn.state.tls } : {})
     }
     if (code !== null) {
       this.log(conn, {

@@ -4,6 +4,7 @@
 import { execFile } from 'node:child_process'
 import { BrowserWindow, Menu, app, type MenuItemConstructorOptions } from 'electron'
 import { APP_COPYRIGHT, APP_NAME, LEGAL_NOTICE } from '@shared/app-info'
+import { readAppleRoots, verifyWithSecurity } from './darwin-trust'
 import type { PlatformAdapter } from './types'
 
 export const darwinAdapter: PlatformAdapter = {
@@ -19,6 +20,14 @@ export const darwinAdapter: PlatformAdapter = {
     return new Promise((resolve) => {
       execFile('/usr/bin/xcode-select', ['-p'], { timeout: 5000 }, (error) => resolve(!error))
     })
+  },
+
+  verifyServerChain(host, pems) {
+    return verifyWithSecurity(host, pems)
+  },
+
+  appleRootCertificates() {
+    return readAppleRoots()
   },
 
   setup() {

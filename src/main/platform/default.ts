@@ -5,6 +5,7 @@
 import { app, dialog, type MenuItemConstructorOptions } from 'electron'
 import { APP_ID, APP_NAME, LEGAL_NOTICE } from '@shared/app-info'
 import type { PlatformAdapter } from './types'
+import { verifyWithX509Chain } from './win32-trust'
 
 function showAboutDialog(): void {
   void dialog.showMessageBox({
@@ -33,6 +34,15 @@ export function createDefaultAdapter(id: 'win32' | 'linux'): PlatformAdapter {
 
     gitUsable() {
       return Promise.resolve(true)
+    },
+
+    verifyServerChain(host, pems) {
+      // Linux has no single system verifier (each library has its own bundle).
+      return id === 'win32' ? verifyWithX509Chain(host, pems) : Promise.resolve(null)
+    },
+
+    appleRootCertificates() {
+      return Promise.resolve(null)
     },
 
     setup() {

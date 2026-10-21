@@ -255,6 +255,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       return target
     },
     [INVOKE.httpResolve]: (input) => ctx.http.resolveForCode(input),
+    [INVOKE.httpCheckTls]: (input) => ctx.http.checkTls(input),
     [INVOKE.mockList]: () => ctx.mocks.list(),
     [INVOKE.mockGet]: (input) => ctx.mocks.get(input.id),
     [INVOKE.mockCreate]: async (input) => {

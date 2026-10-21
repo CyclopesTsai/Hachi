@@ -248,6 +248,9 @@ describe('WsService', () => {
       request: request(tlsServer.url)
     })
     await until(() => status('s1')?.status === 'error', 'tls error')
+    // The chain is read again and diagnosed, as for HTTP (decision 142).
+    expect(status('s1')?.tls?.verdict).toBe('self-signed')
+    expect(status('s1')?.tls?.chain[0]?.name).toBe('localhost')
     await service.connect({
       connectionId: 's2',
       parentId: null,

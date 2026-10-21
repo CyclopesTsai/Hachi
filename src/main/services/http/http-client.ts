@@ -72,6 +72,10 @@ const TLS_CODES = new Set([
   'CERT_NOT_YET_VALID',
   'ERR_TLS_CERT_ALTNAME_INVALID'
 ])
+/** A certificate / TLS failure (decision 132), from an error's `code`. */
+export const isTlsErrorCode = (code: string) =>
+  TLS_CODES.has(code) || code.startsWith('ERR_TLS') || code.startsWith('ERR_SSL')
+
 const NETWORK_CODES = new Set([
   'ECONNREFUSED',
   'ECONNRESET',
@@ -120,7 +124,7 @@ export function classifyError(
     if (/Proxy/.test(name) || code.startsWith('UND_ERR_PRX')) {
       return { code: 'PROXY', message: messages.join(': ') }
     }
-    if (TLS_CODES.has(code) || code.startsWith('ERR_TLS') || code.startsWith('ERR_SSL')) {
+    if (isTlsErrorCode(code)) {
       // Node's hint about --use-system-ca does not apply: Hachi trusts the system's roots.
       const text = messages.join(': ').replace(/; if the root CA is installed locally.*$/, '')
       return { code: 'TLS', message: text }

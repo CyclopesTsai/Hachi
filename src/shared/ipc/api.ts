@@ -7,7 +7,8 @@ import type {
   ContainerSettingsData,
   HttpResult,
   InheritedSettings,
-  OAuth2TokenStatus
+  OAuth2TokenStatus,
+  TlsCheckResult
 } from '../http'
 import type {
   AppConfig,
@@ -331,6 +332,16 @@ export interface WsDisconnectInput {
   reason?: string
 }
 
+/** Certificate check by hand (decision 142). */
+export interface HttpCheckTlsInput {
+  parentId: string | null
+  environmentId: string | null
+  /** As typed (https:// or wss://), before variable substitution. */
+  url: string
+  /** The request's "use proxy" setting. */
+  useProxy: boolean
+}
+
 export interface HttpResolveInput {
   parentId: string | null
   environmentId: string | null
@@ -527,6 +538,7 @@ export interface InvokeMap {
   'http:getBody': { input: RunIdInput; output: string }
   'http:saveResponse': { input: RunIdInput; output: string | null }
   'http:resolve': { input: HttpResolveInput; output: HttpResolveResult }
+  'http:checkTls': { input: HttpCheckTlsInput; output: TlsCheckResult }
   'mock:list': { input: void; output: MockSummary[] }
   'mock:get': { input: { id: string }; output: MockFile }
   'mock:create': { input: { name: string; fromCollectionId: string | null }; output: MockFile }
@@ -710,6 +722,11 @@ export interface HachiApi {
     saveResponse: InvokeFn<'http:saveResponse'>
     /** The request as it would be sent, for code generation (nothing is sent). */
     resolve: InvokeFn<'http:resolve'>
+    /**
+     * Reads the server's certificate chain and checks who would trust it (Hachi, Mozilla's
+     * roots, the OS, Apple's roots) plus TLS versions, OCSP, SCTs (decision 142).
+     */
+    checkTls: InvokeFn<'http:checkTls'>
   }
   /** Mock Servers of the current Workspace (decision 133). */
   mock: {

@@ -7,13 +7,20 @@ const ROLE = (cert: TlsCertInfo, index: number, total: number) =>
 
 const date = (iso: string) => iso.slice(0, 10)
 
-function Badge({ tone, children }: { tone: 'ok' | 'bad' | 'muted'; children: React.ReactNode }) {
+export function Badge({
+  tone,
+  children
+}: {
+  tone: 'ok' | 'bad' | 'warn' | 'muted'
+  children: React.ReactNode
+}) {
   return (
     <span
       className={cn(
-        'rounded px-1.5 py-px text-[11px] font-medium',
+        'shrink-0 rounded px-1.5 py-px text-[11px] font-medium whitespace-nowrap',
         tone === 'ok' && 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
         tone === 'bad' && 'bg-red-500/15 text-red-700 dark:text-red-400',
+        tone === 'warn' && 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
         tone === 'muted' && 'bg-muted text-muted-foreground'
       )}
     >
@@ -78,7 +85,17 @@ const Link = () => (
 )
 
 /** Chain diagram + verdict of a TLS failure (decision 132). */
-export function TlsDiagnosisView({ diagnosis }: { diagnosis: TlsDiagnosis }) {
+export function TlsDiagnosisView({
+  diagnosis,
+  title,
+  action
+}: {
+  diagnosis: TlsDiagnosis
+  /** Instead of "憑證檢查：<summary>" (the check dialog, decision 142). */
+  title?: string
+  /** Shown under the advice (e.g. the button to check every platform). */
+  action?: React.ReactNode
+}) {
   const d = diagnosis
   const Icon =
     d.verdict === 'ok' ? ShieldCheck : d.verdict === 'unavailable' ? ShieldQuestion : ShieldAlert
@@ -90,9 +107,10 @@ export function TlsDiagnosisView({ diagnosis }: { diagnosis: TlsDiagnosis }) {
     >
       <h3 className="flex items-center gap-1.5 text-sm font-medium">
         <Icon className="size-4 shrink-0" />
-        憑證檢查：{d.summary}
+        {title ?? `憑證檢查：${d.summary}`}
       </h3>
-      <p className="text-xs text-muted-foreground">{d.advice}</p>
+      {d.advice && <p className="text-xs text-muted-foreground">{d.advice}</p>}
+      {action}
       {d.chain.length > 0 && (
         <div className="flex flex-col">
           <p className="mb-1 text-xs text-muted-foreground">

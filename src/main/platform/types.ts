@@ -1,5 +1,18 @@
 import type { MenuItemConstructorOptions } from 'electron'
 
+/** The operating system's own verdict on a server's chain (decision 142). */
+export interface SystemTrustVerdict {
+  /** e.g. "這台 Mac（系統驗證）". */
+  label: string
+  /** The clients that use this verifier. */
+  clients: string
+  ok: boolean
+  /** Why it failed, readable; empty on success. */
+  reasons: string[]
+  /** macOS: whether Apple's Certificate Transparency check passed (null: not reported). */
+  ctVerified: boolean | null
+}
+
 /**
  * Platform-specific behavior.
  *
@@ -34,4 +47,11 @@ export interface PlatformAdapter {
   gitUsable(file: string): Promise<boolean>
   /** Called once at startup (About panel, app user model id, …). */
   setup(): void
+  /**
+   * Verifies a server's chain (PEM, leaf first) for `host` with the operating system's
+   * verifier, which may download missing intermediates. Null where there is none (Linux).
+   */
+  verifyServerChain(host: string, pems: string[]): Promise<SystemTrustVerdict | null>
+  /** Apple's built-in roots (PEM), to tell what iOS trusts; null off macOS. */
+  appleRootCertificates(): Promise<string[] | null>
 }

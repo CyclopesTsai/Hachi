@@ -51,6 +51,7 @@ export const INVOKE = {
   httpGetBody: 'http:getBody',
   httpSaveResponse: 'http:saveResponse',
   httpResolve: 'http:resolve',
+  httpCheckTls: 'http:checkTls',
   mockList: 'mock:list',
   mockGet: 'mock:get',
   mockCreate: 'mock:create',

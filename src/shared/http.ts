@@ -195,3 +195,50 @@ export interface TlsDiagnosis {
   /** OpenSSL's verify error (e.g. UNABLE_TO_GET_ISSUER_CERT_LOCALLY), when there is one. */
   opensslError: string | null
 }
+
+/**
+ * Who would trust the chain (decision 142): Hachi's own list, Node's bundled roots
+ * (Mozilla's), the operating system's verifier, and Apple's built-in roots (iOS).
+ */
+export type TlsTrustSource = 'hachi' | 'mozilla' | 'system' | 'apple'
+
+export interface TlsTrustResult {
+  source: TlsTrustSource
+  /** e.g. "這台 Mac（Safari、macOS App）". */
+  label: string
+  /** The clients this row stands for. */
+  clients: string
+  status: 'pass' | 'fail' | 'unsupported' | 'error'
+  /** Why it failed (or why it could not be checked); notes on a pass. */
+  reasons: string[]
+}
+
+export interface TlsCheckItem {
+  id:
+    | 'versions'
+    | 'ocsp-stapling'
+    | 'sct'
+    | 'root-sent'
+    | 'expiry'
+    | 'apple-validity'
+    | 'apple-key'
+    | 'apple-signature'
+    | 'apple-eku'
+    | 'apple-san'
+  label: string
+  status: 'pass' | 'warn' | 'fail' | 'info'
+  detail: string
+}
+
+/** A certificate check started by hand, the request succeeding or not (decision 142). */
+export interface TlsCheckResult {
+  host: string
+  port: number
+  /** The chain as Hachi sees it (same as the failure diagnosis). */
+  diagnosis: TlsDiagnosis
+  trust: TlsTrustResult[]
+  checks: TlsCheckItem[]
+  /** What to do, when some platform fails. */
+  advice: string[]
+  unresolvedVariables: string[]
+}

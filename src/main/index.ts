@@ -161,6 +161,10 @@ async function bootstrap(): Promise<void> {
     fileAccess: () => {
       const ws = workspaces.getCurrent()
       return { root: ws?.path ?? null, trustedOutside: !!ws && config.isFileTrusted(ws.path) }
+    },
+    tlsCheck: {
+      verifySystem: (host, pems) => platform.verifyServerChain(host, pems),
+      appleRoots: () => platform.appleRootCertificates()
     }
   })
   const transfer = new TransferService(collections, environments, loadRedoc)

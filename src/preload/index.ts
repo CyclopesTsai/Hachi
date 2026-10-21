@@ -78,7 +78,8 @@ const api: HachiApi = {
     cancel: (input) => invoke(INVOKE.httpCancel, input),
     getBody: (input) => invoke(INVOKE.httpGetBody, input),
     saveResponse: (input) => invoke(INVOKE.httpSaveResponse, input),
-    resolve: (input) => invoke(INVOKE.httpResolve, input)
+    resolve: (input) => invoke(INVOKE.httpResolve, input),
+    checkTls: (input) => invoke(INVOKE.httpCheckTls, input)
   },
   mock: {
     list: () => invoke(INVOKE.mockList),

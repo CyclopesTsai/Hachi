@@ -27,7 +27,7 @@ Hachi is in the spirit of Postman and Bruno: no account, no cloud, no database. 
 - **Collection Runner**: iterations or a time limit, concurrency, data files (CSV / JSON), live charts and statistics, HTML report
 - **Saved results**: keep a request and its response under the request, with secrets and credentials hidden
 - **Mock Server**: fixed HTTP routes and WebSocket endpoints served from your Workspace
-- **Cookie jar** and **TLS certificate chain diagnosis**
+- **Cookie jar** and **TLS certificate checks**: chain diagnosis, and whether Mozilla, macOS / iOS and Windows trust a server
 - **Import / export**: Postman and Bruno (`.bru` and YAML) both ways, cURL import, OpenAPI 3.0 export (HTML / JSON), code generation (cURL, fetch, axios, Python requests)
 - **Git**: commit, pull / push, conflict resolution and history inside the app
 

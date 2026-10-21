@@ -25,6 +25,8 @@ import { hasScripts } from '@shared/scripts'
 import { HeadersEditor } from './HeadersEditor'
 import { RequestSettingsTab } from './RequestSettingsTab'
 import { ResponseViewer } from './ResponseViewer'
+import { TlsCheckButton } from './TlsCheckDialog'
+import { isPlainUrl, tlsCheckInput } from './tls-check-input'
 
 function Count({ n }: { n: number }) {
   return n > 0 ? (
@@ -79,6 +81,7 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
             <Code2 />
             Code
           </Button>
+          <TlsCheckButton input={() => tlsCheckInput(tab)} disabled={isPlainUrl(draft.url)} />
           <Button
             variant="outline"
             size="sm"

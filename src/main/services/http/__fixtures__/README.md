@@ -9,3 +9,7 @@ it protects nothing. Regenerate with:
 `chain-root.pem` → `chain-intermediate.pem` → `chain-leaf.pem` (+ `chain-leaf-key.pem`) is a
 throwaway three-level chain for the TLS diagnosis tests (decision 132): the intermediate and
 leaf carry AIA "CA Issuers" URLs on `ca.hachi.test`. Only the leaf key is kept.
+
+`sct-leaf.pem` is github.com's public certificate (issued 2026-09-01, ECDSA P-256), kept
+only because it embeds two Certificate Transparency SCTs; the SCT parsing tests read it
+(decision 142). No key goes with it.

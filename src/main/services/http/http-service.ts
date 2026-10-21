@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
 import { HachiError } from '@shared/errors'
-import type { HttpErrorCode, HttpResult, InheritedSettings, OAuth2TokenStatus } from '@shared/http'
+import type {
+  HttpErrorCode,
+  HttpResult,
+  InheritedSettings,
+  OAuth2TokenStatus,
+  TlsCheckResult
+} from '@shared/http'
 import type { ProxySettings } from '@shared/schemas/app-config'
 import type { Auth, OAuth2Auth } from '@shared/schemas/collection'
 import type { HttpRequest } from '@shared/schemas/http-request'
@@ -15,6 +21,7 @@ import {
 import { signAwsSigV4 } from './auth/aws-sigv4'
 import { digestAuthorization, parseDigestChallenge } from './auth/digest'
 import { loadFileVariables, type FileAccess } from './file-variables'
+import { checkCertificates, type TlsCheckDeps } from './tls-check'
 import { diagnoseTls } from './tls-diagnosis'
 import { OAuth2Error, OAuth2Service, type TokenRequest } from './auth/oauth2'
 import {
@@ -100,6 +107,16 @@ export interface HttpServiceDeps {
   cookieJar?: () => CookieJar | null
   /** Where {{$file:…}} may read (decision 134). */
   fileAccess?: () => FileAccess
+  /** The system verifiers for the certificate check (decision 142). */
+  tlsCheck?: TlsCheckDeps
+}
+
+export interface TlsCheckInput {
+  parentId: string | null
+  environmentId: string | null
+  /** As typed (https:// or wss://), before variable substitution. */
+  url: string
+  useProxy: boolean
 }
 
 export interface SendInput {
@@ -472,6 +489,45 @@ export class HttpService {
       }
     }
     return { ...built, unresolvedVariables: [...resolver.unresolved].sort(), authNote }
+  }
+
+  /**
+   * Certificate check by hand (decision 142): the URL's variables are replaced and the
+   * proxy chosen as for sending; then the server's chain is read and checked.
+   */
+  async checkTls(input: TlsCheckInput): Promise<TlsCheckResult> {
+    const layers = await this.deps.getVariableLayers(input.parentId, input.environmentId)
+    const resolver = new VariableResolver(buildVariableMap(layers))
+    let text = resolver.resolve(input.url).trim()
+    if (text === '') throw new HachiError('VALIDATION_ERROR', '請先輸入網址')
+    if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text)) text = `https://${text}`
+    let url: URL
+    try {
+      url = new URL(text)
+    } catch {
+      throw new HachiError('VALIDATION_ERROR', `網址無效：${text}`)
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'wss:') {
+      throw new HachiError('VALIDATION_ERROR', '只能檢查 https:// 或 wss:// 的網址')
+    }
+    const target = url.toString().replace(/^wss:/i, 'https:')
+    let proxyUrl: string | null
+    try {
+      proxyUrl = await resolveProxyUrl(
+        target,
+        this.deps.getProxySettings(),
+        input.useProxy,
+        this.deps.resolveSystemProxy
+      )
+    } catch (error) {
+      throw new HachiError('INVALID_OPERATION', `Cannot resolve proxy: ${String(error)}`)
+    }
+    const result = await checkCertificates(
+      target,
+      { proxyUrl, proxyAuth: this.proxyAuth(proxyUrl) },
+      this.deps.tlsCheck
+    )
+    return { ...result, unresolvedVariables: [...resolver.unresolved].sort() }
   }
 
   /** Cancels a running request. Returns false if it already finished. */
