@@ -4,9 +4,6 @@ import { useEnvStore } from '@renderer/stores/env-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 
-/** Plain http:// / ws:// cannot be checked (a {{variable}} might still turn into https). */
-export const isPlainUrl = (url: string) => /^\s*(http|ws):\/\//i.test(url)
-
 /** What to check for a request / WebSocket tab, as currently edited. */
 export function tlsCheckInput(tab: RequestLikeTab): HttpCheckTlsInput {
   const current = useTabsStore.getState().tabs.find((t) => t.uid === tab.uid) ?? tab

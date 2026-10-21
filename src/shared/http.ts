@@ -241,4 +241,6 @@ export interface TlsCheckResult {
   /** What to do, when some platform fails. */
   advice: string[]
   unresolvedVariables: string[]
+  /** http:// or ws://: nothing to check, the dialog explains why (the rest is empty). */
+  insecure?: 'http' | 'ws'
 }

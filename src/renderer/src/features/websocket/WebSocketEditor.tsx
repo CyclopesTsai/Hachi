@@ -9,7 +9,7 @@ import { VariableInput } from '@renderer/components/variable-input'
 import { AuthEditor } from '@renderer/features/http/AuthEditor'
 import { HeadersEditor } from '@renderer/features/http/HeadersEditor'
 import { TlsCheckButton } from '@renderer/features/http/TlsCheckDialog'
-import { isPlainUrl, tlsCheckInput } from '@renderer/features/http/tls-check-input'
+import { tlsCheckInput } from '@renderer/features/http/tls-check-input'
 import {
   collectionIdOf,
   contextParentId,
@@ -132,7 +132,7 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
               {tab.saveError}
             </span>
           )}
-          <TlsCheckButton input={() => tlsCheckInput(tab)} disabled={isPlainUrl(draft.url)} />
+          <TlsCheckButton input={() => tlsCheckInput(tab)} />
           <Button
             variant="outline"
             size="sm"

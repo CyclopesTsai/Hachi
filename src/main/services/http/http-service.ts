@@ -22,7 +22,7 @@ import { signAwsSigV4 } from './auth/aws-sigv4'
 import { digestAuthorization, parseDigestChallenge } from './auth/digest'
 import { loadFileVariables, type FileAccess } from './file-variables'
 import { checkCertificates, type TlsCheckDeps } from './tls-check'
-import { diagnoseTls } from './tls-diagnosis'
+import { diagnoseTls, unavailable } from './tls-diagnosis'
 import { OAuth2Error, OAuth2Service, type TokenRequest } from './auth/oauth2'
 import {
   buildCodegenRequest,
@@ -506,6 +506,21 @@ export class HttpService {
       url = new URL(text)
     } catch {
       throw new HachiError('VALIDATION_ERROR', `網址無效：${text}`)
+    }
+    if (url.protocol === 'http:' || url.protocol === 'ws:') {
+      // Unencrypted: no certificate; the dialog explains what that means.
+      const host = url.hostname.replace(/^\[|\]$/g, '')
+      const port = Number(url.port || 80)
+      return {
+        host,
+        port,
+        diagnosis: unavailable(host, port, '', '未加密的連線'),
+        trust: [],
+        checks: [],
+        advice: [],
+        unresolvedVariables: [...resolver.unresolved].sort(),
+        insecure: url.protocol === 'http:' ? 'http' : 'ws'
+      }
     }
     if (url.protocol !== 'https:' && url.protocol !== 'wss:') {
       throw new HachiError('VALIDATION_ERROR', '只能檢查 https:// 或 wss:// 的網址')

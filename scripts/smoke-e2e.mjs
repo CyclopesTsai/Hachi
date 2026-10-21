@@ -960,6 +960,15 @@ try {
   await tlsCheck.waitFor({ state: 'detached' })
   step('certificate check: Hachi trusts the test CA, Mozilla / the OS / iOS do not (+ advice)')
 
+  // http:// has no certificate: the button still works and explains the plain connection.
+  await urlInput.fill(api('/json'))
+  await page.getByTestId('tls-check-button').click()
+  await tlsCheck.getByTestId('tls-insecure').waitFor({ timeout: 15_000 })
+  assert.ok((await tlsCheck.getByTestId('tls-insecure').innerText()).includes('未加密的連線'))
+  await page.keyboard.press('Escape')
+  await tlsCheck.waitFor({ state: 'detached' })
+  step('certificate check on http://: explains the unencrypted connection')
+
   await sendTo('/big')
   const large = page.getByTestId('large-body')
   await large.waitFor()

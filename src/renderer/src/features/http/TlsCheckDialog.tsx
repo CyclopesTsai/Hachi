@@ -1,4 +1,4 @@
-import { AlertTriangle, Lightbulb, Loader2, RotateCw, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Lightbulb, Loader2, RotateCw, ShieldCheck, ShieldOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { TlsCheckItem, TlsCheckResult, TlsTrustResult } from '@shared/http'
 import type { HttpCheckTlsInput } from '@shared/ipc/api'
@@ -104,8 +104,33 @@ function CheckList({ items }: { items: TlsCheckItem[] }) {
   )
 }
 
+/** http:// / ws://: no certificate to check; say what the plain connection means. */
+function Insecure({ scheme }: { scheme: 'http' | 'ws' }) {
+  const secure = scheme === 'http' ? 'https://' : 'wss://'
+  return (
+    <section
+      className="flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs"
+      data-testid="tls-insecure"
+    >
+      <h3 className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
+        <ShieldOff className="size-4 shrink-0" />
+        未加密的連線（{scheme}://），沒有憑證可以檢查
+      </h3>
+      <ul className="flex list-disc flex-col gap-1 pl-5 select-text">
+        <li>資料以明文傳送，傳輸途中可能被他人看到或竄改（包括密碼、Token、Cookie）。</li>
+        <li>
+          iOS / macOS App 預設會擋下 {scheme}:// 連線（App Transport Security），要在 Info.plist
+          加上例外才能連；Android 9 起也預設禁止明文連線。
+        </li>
+        <li>正式環境建議改用 {secure}，改好後可以再檢查一次憑證。</li>
+      </ul>
+    </section>
+  )
+}
+
 function Result({ result }: { result: TlsCheckResult }) {
   const d = result.diagnosis
+  if (result.insecure) return <Insecure scheme={result.insecure} />
   return (
     <div className="flex flex-col gap-4">
       {result.unresolvedVariables.length > 0 && (
@@ -182,7 +207,7 @@ function CheckView({ input }: { input: HttpCheckTlsInput }) {
         <DialogDescription className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate">
             {result ? `${result.host}:${result.port} · ` : ''}
-            只讀取伺服器送出的憑證，不會修改任何信任設定
+            {result?.insecure ? '沒有加密' : '只讀取伺服器送出的憑證，不會修改任何信任設定'}
           </span>
           <Button
             variant="outline"
@@ -218,14 +243,12 @@ export function TlsCheckButton({
   input,
   label = '憑證',
   variant = 'outline',
-  disabled = false,
   'data-testid': testId = 'tls-check-button'
 }: {
   /** Read when the dialog opens. */
   input: () => HttpCheckTlsInput
   label?: string
   variant?: 'outline' | 'link'
-  disabled?: boolean
   'data-testid'?: string
 }) {
   const [opened, setOpened] = useState<HttpCheckTlsInput | null>(null)
@@ -235,7 +258,6 @@ export function TlsCheckButton({
         variant={variant}
         size="sm"
         className={cn(variant === 'link' && 'h-auto px-0 text-xs')}
-        disabled={disabled}
         data-testid={testId}
         title="檢查伺服器憑證：Hachi、Mozilla、作業系統與 iOS 是否信任"
         onClick={() => setOpened(input())}

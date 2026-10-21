@@ -232,10 +232,14 @@ describe('HttpService.checkTls', () => {
     expect(ws.trust[0]?.status).toBe('pass')
   })
 
-  it('only checks https:// and wss://', async () => {
+  it('says http:// / ws:// are unencrypted, and only checks https:// and wss://', async () => {
     const s = service()
-    await expect(s.checkTls(input('http://localhost/'))).rejects.toBeInstanceOf(HachiError)
-    await expect(s.checkTls(input('ws://localhost/'))).rejects.toThrow('https:// 或 wss://')
+    const http = await s.checkTls(input('http://localhost:8080/{{nope}}'))
+    expect(http).toMatchObject({ insecure: 'http', host: 'localhost', port: 8080, trust: [] })
+    expect(http.unresolvedVariables).toEqual(['nope'])
+    expect(await s.checkTls(input('ws://localhost/'))).toMatchObject({ insecure: 'ws', port: 80 })
+    await expect(s.checkTls(input('ftp://localhost/'))).rejects.toBeInstanceOf(HachiError)
+    await expect(s.checkTls(input('ftp://localhost/'))).rejects.toThrow('https:// 或 wss://')
     await expect(s.checkTls(input('  '))).rejects.toThrow('請先輸入網址')
   })
 })
