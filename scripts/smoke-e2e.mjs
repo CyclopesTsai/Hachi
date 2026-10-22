@@ -2942,13 +2942,16 @@ try {
   step('English collection, environments, history, Mock, Runner, Git, settings and import screens')
 
   // Get item has an unsaved script: closing asks first.
-  const enExited = app.waitForEvent('close')
   void app
     .evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
     .catch(() => undefined)
-  await page.getByRole('button', { name: 'Don’t Save' }).waitFor()
+  const dontSave = page.getByTestId('unsaved-dialog').getByRole('button', { name: 'Don’t Save' })
+  await dontSave.waitFor()
   await englishScreen('close-prompt')
-  await page.getByRole('button', { name: 'Don’t Save' }).click()
+  // Waited for only now, so a failed check above is not hidden by this wait timing out.
+  const enExited = app.waitForEvent('close')
+  // The app quits while the click is still settling; the close event is the real check.
+  await dontSave.click({ noWaitAfter: true }).catch(() => undefined)
   await enExited
   step('English close prompt; Don’t Save quits')
 
