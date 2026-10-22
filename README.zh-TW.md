@@ -13,7 +13,7 @@
   <a href="README.md">English</a>
 </p>
 
-![Hachi](docs/screenshot.png)
+![Hachi](docs/screenshot.zh-TW.png)
 
 Hachi 的定位類似 Postman / Bruno：不需要帳號、不上雲、不用資料庫。**Workspace** 就是一個 JSON 檔案的資料夾（每個請求一個檔案），可以用 git 檢視差異、分享與版本控制。App 介面有繁體中文與英文，預設跟隨系統語言，也可以在 App 設定切換（原生選單為英文）。
 
@@ -27,7 +27,7 @@ Hachi 的定位類似 Postman / Bruno：不需要帳號、不上雲、不用資�
 - **Collection Runner**：依次數或時間執行、並行、資料檔（CSV / JSON）、即時圖表與統計、HTML 報告
 - **儲存結果**：把請求與回應存在請求底下，機密值與憑證會隱藏
 - **Mock Server**：從 Workspace 提供固定內容的 HTTP 路由與 WebSocket 端點
-- **Cookie Jar** 與 **TLS 憑證檢查**：憑證鏈診斷，以及 Mozilla、macOS / iOS、Windows 是否信任伺服器
+- **Cookie Jar** 與 **TLS 憑證檢查**：憑證鏈診斷、Mozilla、macOS / iOS、Windows 是否信任伺服器，以及根憑證在 Apple、Chrome、Microsoft、Mozilla 根憑證計畫（CCADB）中的狀態
 - **匯入 / 匯出**：Postman、Bruno（`.bru` 與 YAML）雙向，匯入 cURL，匯出 OpenAPI 3.0（HTML / JSON），程式碼產生（cURL、fetch、axios、Python requests）
 - **Git**：在 App 內 commit、Pull / Push、處理衝突、查看 History
 
