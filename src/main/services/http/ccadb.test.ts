@@ -57,7 +57,7 @@ describe('CCADB reports (issue #7)', () => {
 
   it('refuses reports that do not look right', () => {
     expect(() => parseReport('apple', 'a,b,c\n1,2,3\n')).toThrow('欄位不符預期')
-    const header = fixture('apple').split('\r\n')[0] as string
+    const header = fixture('apple').split(/\r?\n/)[0] as string
     expect(() => parseReport('apple', `${header}\r\n`)).toThrow('內容不符預期')
   })
 })
