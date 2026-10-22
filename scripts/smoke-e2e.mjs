@@ -969,6 +969,54 @@ try {
   await tlsCheck.waitFor({ state: 'detached' })
   step('certificate check on http://: explains the unencrypted connection')
 
+  // Issue #8: tabs are dragged to reorder them (the others make room as it moves); the
+  // dragged tab becomes active and pinned. The order is saved with the session, which
+  // the relaunch check below compares.
+  const stripTabs = page.locator('[data-testid="tab"]')
+  const stripTitles = () => stripTabs.evaluateAll((els) => els.map((e) => e.dataset.title))
+  const dragTab = async (from, to, shot) => {
+    const s = await stripTabs.nth(from).boundingBox()
+    const d = await stripTabs.nth(to).boundingBox()
+    const y = s.y + s.height / 2
+    await page.mouse.move(s.x + s.width / 2, y)
+    await page.mouse.down()
+    await page.mouse.move(s.x + s.width / 2 + (to > from ? 12 : -12), y, { steps: 4 })
+    await page.mouse.move(d.x + d.width / 2, y, { steps: 15 })
+    // Let the sortable list settle on the final position before dropping (as for the tree).
+    await new Promise((r) => setTimeout(r, 200))
+    if (shot) await page.screenshot({ path: path.join(shots, shot) })
+    await page.mouse.up()
+    // dnd-kit swallows clicks for 50 ms after a drop (so the drop is not also a click).
+    await new Promise((r) => setTimeout(r, 150))
+  }
+  await page.getByRole('tablist', { name: '開啟的分頁' }).evaluate((el) => el.scrollTo({ left: 0 }))
+  const beforeDrag = await stripTitles()
+  assert.ok(beforeDrag.length >= 3, beforeDrag.join(', '))
+  await dragTab(0, 2, '33-tab-drag.png')
+  const movedOrder = [beforeDrag[1], beforeDrag[2], beforeDrag[0], ...beforeDrag.slice(3)]
+  await waitUntil(
+    async () => JSON.stringify(await stripTitles()) === JSON.stringify(movedOrder),
+    `tab moved: ${beforeDrag.join(', ')}`
+  )
+  assert.equal(await tabByTitle(beforeDrag[0]).getAttribute('aria-selected'), 'true')
+  // A preview tab that is dragged is pinned.
+  await t.row('Get Users').click()
+  const previewTab = page.locator('[data-testid="tab"][data-preview]')
+  await previewTab.waitFor()
+  const draggedPreview = await previewTab.getAttribute('data-title')
+  await previewTab.scrollIntoViewIfNeeded()
+  const previewAt = (await stripTitles()).indexOf(draggedPreview)
+  assert.ok(previewAt > 0, `preview tab ${draggedPreview} at ${previewAt}`)
+  await dragTab(previewAt, previewAt - 1)
+  await waitUntil(
+    async () => (await stripTitles()).indexOf(draggedPreview) === previewAt - 1,
+    'preview tab moved left'
+  )
+  assert.equal(await tabByTitle(draggedPreview).getAttribute('data-preview'), null, 'drag pins')
+  step('tabs: drag to reorder (others make room); the dragged tab is activated and pinned')
+  await tabByTitle('Cookies').click() // back to the request the next checks use
+  await urlInput.waitFor()
+
   await sendTo('/big')
   const large = page.getByTestId('large-body')
   await large.waitFor()

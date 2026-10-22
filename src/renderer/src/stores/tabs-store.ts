@@ -22,6 +22,7 @@ import {
   createRunnerTab,
   fromSession,
   insertTab,
+  moveTab,
   isDraftTab,
   isRequestLike,
   isTabDirty,
@@ -117,6 +118,8 @@ interface TabsState {
    */
   openHistoryEntry(entry: HistoryEntry, options?: { preview?: boolean }): Promise<void>
   pin(key: TabKey): void
+  /** Moves a tab within the strip (dragged, issue #8). */
+  move(key: TabKey, toIndex: number): void
   /** Closes a tab, asking first if it has unsaved changes. Resolves false if cancelled. */
   close(key: TabKey): Promise<boolean>
   closeOthers(key: TabKey): Promise<void>
@@ -482,6 +485,10 @@ export const useTabsStore = create<TabsState>()((set, get) => {
 
     pin(key) {
       if (find(key)?.preview) patch(key, (t) => ({ ...t, preview: false }))
+    },
+
+    move(key, toIndex) {
+      set((s) => ({ tabs: moveTab(s.tabs, key, toIndex) }))
     },
 
     async close(key) {

@@ -375,6 +375,16 @@ export function insertTab(tabs: readonly Tab[], tab: Tab, activeKey: TabKey | nu
   return [...tabs.slice(0, at), tab, ...tabs.slice(at)]
 }
 
+/** `key` moved to `toIndex` (dragging in the tab strip, issue #8); unchanged if unknown. */
+export function moveTab(tabs: readonly Tab[], key: TabKey, toIndex: number): Tab[] {
+  const from = tabs.findIndex((t) => t.key === key)
+  if (from < 0) return [...tabs]
+  const to = Math.max(0, Math.min(tabs.length - 1, toIndex))
+  const out = tabs.filter((t) => t.key !== key)
+  out.splice(to, 0, tabs[from] as Tab)
+  return out
+}
+
 /** Which tab becomes active after closing `key` (the right neighbour, else the left). */
 export function nextActiveKey(tabs: readonly Tab[], key: TabKey, activeKey: TabKey | null) {
   if (activeKey !== key) return activeKey

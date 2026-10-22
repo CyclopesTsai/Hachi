@@ -1,4 +1,15 @@
 import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type Modifier
+} from '@dnd-kit/core'
+import { SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   AlertTriangle,
   Bookmark,
   Folder,
@@ -10,7 +21,7 @@ import {
   X,
   Play
 } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { findNode } from '@shared/tree'
 import {
   ContextMenu,
@@ -86,6 +97,11 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
   const title = useTreeStore((s) => tabTitle(tab, s.tree, mocks))
   const dirty = isTabDirty(tab)
   const ref = useRef<HTMLDivElement>(null)
+  // Dragged to reorder (issue #8). Only the pointer listeners: the tab keeps its own
+  // role / tabIndex (no keyboard dragging, no new shortcuts).
+  const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: tab.key
+  })
 
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
@@ -95,7 +111,12 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          ref={ref}
+          ref={(el) => {
+            ref.current = el
+            setNodeRef(el)
+          }}
+          {...listeners}
+          style={{ transform: CSS.Translate.toString(transform), transition }}
           role="tab"
           aria-selected={active}
           tabIndex={active ? 0 : -1}
@@ -105,12 +126,14 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
           data-preview={tab.preview || undefined}
           data-dirty={dirty || undefined}
           data-draft={isDraftTab(tab) || undefined}
+          data-dragging={isDragging || undefined}
           title={tab.preview ? `${title}（預覽：編輯或雙擊後固定）` : title}
           className={cn(
             'group relative flex h-full max-w-56 min-w-28 shrink-0 cursor-default items-center gap-1.5 border-r pr-1 pl-2.5 text-xs select-none',
             active
               ? 'bg-background text-foreground'
-              : 'text-muted-foreground hover:bg-background/60'
+              : 'text-muted-foreground hover:bg-background/60',
+            isDragging && 'z-10 shadow-md'
           )}
           onClick={() => store.activate(tab.key)}
           onDoubleClick={() => store.pin(tab.key)}
@@ -182,10 +205,33 @@ function pointerOver(el: HTMLElement, over: boolean) {
   el.style.overflowX = ''
 }
 
-/** Open tabs above the editor; "+" opens a new unsaved HTTP request. */
+/** Tabs slide along the strip only. */
+const alongStrip: Modifier = ({ transform }) => ({ ...transform, y: 0 })
+
+/**
+ * Open tabs above the editor; "+" opens a new unsaved HTTP request. Tabs can be dragged
+ * to reorder them (issue #8): the others make room as it moves, the strip scrolls at its
+ * edges, and the dragged tab becomes the active, pinned one. The order is part of the
+ * session, so it survives a restart.
+ */
 export function TabBar() {
   const tabs = useTabsStore((s) => s.tabs)
   const activeKey = useTabsStore((s) => s.activeKey)
+  // Same threshold as the tree: a click that moves a little is still a click.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  const keys = useMemo(() => tabs.map((t) => t.key), [tabs])
+
+  const onDragStart = (e: DragStartEvent) => {
+    const store = useTabsStore.getState()
+    store.activate(String(e.active.id))
+    store.pin(String(e.active.id))
+  }
+  const onDragEnd = (e: DragEndEvent) => {
+    if (!e.over || e.over.id === e.active.id) return
+    const to = keys.indexOf(String(e.over.id))
+    if (to >= 0) useTabsStore.getState().move(String(e.active.id), to)
+  }
+
   return (
     <div className="flex h-9 shrink-0 border-b bg-muted/40" data-testid="tab-bar">
       <div
@@ -195,9 +241,18 @@ export function TabBar() {
         onMouseEnter={(e) => pointerOver(e.currentTarget, true)}
         onMouseLeave={(e) => pointerOver(e.currentTarget, false)}
       >
-        {tabs.map((tab) => (
-          <TabButton key={tab.uid} tab={tab} active={tab.key === activeKey} />
-        ))}
+        <DndContext
+          sensors={sensors}
+          modifiers={[alongStrip]}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+        >
+          <SortableContext items={keys} strategy={horizontalListSortingStrategy}>
+            {tabs.map((tab) => (
+              <TabButton key={tab.uid} tab={tab} active={tab.key === activeKey} />
+            ))}
+          </SortableContext>
+        </DndContext>
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

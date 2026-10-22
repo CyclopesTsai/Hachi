@@ -13,6 +13,7 @@ import {
   insertTab,
   isDraftTab,
   isTabDirty,
+  moveTab,
   nextActiveKey,
   syncTabsWithTree,
   tabTitle,
@@ -273,5 +274,22 @@ describe('session', () => {
       tabs.every((t) => !t.preview && (t.kind === 'environments' || t.status === 'idle'))
     ).toBe(true)
     expect(activeKey).toBe('item:r2') // the saved active tab is gone: first one
+  })
+})
+
+describe('moveTab (issue #8)', () => {
+  const keys = (tabs: Tab[]) => tabs.map((t) => t.key.replace('item:', ''))
+  const tabs = [loaded('r1'), loaded('r2'), loaded('r3'), createItemTab(node('ws'), false)]
+
+  it('moves a tab to another position, both ways', () => {
+    expect(keys(moveTab(tabs, 'item:r1', 2))).toEqual(['r2', 'r3', 'r1', 'ws'])
+    expect(keys(moveTab(tabs, 'item:ws', 0))).toEqual(['ws', 'r1', 'r2', 'r3'])
+    expect(keys(moveTab(tabs, 'item:r2', 1))).toEqual(keys(tabs))
+  })
+
+  it('clamps the index and ignores unknown tabs', () => {
+    expect(keys(moveTab(tabs, 'item:r1', 99))).toEqual(['r2', 'r3', 'ws', 'r1'])
+    expect(keys(moveTab(tabs, 'item:r3', -3))).toEqual(['r3', 'r1', 'r2', 'ws'])
+    expect(keys(moveTab(tabs, 'item:nope', 0))).toEqual(keys(tabs))
   })
 })
