@@ -34,6 +34,7 @@ import {
 } from '@shared/transfer/postman'
 import type { CollectionService } from './collection-service'
 import type { EnvironmentService } from './environment-service'
+import { msg } from '@shared/i18n'
 
 /** Files larger than this are not imported. */
 export const MAX_IMPORT_BYTES = 50 * 1024 * 1024
@@ -74,11 +75,15 @@ export async function readBrunoFolder(dir: string): Promise<Record<string, strin
       const relPath = [...rel, entry.name].join('/')
       if (!entry.isFile() || !isBrunoFilePath(relPath)) continue
       if (++count > MAX_BRUNO_FILES) {
-        throw new HachiError('INVALID_FILE', `檔案太多（上限 ${MAX_BRUNO_FILES} 個 Bruno 檔案）`)
+        throw new HachiError(
+          'INVALID_FILE',
+          msg().transferMain.service.tooManyFiles(MAX_BRUNO_FILES)
+        )
       }
       const text = await readFile(child, 'utf8')
       bytes += Buffer.byteLength(text)
-      if (bytes > MAX_IMPORT_BYTES) throw new HachiError('INVALID_FILE', '資料夾太大（上限 50 MB）')
+      if (bytes > MAX_IMPORT_BYTES)
+        throw new HachiError('INVALID_FILE', msg().transferMain.service.folderTooLarge)
       files[relPath] = text
     }
   }
@@ -86,7 +91,7 @@ export async function readBrunoFolder(dir: string): Promise<Record<string, strin
     await walk(dir, [])
   } catch (error) {
     if (error instanceof HachiError) throw error
-    throw new HachiError('NOT_FOUND', '無法讀取資料夾')
+    throw new HachiError('NOT_FOUND', msg().transferMain.service.cannotReadFolder)
   }
   return files
 }
@@ -118,7 +123,8 @@ export async function findBrunoCollections(dir: string): Promise<BrunoCollection
     try {
       entries = await readdir(abs, { withFileTypes: true })
     } catch {
-      if (depth === 0) throw new HachiError('NOT_FOUND', '無法讀取資料夾')
+      if (depth === 0)
+        throw new HachiError('NOT_FOUND', msg().transferMain.service.cannotReadFolder)
       return
     }
     const names = new Set(entries.filter((e) => e.isFile()).map((e) => e.name))
@@ -148,7 +154,7 @@ export async function findBrunoCollections(dir: string): Promise<BrunoCollection
 
 function limitVariables(variables: Variable[], warnings: string[]): Variable[] {
   if (variables.length <= VARIABLES_MAX) return variables
-  warnings.push(`變數超過 ${VARIABLES_MAX} 個，只匯入前 ${VARIABLES_MAX} 個`)
+  warnings.push(msg().transferMain.service.tooManyVars(VARIABLES_MAX))
   return variables.slice(0, VARIABLES_MAX)
 }
 
@@ -156,7 +162,7 @@ function parseJson(text: string): unknown {
   try {
     return JSON.parse(text.replace(/^\uFEFF/, '')) as unknown
   } catch {
-    throw new HachiError('INVALID_FILE', '不是有效的 JSON 檔案')
+    throw new HachiError('INVALID_FILE', msg().transferMain.service.badJson)
   }
 }
 
@@ -176,10 +182,10 @@ export class TransferService {
     try {
       size = (await stat(absPath)).size
     } catch {
-      throw new HachiError('NOT_FOUND', '找不到檔案')
+      throw new HachiError('NOT_FOUND', msg().transferMain.service.fileNotFound)
     }
     if (size > MAX_IMPORT_BYTES) {
-      throw new HachiError('INVALID_FILE', '檔案太大（上限 50 MB）')
+      throw new HachiError('INVALID_FILE', msg().transferMain.service.fileTooLarge)
     }
     return this.importText(path.basename(absPath), await readFile(absPath, 'utf8'))
   }
@@ -255,10 +261,10 @@ export class TransferService {
   async importBrunoCollections(scanId: string, paths: readonly string[]): Promise<ImportOutcome[]> {
     const scan = this.pendingScan
     if (!scan || scan.id !== scanId) {
-      throw new HachiError('INVALID_OPERATION', '選擇已過期，請重新選擇資料夾')
+      throw new HachiError('INVALID_OPERATION', msg().transferMain.service.expired)
     }
     if (paths.some((p) => !scan.paths.has(p))) {
-      throw new HachiError('VALIDATION_ERROR', '不是掃描到的 Collection')
+      throw new HachiError('VALIDATION_ERROR', msg().transferMain.service.notScanned)
     }
     this.pendingScan = null
     const results: ImportOutcome[] = []

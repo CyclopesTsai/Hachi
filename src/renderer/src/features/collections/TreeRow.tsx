@@ -37,6 +37,7 @@ import { useTransferStore } from '@renderer/stores/transfer-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { RequestBadge } from './RequestBadge'
 import { neighborRow, searchTree, type DropPosition, type FlatRow } from './tree-model'
+import { msg } from '@shared/i18n'
 
 export interface DropIndicator {
   targetId: string
@@ -65,7 +66,7 @@ export function InlineRename({
   }
   return (
     <input
-      aria-label="名稱"
+      aria-label={msg().tree.name}
       data-testid="tree-rename-input"
       className="h-6 min-w-0 flex-1 rounded border border-ring bg-background px-1 text-sm outline-none"
       value={value}
@@ -294,11 +295,14 @@ export function TreeRow({
           {unsaved && (
             <span
               className="size-1.5 shrink-0 rounded-full bg-primary"
-              aria-label="有未儲存的修改"
+              aria-label={msg().tree.unsaved}
             />
           )}
           {broken && (
-            <AlertTriangle className="size-3.5 shrink-0 text-destructive" aria-label="檔案錯誤" />
+            <AlertTriangle
+              className="size-3.5 shrink-0 text-destructive"
+              aria-label={msg().tree.fileError}
+            />
           )}
         </div>
       </ContextMenuTrigger>
@@ -315,20 +319,20 @@ export function TreeRow({
           <>
             <ContextMenuItem onSelect={() => createAndOpen(node.id, 'request', 'http')}>
               <FilePlus2 />
-              新增 HTTP 請求
+              {msg().tree.newHttp}
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => createAndOpen(node.id, 'request', 'websocket')}>
               <Radio />
-              新增 WebSocket
+              {msg().tree.newWebSocket}
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => createAndOpen(node.id, 'folder')}>
               <FolderPlus />
-              新增資料夾
+              {msg().tree.newFolder}
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={() => tabs.openRunner(node.id)}>
               <Play />
-              執行…
+              {msg().tree.run}
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
@@ -337,18 +341,18 @@ export function TreeRow({
           <>
             <ContextMenuItem onSelect={startRename}>
               <Pencil />
-              重新命名
+              {msg().common.rename}
             </ContextMenuItem>
             <ContextMenuItem
               onSelect={() => void duplicate(node.id).then((id) => id && tabs.openItem(id))}
             >
               <Copy />
-              複製
+              {msg().tree.duplicate}
             </ContextMenuItem>
             {node.kind === 'collection' && (
               <ContextMenuItem onSelect={() => useTransferStore.getState().setExportId(node.id)}>
                 <Share />
-                匯出…
+                {msg().tree.export}
               </ContextMenuItem>
             )}
             <ContextMenuSeparator />
@@ -356,7 +360,7 @@ export function TreeRow({
         )}
         <ContextMenuItem onSelect={() => void tabs.reload({ scope: 'item', id: node.id })}>
           <RefreshCw />
-          重新讀取
+          {msg().tree.reload}
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => void reveal(node.id)}>
           <FolderSearch />
@@ -365,7 +369,7 @@ export function TreeRow({
         <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={() => onRequestDelete(node)}>
           <Trash2 />
-          刪除…
+          {msg().tree.deleteMenu}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

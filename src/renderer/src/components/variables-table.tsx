@@ -6,6 +6,7 @@ import { CheckboxLabel } from '@renderer/components/ui/native-select'
 import { VariableInput } from '@renderer/components/variable-input'
 import { newKeyValue } from '@renderer/lib/key-value'
 import { cn } from '@renderer/lib/utils'
+import { msg } from '@shared/i18n'
 
 /**
  * Environment / Collection variables. Secret values are masked unless revealed and
@@ -28,16 +29,16 @@ export function VariablesTable({
         onChange={onChange}
         data-testid={testId}
         createRow={(patch) => ({ ...newKeyValue(patch), secret: false, ...patch })}
-        keyPlaceholder="變數名稱"
-        valuePlaceholder="值"
+        keyPlaceholder={msg().vars.table.name}
+        valuePlaceholder={msg().vars.table.value}
         renderExtra={(row, update) => (
           <label
             className="flex h-8 cursor-default items-center justify-center gap-1 text-[11px] text-muted-foreground"
-            title="機密變數：值只存在這台電腦的 .hachi-secrets.json，不會寫進可提交的檔案"
+            title={msg().vars.table.secretTitle}
           >
             <input
               type="checkbox"
-              aria-label="機密"
+              aria-label={msg().vars.table.secret}
               className="size-3.5 accent-primary"
               checked={row.secret}
               onChange={(e) => update({ secret: e.target.checked })}
@@ -51,7 +52,7 @@ export function VariablesTable({
               type="password"
               aria-label="Value"
               className={cn(KV_CELL_CLASS, !row.enabled && 'text-muted-foreground')}
-              placeholder="機密值"
+              placeholder={msg().vars.table.secretValue}
               value={row.value}
               onChange={(e) => update({ value: e.target.value })}
             />
@@ -60,7 +61,7 @@ export function VariablesTable({
               aria-label="Value"
               textClassName={KV_CELL_CLASS}
               muted={!row.enabled}
-              placeholder="值"
+              placeholder={msg().vars.table.value}
               value={row.value}
               onChange={(e) => update({ value: e.target.value })}
             />
@@ -69,10 +70,11 @@ export function VariablesTable({
       />
       <div className="flex items-center gap-4">
         <CheckboxLabel checked={reveal} onChange={(e) => setReveal(e.target.checked)}>
-          顯示機密值
+          {msg().vars.table.reveal}
         </CheckboxLabel>
         <span className="text-xs text-muted-foreground">
-          勾選 <Lock className="inline size-3" /> 的變數為機密：值只存在這台電腦，不會被提交到 git。
+          {msg().vars.table.hintBefore} <Lock className="inline size-3" />{' '}
+          {msg().vars.table.hintAfter}
         </span>
       </div>
     </div>

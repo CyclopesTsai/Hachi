@@ -27,6 +27,7 @@ import { RequestSettingsTab } from './RequestSettingsTab'
 import { ResponseViewer } from './ResponseViewer'
 import { TlsCheckButton } from './TlsCheckDialog'
 import { tlsCheckInput } from './tls-check-input'
+import { msg } from '@shared/i18n'
 
 function Count({ n }: { n: number }) {
   return n > 0 ? (
@@ -59,11 +60,14 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
           </h2>
           {isDraft && (
             <span className="shrink-0 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
-              尚未儲存的請求
+              {msg().http.unsavedRequest}
             </span>
           )}
           {dirty && (
-            <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="有未儲存的修改" />
+            <span
+              className="size-2 shrink-0 rounded-full bg-primary"
+              aria-label={msg().http.unsaved}
+            />
           )}
           <div className="flex-1" />
           {tab.saveError && (
@@ -76,7 +80,7 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
             size="sm"
             data-testid="codegen-button"
             onClick={() => setCodeOpen(true)}
-            title="產生 cURL / fetch / axios / Python 程式碼"
+            title={msg().http.codeTitle}
           >
             <Code2 />
             Code
@@ -87,17 +91,17 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
             size="sm"
             disabled={(!dirty && !isDraft) || tab.saving}
             onClick={() => void store.save(tab.key)}
-            title="儲存（CmdOrCtrl+S）"
+            title={msg().http.saveTitle}
           >
             <Save />
-            {isDraft ? '儲存到…' : '儲存'}
+            {isDraft ? msg().http.saveTo : msg().common.save}
           </Button>
         </div>
 
         {/* No keyboard shortcut for send / cancel on purpose (avoids accidental requests). */}
         <div className="flex items-center gap-2 px-3 py-2">
           <NativeSelect
-            aria-label="HTTP 方法"
+            aria-label={msg().http.method}
             className="h-9 w-28 font-mono text-xs font-semibold"
             value={draft.method}
             onChange={(e) => set({ method: e.target.value as HttpRequest['method'] })}
@@ -113,19 +117,19 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
             data-testid="url-input"
             className="h-9 flex-1 rounded-md border border-input bg-background shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30"
             textClassName="px-3 font-mono text-sm"
-            placeholder="https://api.example.com/users  或  {{baseUrl}}/users"
+            placeholder={msg().http.urlPlaceholder}
             value={draft.url}
             onChange={(e) => set({ url: e.target.value })}
           />
           {running ? (
             <Button variant="outline" className="w-24" onClick={() => void store.cancel(tab.key)}>
               <X />
-              取消
+              {msg().common.cancel}
             </Button>
           ) : (
             <Button className="w-24" onClick={() => void store.send(tab.key)}>
               <Send />
-              發送
+              {msg().http.send}
             </Button>
           )}
         </div>
@@ -163,12 +167,10 @@ export function RequestEditor({ tab, title }: { tab: RequestTab; title: string }
                   <KeyValueTable
                     rows={draft.params}
                     onChange={(params) => set({ params })}
-                    keyPlaceholder="Query 參數"
+                    keyPlaceholder={msg().http.queryParam}
                     data-testid="params-table"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    啟用的參數會在發送時加到 URL 後面（URL 欄位裡已寫的 query 也會保留）。
-                  </p>
+                  <p className="text-xs text-muted-foreground">{msg().http.paramsHint}</p>
                 </div>
               </TabsContent>
               <TabsContent value="headers" className="overflow-auto">

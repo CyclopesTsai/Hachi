@@ -23,6 +23,7 @@ import {
   type Json
 } from './bruno-model'
 import { safeName, uniqueIn } from './bruno-bru'
+import { msg } from '../i18n'
 
 export class YamlError extends Error {}
 
@@ -31,7 +32,9 @@ function parseYaml(path: string, text: string): Json {
   try {
     doc = parse(text) as unknown
   } catch (error) {
-    throw new YamlError(`${path}：${error instanceof Error ? error.message : String(error)}`)
+    throw new YamlError(
+      msg().transferMain.pathError(path, error instanceof Error ? error.message : String(error))
+    )
   }
   return isObject(doc) ? doc : {}
 }

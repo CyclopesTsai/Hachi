@@ -10,6 +10,7 @@ import type { Auth, KeyValue } from '../schemas/collection'
 import type { HttpBody, HttpRequest } from '../schemas/http-request'
 import type { PortableCollection, PortableContainer } from './portable'
 import { TransferWarnings } from './warnings'
+import { msg } from '../i18n'
 
 type Json = Record<string, unknown>
 
@@ -154,7 +155,7 @@ function requestBody(body: HttpBody, where: string, ctx: Ctx): Json | null {
       try {
         example = JSON.parse(body.json)
       } catch {
-        ctx.warnings.add('JSON Body 不是有效的 JSON（可能含有變數），只附上原文', where)
+        ctx.warnings.add(msg().transferMain.openapi.jsonBody, where)
         return { content: { 'application/json': { example: body.json } } }
       }
       return { content: { 'application/json': { schema: inferSchema(example), example } } }
@@ -235,13 +236,13 @@ function operationOf(
 ): Operation | null {
   const where = [...folders, request.name].join(' / ')
   if (request.url.trim() === '') {
-    ctx.warnings.add('沒有網址，未匯出', where)
+    ctx.warnings.add(msg().transferMain.openapi.noUrl, where)
     return null
   }
   const split = splitUrl(request.url)
   const server = split.server === '' ? '' : resolve(split.server, ctx.values)
   if (/\{\{[^{}]+\}\}/.test(server)) {
-    ctx.warnings.add(`伺服器網址中的變數沒有值：${server}（可在匯出時選擇環境）`)
+    ctx.warnings.add(msg().transferMain.openapi.serverVars(server))
   }
 
   // {{id}} and :id segments become {id}.
@@ -372,7 +373,7 @@ export function buildOpenApi(
     if (item[op.method]) {
       const first = (item[op.method] as Json).summary as string
       ctx.warnings.add(
-        `與「${first}」的路徑和方法相同（${op.method.toUpperCase()} ${op.path}），未匯出`,
+        msg().transferMain.openapi.duplicate(first, op.method.toUpperCase(), op.path),
         op.where
       )
       continue

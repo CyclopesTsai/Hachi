@@ -32,6 +32,7 @@ import type { RuntimeVariables } from '../runtime-variables'
 import type { ContainerLevel } from './build-request'
 import type { CookieJar } from './cookie-jar'
 import type { HttpService, SendInput } from './http-service'
+import { msg } from '@shared/i18n'
 
 export interface ExecutorDeps {
   http: HttpService
@@ -73,8 +74,7 @@ interface ScriptStep {
   code: string
 }
 
-const levelLabel = (level: ContainerLevel) =>
-  `${level.kind === 'collection' ? 'Collection' : '資料夾'}「${level.name}」`
+const levelLabel = (level: ContainerLevel) => msg().httpMain.scripts.level(level.kind, level.name)
 
 /**
  * Pre-request steps run outside in (collection → folders → request). Post-response steps
@@ -223,7 +223,7 @@ export function dataLayer(row: Record<string, string> | null): VariableLayer | n
   if (!row) return null
   return {
     source: 'data',
-    sourceName: '資料檔',
+    sourceName: msg().vars.sources.data,
     variables: Object.entries(row).map(([key, value]) => ({
       id: `data:${key}`,
       key,
@@ -261,13 +261,13 @@ export class RequestExecutor {
         return c
       },
       applyEnvironment: async (changes) => {
-        if (!input.environmentId) throw new Error('目前沒有選擇環境')
+        if (!input.environmentId) throw new Error(msg().httpMain.scripts.noEnvironment)
         await deps.applyEnvironmentChanges(input.environmentId, changes)
         deps.variablesChanged({ environmentId: input.environmentId, collectionId: null })
       },
       applyCollection: async (changes) => {
         const id = collectionId ?? (await deps.getCollection(input.parentId))?.id
-        if (!id) throw new Error('這個請求不在 Collection 中')
+        if (!id) throw new Error(msg().httpMain.scripts.notInCollection)
         await deps.applyCollectionChanges(id, changes)
         deps.variablesChanged({ environmentId: null, collectionId: id })
       },
@@ -306,7 +306,7 @@ export class RequestExecutor {
     const workspace = this.deps.workspacePath()
     const report = emptyReport(scriptsPresent && !runScripts)
     if (runScripts && (!workspace || !this.deps.isTrusted(workspace))) {
-      return this.fail(input, '這個 Workspace 的腳本尚未信任，沒有發送', report)
+      return this.fail(input, msg().httpMain.scripts.untrusted, report)
     }
 
     let sending = request
@@ -323,8 +323,11 @@ export class RequestExecutor {
       )
       if (out.request) sending = applyScriptRequest(sending, out.request)
       if (out.error) {
-        const where = step.label ? `${step.label}的 ` : ''
-        return this.fail(input, `${where}Pre-request 腳本錯誤：${out.error}`, report)
+        return this.fail(
+          input,
+          msg().httpMain.scripts.preRequestError(step.label, out.error),
+          report
+        )
       }
     }
 
@@ -377,10 +380,10 @@ export class RequestExecutor {
     if (call.op === 'sendRequest') return this.sendFromScript(call.request, scope)
     const depth = (input.depth ?? 0) + 1
     if (depth > SCRIPT_MAX_RUN_DEPTH) {
-      return { ok: false, error: `runRequest 最多巢狀 ${SCRIPT_MAX_RUN_DEPTH} 層` }
+      return { ok: false, error: msg().httpMain.scripts.maxDepth(SCRIPT_MAX_RUN_DEPTH) }
     }
     const found = await this.deps.findRequest(input.parentId, call.path)
-    if (!found) return { ok: false, error: `找不到請求「${call.path}」` }
+    if (!found) return { ok: false, error: msg().httpMain.scripts.requestNotFound(call.path) }
     const result = await this.execute(
       {
         runId: randomUUID(),
@@ -400,10 +403,10 @@ export class RequestExecutor {
   private async sendFromScript(spec: HostRequest, scope: ExecutionScope): Promise<HostReply> {
     const method = spec.method.toUpperCase()
     if (!(HTTP_METHODS as readonly string[]).includes(method)) {
-      return { ok: false, error: `sendRequest 不支援的 HTTP 方法：${spec.method}` }
+      return { ok: false, error: msg().httpMain.scripts.badMethod(spec.method) }
     }
     if (!/^https?:\/\//i.test(spec.url)) {
-      return { ok: false, error: `sendRequest 的網址需要 http:// 或 https://：${spec.url}` }
+      return { ok: false, error: msg().httpMain.scripts.badUrl(spec.url) }
     }
     const contentType = spec.headers.find(([k]) => k.toLowerCase() === 'content-type')?.[1]
     const request = httpRequestSchema.parse({
@@ -455,9 +458,9 @@ export class RequestExecutor {
   private scriptResponse(result: HttpResponseData, facts: ResponseFacts): ScriptResponse {
     const unavailable =
       result.body.kind === 'binary'
-        ? '回應不是文字（二進位內容），腳本無法讀取'
+        ? msg().httpMain.scripts.binaryBody
         : result.body.kind === 'large' || result.bodyBytes > SCRIPT_BODY_LIMIT_BYTES
-          ? `回應超過 ${SCRIPT_BODY_LIMIT_BYTES / 1024 / 1024} MB，腳本無法讀取`
+          ? msg().httpMain.scripts.bodyTooLarge(SCRIPT_BODY_LIMIT_BYTES / 1024 / 1024)
           : null
     return {
       status: result.status,
@@ -505,7 +508,9 @@ export class RequestExecutor {
       )
     } catch (error) {
       out = {
-        error: `無法執行腳本：${error instanceof Error ? error.message : String(error)}`,
+        error: msg().httpMain.scripts.cannotRun(
+          error instanceof Error ? error.message : String(error)
+        ),
         logs: [],
         tests: [],
         changes: [],
@@ -517,9 +522,13 @@ export class RequestExecutor {
     if (out.nextRequest !== undefined) report.nextRequest = out.nextRequest
     const before = report[phase]
     const logs = step.label
-      ? [{ level: 'info' as const, text: `── ${step.label}的腳本 ──` }, ...out.logs]
+      ? [
+          { level: 'info' as const, text: msg().httpMain.scripts.logHeader(step.label) },
+          ...out.logs
+        ]
       : out.logs
-    const error = out.error && step.label ? `${step.label}：${out.error}` : out.error
+    const error =
+      out.error && step.label ? msg().httpMain.scripts.labelled(step.label, out.error) : out.error
     report[phase] = before
       ? {
           error: before.error ?? error,
@@ -546,12 +555,12 @@ export class RequestExecutor {
     const env = of('environment')
     if (env.length > 0) {
       if (!(await scope.environment())) {
-        report.changeErrors.push('目前沒有選擇環境，擷取的值沒有存到環境')
+        report.changeErrors.push(msg().httpMain.scripts.captureNoEnvironment)
       } else {
         try {
           await scope.applyEnvironment(env)
         } catch (error) {
-          report.changeErrors.push(`無法寫入環境變數：${String(error)}`)
+          report.changeErrors.push(msg().httpMain.scripts.envWriteFailed(String(error)))
         }
       }
     }
@@ -560,7 +569,7 @@ export class RequestExecutor {
       try {
         await scope.applyCollection(col)
       } catch (error) {
-        report.changeErrors.push(`無法寫入 Collection 變數：${String(error)}`)
+        report.changeErrors.push(msg().httpMain.scripts.collectionWriteFailed(String(error)))
       }
     }
   }

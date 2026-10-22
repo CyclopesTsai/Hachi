@@ -15,6 +15,7 @@ import { VariableInput } from '@renderer/components/variable-input'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
 import { useEnvStore } from '@renderer/stores/env-store'
+import { msg } from '@shared/i18n'
 
 /** Text field that highlights `{{variables}}` (styled like <Input>). */
 function VarField({
@@ -48,7 +49,7 @@ function VarField({
 }
 
 const AUTH_LABELS: Record<Auth['type'], string> = {
-  inherit: '沿用上層（Inherit）',
+  inherit: '',
   none: 'None',
   bearer: 'Bearer Token',
   basic: 'Basic Auth',
@@ -104,9 +105,14 @@ function SecretField({
   )
 }
 
+const authLabel = (type: Auth['type']) =>
+  type === 'inherit' ? msg().auth.inherit : AUTH_LABELS[type]
+
 const timeLeft = (expiresAt: number) => {
   const minutes = Math.round((expiresAt - Date.now()) / 60_000)
-  return minutes >= 120 ? `${Math.round(minutes / 60)} 小時` : `${Math.max(minutes, 0)} 分鐘`
+  return minutes >= 120
+    ? msg().auth.hours(Math.round(minutes / 60))
+    : msg().auth.minutes(Math.max(minutes, 0))
 }
 
 /** Token kept in memory for these settings (decision 128): status + 取得 / 清除. */
@@ -155,14 +161,12 @@ function OAuth2TokenPanel({ auth, scopeId }: { auth: OAuth2Auth; scopeId: string
   }
 
   const browser = auth.grantType === 'authorization_code'
-  let text = '還沒有 Token'
+  const m = msg().auth
+  let text = m.noToken
   if (status?.state === 'valid') {
-    text =
-      status.expiresAt === null
-        ? '已取得 Token'
-        : `已取得 Token（剩 ${timeLeft(status.expiresAt)}）`
+    text = status.expiresAt === null ? m.hasToken : m.hasTokenLeft(timeLeft(status.expiresAt))
   } else if (status?.state === 'expired') {
-    text = status.refreshable ? 'Token 已過期，送出時會自動更新' : 'Token 已過期'
+    text = status.refreshable ? m.expiredRefresh : m.expired
   }
   return (
     <div
@@ -179,12 +183,12 @@ function OAuth2TokenPanel({ auth, scopeId }: { auth: OAuth2Auth; scopeId: string
             variant="outline"
             onClick={() => void window.hachi.auth.oauth2Cancel(input)}
           >
-            取消
+            {msg().common.cancel}
           </Button>
         ) : null}
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void obtain()}>
           {busy && <Loader2 className="animate-spin" />}
-          取得 Token
+          {m.getToken}
         </Button>
         <Button
           size="sm"
@@ -192,16 +196,14 @@ function OAuth2TokenPanel({ auth, scopeId }: { auth: OAuth2Auth; scopeId: string
           disabled={busy || !status || status.state === 'none'}
           onClick={() => void clear()}
         >
-          清除
+          {m.clear}
         </Button>
       </div>
-      {busy && browser && (
-        <p className="text-xs text-muted-foreground">已開啟瀏覽器，完成授權後會自動回到這裡…</p>
-      )}
+      {busy && browser && <p className="text-xs text-muted-foreground">{m.browserOpened}</p>}
       {error && <p className="text-xs break-all text-destructive">{error}</p>}
       <p className="text-xs text-muted-foreground">
-        Token 只存在記憶體，關閉 Hachi 後清除。
-        {browser ? '送出請求前要先取得 Token。' : '送出時沒有 Token 會自動取得。'}
+        {m.memoryOnly}
+        {browser ? m.getFirst : m.getAutomatically}
       </p>
     </div>
   )
@@ -258,7 +260,7 @@ function OAuth2Fields({
             label="Callback URL"
             value={auth.callbackUrl}
             readOnly={readOnly}
-            placeholder="http://127.0.0.1:<自動選擇>/callback"
+            placeholder={msg().auth.callbackPlaceholder}
             onChange={(callbackUrl) => set({ callbackUrl })}
           />
         </Field>
@@ -304,25 +306,25 @@ function OAuth2Fields({
           label="Scope"
           value={auth.scope}
           readOnly={readOnly}
-          placeholder="以空白分隔"
+          placeholder={msg().auth.scopePlaceholder}
           onChange={(scope) => set({ scope })}
         />
       </Field>
-      <Field label="Client 驗證">
+      <Field label={msg().auth.clientAuth}>
         <NativeSelect
-          aria-label="Client 驗證"
+          aria-label={msg().auth.clientAuth}
           value={auth.clientAuth}
           disabled={readOnly}
           onChange={(e) => set({ clientAuth: e.target.value as 'header' | 'body' })}
           className="w-56"
         >
           <option value="header">Basic Auth Header</option>
-          <option value="body">放在 Body</option>
+          <option value="body">{msg().auth.clientAuthBody}</option>
         </NativeSelect>
       </Field>
-      <Field label="Header 前綴">
+      <Field label={msg().auth.headerPrefix}>
         <Input
-          aria-label="Header 前綴"
+          aria-label={msg().auth.headerPrefix}
           className={cn('h-8 w-40 font-mono text-xs', readOnly && 'bg-muted shadow-none')}
           value={auth.headerPrefix}
           readOnly={readOnly}
@@ -336,7 +338,7 @@ function OAuth2Fields({
             disabled={readOnly}
             onChange={(e) => set({ pkce: e.target.checked })}
           >
-            使用 PKCE（S256）
+            {msg().auth.pkce}
           </CheckboxLabel>
         </Field>
       )}
@@ -413,9 +415,9 @@ function AuthFields({
               onChange={(value) => set({ value })}
             />
           </Field>
-          <Field label="加在">
+          <Field label={msg().auth.addTo}>
             <NativeSelect
-              aria-label="加在"
+              aria-label={msg().auth.addTo}
               value={auth.in}
               disabled={readOnly}
               onChange={(e) => set({ in: e.target.value as 'header' | 'query' })}
@@ -446,9 +448,7 @@ function AuthFields({
               onChange={(password) => set({ password })}
             />
           </Field>
-          <p className="text-xs text-muted-foreground">
-            先送出一次，伺服器回 401 時依它的 Digest challenge 再送一次。
-          </p>
+          <p className="text-xs text-muted-foreground">{msg().auth.digestHint}</p>
         </>
       )
     case 'awsSigV4':
@@ -492,7 +492,7 @@ function AuthFields({
               label="Service"
               value={auth.service}
               readOnly={readOnly}
-              placeholder="execute-api、s3…"
+              placeholder={msg().auth.servicePlaceholder}
               onChange={(service) => set({ service })}
             />
           </Field>
@@ -501,7 +501,7 @@ function AuthFields({
     case 'oauth2':
       return <OAuth2Fields auth={auth} set={set} readOnly={readOnly} />
     default:
-      return <p className="text-sm text-muted-foreground">不使用驗證。</p>
+      return <p className="text-sm text-muted-foreground">{msg().auth.none}</p>
   }
 }
 
@@ -529,16 +529,16 @@ export function AuthEditor({
   const shown = auth.type === 'inherit' ? inherited.auth?.auth : auth
   return (
     <div className="flex max-w-xl flex-col gap-4 p-4" data-testid="auth-editor">
-      <Field label="類型">
+      <Field label={msg().auth.type}>
         <NativeSelect
-          aria-label="驗證類型"
+          aria-label={msg().auth.typeLabel}
           className="w-56"
           value={auth.type}
           onChange={(e) => onChange(defaultsFor(e.target.value as Auth['type']))}
         >
           {types.map((t) => (
             <option key={t} value={t}>
-              {AUTH_LABELS[t]}
+              {authLabel(t)}
             </option>
           ))}
         </NativeSelect>
@@ -554,9 +554,12 @@ export function AuthEditor({
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
                 <ArrowUpRight className="size-3.5 shrink-0" />
                 <span>
-                  {'沿用自「'}
+                  {msg().auth.inheritedFrom}
                   <span className="font-medium text-foreground">{inherited.auth.sourceName}</span>
-                  {`」：${AUTH_LABELS[inherited.auth.auth.type]}（唯讀，請到「${inherited.auth.sourceName}」修改）`}
+                  {msg().auth.inheritedRest(
+                    authLabel(inherited.auth.auth.type),
+                    inherited.auth.sourceName
+                  )}
                 </span>
               </p>
               <div className="flex flex-col gap-3">
@@ -564,9 +567,7 @@ export function AuthEditor({
               </div>
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              上層沒有設定驗證，發送時不會帶驗證資訊。
-            </p>
+            <p className="text-xs text-muted-foreground">{msg().auth.inheritedNone}</p>
           )}
         </div>
       ) : (
@@ -575,7 +576,7 @@ export function AuthEditor({
       {shown?.type === 'oauth2' && <OAuth2TokenPanel auth={shown} scopeId={scopeId} />}
       {websocket && shown && HTTP_ONLY.includes(shown.type) && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          WebSocket 不支援 {AUTH_LABELS[shown.type]}，連線時不會帶驗證資訊。
+          {msg().auth.notForWebSocket(authLabel(shown.type))}
         </p>
       )}
     </div>

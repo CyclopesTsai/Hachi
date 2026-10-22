@@ -4,6 +4,7 @@
  */
 import type { GitFileChange } from '@shared/git'
 import { isContainer, type TreeNode, type WorkspaceTree } from '@shared/tree'
+import { msg } from '@shared/i18n'
 
 export interface ChangeFolder {
   kind: 'folder'
@@ -42,7 +43,10 @@ export function buildChangeTree(
       fileNames.set(node.relPath, node.name)
       // Saved results (decision 140): `<request>.examples/` under the request's name.
       if (node.examples?.length) {
-        dirNames.set(node.relPath.replace(/\.json$/i, '.examples'), `${node.name}（儲存的結果）`)
+        dirNames.set(
+          node.relPath.replace(/\.json$/i, '.examples'),
+          msg().git.names.examples(node.name)
+        )
       }
       for (const example of node.examples ?? []) fileNames.set(example.relPath, example.name)
     }
@@ -78,7 +82,10 @@ export function buildChangeTree(
     folder.children.push({
       kind: 'file',
       key: file.path,
-      name: META_FILES.has(base) && dir !== '' ? '（設定）' : (fileNames.get(file.path) ?? base),
+      name:
+        META_FILES.has(base) && dir !== ''
+          ? msg().git.names.meta
+          : (fileNames.get(file.path) ?? base),
       file
     })
     for (let d: string | null = dir; d !== null;) {

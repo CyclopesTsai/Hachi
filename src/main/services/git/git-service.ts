@@ -6,6 +6,7 @@
 import { readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { HachiError } from '@shared/errors'
+import { msg } from '@shared/i18n'
 import type {
   GitBranch,
   GitCommitDetail,
@@ -85,7 +86,7 @@ export class GitService {
     extra: { input?: string; timeoutMs?: number } = {}
   ): Promise<GitResult> {
     const git = await this.findGit()
-    if (!git) throw new HachiError('NOT_FOUND', '找不到 git，請先安裝')
+    if (!git) throw new HachiError('NOT_FOUND', msg().gitMain.noGit)
     return runGit(git, ['-c', 'core.quotepath=false', ...args], {
       cwd,
       // No editor ever opens (merge commits use their default message).
@@ -104,7 +105,8 @@ export class GitService {
     extra: { input?: string; timeoutMs?: number } = {}
   ): Promise<string> {
     const result = await this.exec(cwd, args, network, extra)
-    if (result.code !== 0) throw new HachiError('IO_ERROR', `${what}失敗：${gitMessage(result)}`)
+    if (result.code !== 0)
+      throw new HachiError('IO_ERROR', msg().gitMain.failed(what, gitMessage(result)))
     return result.stdout
   }
 
@@ -130,7 +132,7 @@ export class GitService {
         '--',
         prefix === '' ? '.' : prefix
       ],
-      '讀取 Git 狀態'
+      msg().gitMain.ops.readStatus
     )
     const parsed = parseStatus(out)
     const inWorkspace = (p: string) => (prefix === '' ? p : p.slice(prefix.length + 1))
@@ -163,9 +165,9 @@ export class GitService {
 
   private async requireRepo(workspace: string): Promise<GitRepoStatus & { prefix: string }> {
     const status = await this.readStatus(workspace)
-    if (status.state === 'no-git') throw new HachiError('NOT_FOUND', '找不到 git，請先安裝')
+    if (status.state === 'no-git') throw new HachiError('NOT_FOUND', msg().gitMain.noGit)
     if (status.state === 'not-repo') {
-      throw new HachiError('INVALID_OPERATION', '這個 Workspace 不在 Git repo 中')
+      throw new HachiError('INVALID_OPERATION', msg().gitMain.notRepo)
     }
     const prefix = toPosix(path.relative(status.root, await realpath(workspace)))
     return { ...status, prefix }
@@ -174,10 +176,10 @@ export class GitService {
   /** `git init` in the Workspace folder (first branch: main). */
   init(workspace: string): Promise<GitStatus> {
     return this.run(async () => {
-      await this.must(workspace, ['-c', 'init.defaultBranch=main', 'init'], '建立 Git repo')
+      await this.must(workspace, ['-c', 'init.defaultBranch=main', 'init'], msg().gitMain.ops.init)
       // Windows (decision 123): deep collection folders exceed 260 characters, and
       // checking out with CRLF would make unchanged Hachi files look modified.
-      await this.must(workspace, ['config', 'core.longpaths', 'true'], '建立 Git repo')
+      await this.must(workspace, ['config', 'core.longpaths', 'true'], msg().gitMain.ops.init)
       const attributes = path.join(workspace, '.gitattributes')
       if (!(await stat(attributes).catch(() => null))) {
         await writeFile(
@@ -202,8 +204,16 @@ export class GitService {
   setIdentity(workspace: string, identity: GitIdentity, global: boolean): Promise<void> {
     return this.run(async () => {
       const scope = global ? '--global' : '--local'
-      await this.must(workspace, ['config', scope, 'user.name', identity.name], '儲存 Git 使用者')
-      await this.must(workspace, ['config', scope, 'user.email', identity.email], '儲存 Git 使用者')
+      await this.must(
+        workspace,
+        ['config', scope, 'user.name', identity.name],
+        msg().gitMain.ops.identity
+      )
+      await this.must(
+        workspace,
+        ['config', scope, 'user.email', identity.email],
+        msg().gitMain.ops.identity
+      )
     })
   }
 
@@ -215,7 +225,7 @@ export class GitService {
     const byPath = new Map(repo.files.map((f) => [f.path, f]))
     return paths.map((p) => {
       const change = byPath.get(p)
-      if (!change) throw new HachiError('VALIDATION_ERROR', `沒有這個變更：${p}（請重新整理）`)
+      if (!change) throw new HachiError('VALIDATION_ERROR', msg().gitMain.noChangeAt(p))
       return change
     })
   }
@@ -229,11 +239,11 @@ export class GitService {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
       if (repo.merging) {
-        throw new HachiError('INVALID_OPERATION', '合併進行中：解決衝突後請用「完成合併」')
+        throw new HachiError('INVALID_OPERATION', msg().gitMain.merging)
       }
       const changes = this.pick(repo, paths)
       if (changes.some((c) => c.kind === 'conflicted')) {
-        throw new HachiError('INVALID_OPERATION', '有衝突的檔案要先解決才能 commit')
+        throw new HachiError('INVALID_OPERATION', msg().gitMain.conflictsFirst)
       }
       const repoPaths = changes.flatMap((c) => [
         this.repoPath(repo, c.path),
@@ -269,16 +279,20 @@ export class GitService {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
       const [change] = this.pick(repo, [file])
-      if (!change) throw new HachiError('VALIDATION_ERROR', '沒有這個變更')
+      if (!change) throw new HachiError('VALIDATION_ERROR', msg().gitMain.noChange)
       const abs = (p: string) => path.join(repo.root, ...this.repoPath(repo, p).split('/'))
       const restore = (p: string) =>
         this.must(
           repo.root,
           ['restore', '--source=HEAD', '--staged', '--worktree', '--', this.repoPath(repo, p)],
-          '捨棄變更'
+          msg().gitMain.ops.discard
         )
       const unstage = (p: string) =>
-        this.must(repo.root, ['rm', '--cached', '-q', '--', this.repoPath(repo, p)], '捨棄變更')
+        this.must(
+          repo.root,
+          ['rm', '--cached', '-q', '--', this.repoPath(repo, p)],
+          msg().gitMain.ops.discard
+        )
       switch (change.kind) {
         case 'untracked':
           await this.trash(abs(change.path))
@@ -293,7 +307,7 @@ export class GitService {
           if (change.oldPath !== undefined) await restore(change.oldPath)
           break
         case 'conflicted':
-          throw new HachiError('INVALID_OPERATION', '衝突的檔案請用合併工具處理')
+          throw new HachiError('INVALID_OPERATION', msg().gitMain.useMergeTools)
         default:
           await restore(change.path)
       }
@@ -306,7 +320,7 @@ export class GitService {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
       const [change] = this.pick(repo, [file])
-      if (!change) throw new HachiError('VALIDATION_ERROR', '沒有這個變更')
+      if (!change) throw new HachiError('VALIDATION_ERROR', msg().gitMain.noChange)
       const conflict = change.kind === 'conflicted'
       const result: GitFileDiff = {
         path: file,
@@ -321,7 +335,7 @@ export class GitService {
         const size = await this.exec(repo.root, ['cat-file', '-s', spec])
         if (size.code !== 0) return null
         if (tooLarge(Number(size.stdout.trim()))) return 'tooLarge'
-        return this.must(repo.root, ['show', spec], '讀取差異')
+        return this.must(repo.root, ['show', spec], msg().gitMain.ops.diff)
       }
       if (conflict) {
         // Stage 2 = ours (current branch), stage 3 = theirs (what is being merged in).
@@ -339,7 +353,11 @@ export class GitService {
         const size = await this.exec(repo.root, ['cat-file', '-s', `HEAD:${source}`])
         if (size.code === 0) {
           if (tooLarge(Number(size.stdout.trim()))) return { ...result, unavailable: 'tooLarge' }
-          result.before = await this.must(repo.root, ['show', `HEAD:${source}`], '讀取差異')
+          result.before = await this.must(
+            repo.root,
+            ['show', `HEAD:${source}`],
+            msg().gitMain.ops.diff
+          )
         }
       }
       if (change.kind !== 'deleted') {
@@ -377,13 +395,13 @@ export class GitService {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
       if (url.startsWith('-') || /\s/.test(url)) {
-        throw new HachiError('VALIDATION_ERROR', '遠端網址不合法')
+        throw new HachiError('VALIDATION_ERROR', msg().gitMain.badRemote)
       }
       const exists = (await this.exec(repo.root, ['remote'])).stdout.split('\n').includes('origin')
       await this.must(
         repo.root,
         exists ? ['remote', 'set-url', 'origin', url] : ['remote', 'add', 'origin', url],
-        '設定遠端'
+        msg().gitMain.ops.remote
       )
       return this.readStatus(workspace)
     })
@@ -392,7 +410,7 @@ export class GitService {
   fetch(workspace: string): Promise<GitStatus> {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
-      if (!repo.hasRemote) throw new HachiError('INVALID_OPERATION', '還沒有設定遠端')
+      if (!repo.hasRemote) throw new HachiError('INVALID_OPERATION', msg().gitMain.noRemote)
       await this.must(repo.root, ['fetch', '--all', '--prune'], 'Fetch', true)
       return this.readStatus(workspace)
     })
@@ -402,12 +420,9 @@ export class GitService {
   pull(workspace: string): Promise<GitStatus> {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
-      if (repo.merging) throw new HachiError('INVALID_OPERATION', '還有沒完成的合併')
+      if (repo.merging) throw new HachiError('INVALID_OPERATION', msg().gitMain.unfinishedMerge)
       if (!repo.upstream) {
-        throw new HachiError(
-          'INVALID_OPERATION',
-          '目前的分支沒有追蹤遠端分支：先 Push 一次（會自動設定）'
-        )
+        throw new HachiError('INVALID_OPERATION', msg().gitMain.noUpstream)
       }
       const result = await this.exec(
         repo.root,
@@ -416,7 +431,7 @@ export class GitService {
       )
       const after = await this.readStatus(workspace)
       if (result.code !== 0 && !(after.state === 'repo' && after.merging)) {
-        throw new HachiError('IO_ERROR', `Pull 失敗：${gitMessage(result)}`)
+        throw new HachiError('IO_ERROR', msg().gitMain.pullFailed(gitMessage(result)))
       }
       return after
     })
@@ -427,9 +442,9 @@ export class GitService {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
       const remote = await this.remoteName(repo.root)
-      if (!remote) throw new HachiError('INVALID_OPERATION', '還沒有設定遠端')
-      if (repo.empty) throw new HachiError('INVALID_OPERATION', '還沒有任何 commit')
-      if (!repo.branch) throw new HachiError('INVALID_OPERATION', '目前不在任何分支上')
+      if (!remote) throw new HachiError('INVALID_OPERATION', msg().gitMain.noRemote)
+      if (repo.empty) throw new HachiError('INVALID_OPERATION', msg().gitMain.noCommits)
+      if (!repo.branch) throw new HachiError('INVALID_OPERATION', msg().gitMain.noBranch)
       const result = await this.exec(
         repo.root,
         repo.upstream ? ['push'] : ['push', '-u', remote, 'HEAD'],
@@ -439,9 +454,7 @@ export class GitService {
         const rejected = /\[rejected\]|non-fast-forward|fetch first/i.test(result.stderr)
         throw new HachiError(
           'IO_ERROR',
-          rejected
-            ? 'Push 被拒絕：遠端有新的 commit，請先 Pull'
-            : `Push 失敗：${gitMessage(result)}`
+          rejected ? msg().gitMain.pushRejected : msg().gitMain.pushFailed(gitMessage(result))
         )
       }
       return this.readStatus(workspace)
@@ -456,18 +469,18 @@ export class GitService {
       const repo = await this.requireRepo(workspace)
       const [change] = this.pick(repo, [file])
       if (change?.kind !== 'conflicted')
-        throw new HachiError('VALIDATION_ERROR', '這個檔案沒有衝突')
+        throw new HachiError('VALIDATION_ERROR', msg().gitMain.notConflicted)
       const target = this.repoPath(repo, file)
       const abs = path.join(repo.root, ...target.split('/'))
       if (how === 'resolved') {
         const text = await readFile(abs, 'utf8').catch(() => null)
         if (text !== null && /^(<{7}|>{7})( |$)/m.test(text)) {
-          throw new HachiError('VALIDATION_ERROR', '檔案中還有衝突標記（<<<<<<< / >>>>>>>）')
+          throw new HachiError('VALIDATION_ERROR', msg().gitMain.markersLeft)
         }
         await this.must(
           repo.root,
           text === null ? ['rm', '-q', '--', target] : ['add', '--', target],
-          '標記已解決'
+          msg().gitMain.ops.markResolved
         )
       } else {
         const side = how === 'ours' ? '--ours' : '--theirs'
@@ -476,7 +489,7 @@ export class GitService {
         await this.must(
           repo.root,
           checkout.code === 0 ? ['add', '--', target] : ['rm', '-q', '--', target],
-          '解決衝突'
+          msg().gitMain.ops.resolve
         )
       }
       return this.readStatus(workspace)
@@ -486,7 +499,7 @@ export class GitService {
   abortMerge(workspace: string): Promise<GitStatus> {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
-      await this.must(repo.root, ['merge', '--abort'], '放棄合併')
+      await this.must(repo.root, ['merge', '--abort'], msg().gitMain.ops.abortMerge)
       return this.readStatus(workspace)
     })
   }
@@ -495,11 +508,11 @@ export class GitService {
   finishMerge(workspace: string): Promise<GitStatus> {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
-      if (!repo.merging) throw new HachiError('INVALID_OPERATION', '目前沒有進行中的合併')
+      if (!repo.merging) throw new HachiError('INVALID_OPERATION', msg().gitMain.noMerge)
       if (repo.files.some((f) => f.kind === 'conflicted')) {
-        throw new HachiError('INVALID_OPERATION', '還有衝突的檔案沒有解決')
+        throw new HachiError('INVALID_OPERATION', msg().gitMain.unresolved)
       }
-      await this.must(repo.root, ['commit', '--no-edit'], '完成合併')
+      await this.must(repo.root, ['commit', '--no-edit'], msg().gitMain.ops.finishMerge)
       return this.readStatus(workspace)
     })
   }
@@ -533,7 +546,7 @@ export class GitService {
           '--exclude=refs/stash',
           '--all'
         ],
-        '讀取歷史'
+        msg().gitMain.ops.log
       )
       const commits = parseLog(out)
       return { commits: commits.slice(0, LOG_PAGE), more: commits.length > LOG_PAGE }
@@ -550,7 +563,7 @@ export class GitService {
       parent
         ? ['diff', '--name-status', '-z', '-M', parent, hash]
         : ['diff-tree', '--root', '-r', '--no-commit-id', '--name-status', '-z', '-M', hash],
-      '讀取 commit'
+      msg().gitMain.ops.commit
     )
     const inside = (p: string) => repo.prefix === '' || p.startsWith(`${repo.prefix}/`)
     // Workspace files first, then the rest of the repository.
@@ -570,15 +583,15 @@ export class GitService {
   commitDetail(workspace: string, hash: string): Promise<GitCommitDetail> {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
-      if (!isHash(hash)) throw new HachiError('VALIDATION_ERROR', '不是 commit id')
+      if (!isHash(hash)) throw new HachiError('VALIDATION_ERROR', msg().gitMain.notCommitId)
       const out = await this.must(
         repo.root,
         ['show', '-s', '--decorate=full', `--format=${LOG_FORMAT}%B`, hash],
-        '讀取 commit'
+        msg().gitMain.ops.commit
       )
       const end = out.indexOf('\x1e')
       const [summary] = parseLog(out.slice(0, end + 1))
-      if (!summary) throw new HachiError('NOT_FOUND', '找不到這個 commit')
+      if (!summary) throw new HachiError('NOT_FOUND', msg().gitMain.commitNotFound)
       return {
         ...summary,
         message: out.slice(end + 1).trim(),
@@ -591,14 +604,16 @@ export class GitService {
   commitDiff(workspace: string, hash: string, repoPath: string): Promise<GitFileDiff> {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
-      if (!isHash(hash)) throw new HachiError('VALIDATION_ERROR', '不是 commit id')
-      const parents = (await this.must(repo.root, ['rev-parse', `${hash}^@`], '讀取 commit'))
+      if (!isHash(hash)) throw new HachiError('VALIDATION_ERROR', msg().gitMain.notCommitId)
+      const parents = (
+        await this.must(repo.root, ['rev-parse', `${hash}^@`], msg().gitMain.ops.commit)
+      )
         .split('\n')
         .filter(Boolean)
       const file = (await this.commitFiles(repo, hash, parents[0])).find(
         (f) => f.repoPath === repoPath
       )
-      if (!file) throw new HachiError('VALIDATION_ERROR', '這個 commit 沒有改到這個檔案')
+      if (!file) throw new HachiError('VALIDATION_ERROR', msg().gitMain.fileNotInCommit)
       const result: GitFileDiff = {
         path: file.path,
         conflict: false,
@@ -610,7 +625,7 @@ export class GitService {
         const size = await this.exec(repo.root, ['cat-file', '-s', spec])
         if (size.code !== 0) return null
         if (Number(size.stdout.trim()) > MAX_DIFF_BYTES) return 'tooLarge'
-        return this.must(repo.root, ['show', spec], '讀取差異')
+        return this.must(repo.root, ['show', spec], msg().gitMain.ops.diff)
       }
       const before =
         parents[0] && file.kind !== 'added'
@@ -637,7 +652,7 @@ export class GitService {
           'refs/heads',
           'refs/remotes'
         ],
-        '讀取分支'
+        msg().gitMain.ops.branches
       )
       return parseBranches(out)
     })
@@ -656,20 +671,24 @@ export class GitService {
             'refs/heads',
             'refs/remotes'
           ],
-          '讀取分支'
+          msg().gitMain.ops.branches
         )
       )
       if (!branches.some((b) => b.name === name && b.remote === remote)) {
-        throw new HachiError('NOT_FOUND', `找不到分支「${name}」`)
+        throw new HachiError('NOT_FOUND', msg().gitMain.branchNotFound(name))
       }
       if (!remote) {
-        await this.must(repo.root, ['switch', name], '切換分支')
+        await this.must(repo.root, ['switch', name], msg().gitMain.ops.switch)
       } else {
         const local = name.slice(name.indexOf('/') + 1)
         if (branches.some((b) => !b.remote && b.name === local)) {
-          await this.must(repo.root, ['switch', local], '切換分支')
+          await this.must(repo.root, ['switch', local], msg().gitMain.ops.switch)
         } else {
-          await this.must(repo.root, ['switch', '-c', local, '--track', name], '切換分支')
+          await this.must(
+            repo.root,
+            ['switch', '-c', local, '--track', name],
+            msg().gitMain.ops.switch
+          )
         }
       }
       return this.readStatus(workspace)
@@ -681,8 +700,8 @@ export class GitService {
     return this.run(async () => {
       const repo = await this.requireRepo(workspace)
       const check = await this.exec(repo.root, ['check-ref-format', '--branch', name])
-      if (check.code !== 0) throw new HachiError('VALIDATION_ERROR', `分支名稱不合法：${name}`)
-      await this.must(repo.root, ['switch', '-c', name], '建立分支')
+      if (check.code !== 0) throw new HachiError('VALIDATION_ERROR', msg().gitMain.badBranch(name))
+      await this.must(repo.root, ['switch', '-c', name], msg().gitMain.ops.createBranch)
       return this.readStatus(workspace)
     })
   }

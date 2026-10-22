@@ -21,10 +21,15 @@ import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-sele
 import { errorMessage } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
 import { useEnvStore } from '@renderer/stores/env-store'
-import { EXPORT_FORMAT_LABELS, useTransferStore } from '@renderer/stores/transfer-store'
+import {
+  EXPORT_FORMATS,
+  exportFormatLabel,
+  useTransferStore
+} from '@renderer/stores/transfer-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import type { ExportFormat } from '@shared/ipc/api'
 import { findNode } from '@shared/tree'
+import { msg } from '@shared/i18n'
 
 function CurlForm() {
   const [text, setText] = useState('')
@@ -42,14 +47,12 @@ function CurlForm() {
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
       <DialogHeader>
-        <DialogTitle>匯入 cURL</DialogTitle>
-        <DialogDescription>
-          貼上 cURL 指令（例如瀏覽器開發者工具的「Copy as cURL」），會開成未儲存的新分頁。
-        </DialogDescription>
+        <DialogTitle>{msg().transfer.curlTitle}</DialogTitle>
+        <DialogDescription>{msg().transfer.curlDescription}</DialogDescription>
       </DialogHeader>
       <textarea
         autoFocus
-        aria-label="cURL 指令"
+        aria-label={msg().transfer.curlLabel}
         data-testid="curl-input"
         spellCheck={false}
         className="h-56 w-full resize-none rounded-md border border-input bg-transparent p-3 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
@@ -69,10 +72,10 @@ function CurlForm() {
           variant="outline"
           onClick={() => useTransferStore.getState().setCurlOpen(false)}
         >
-          取消
+          {msg().common.cancel}
         </Button>
         <Button type="submit" disabled={text.trim() === ''}>
-          匯入
+          {msg().transfer.import}
         </Button>
       </DialogFooter>
     </form>
@@ -86,14 +89,6 @@ export function CurlImportDialog() {
       <DialogContent className="sm:max-w-2xl">{open && <CurlForm />}</DialogContent>
     </Dialog>
   )
-}
-
-const FORMAT_HINTS: Record<ExportFormat, string> = {
-  postman: '單一 JSON 檔，可匯入 Postman 或 Hachi',
-  'bruno-yaml': 'Bruno 3.1 起的預設格式（opencollection.yml），連同所有環境（機密變數只匯出名稱）',
-  bruno: '舊版 Bruno 也能開（.bru 檔），連同所有環境（機密變數只匯出名稱）',
-  'openapi-html': '可直接用瀏覽器開啟的 API 文件（內嵌 Redoc，離線可用）',
-  'openapi-json': '給其他工具使用的 OpenAPI 規格檔'
 }
 
 function ExportForm({ collectionId }: { collectionId: string }) {
@@ -120,12 +115,12 @@ function ExportForm({ collectionId }: { collectionId: string }) {
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>匯出 Collection</DialogTitle>
+        <DialogTitle>{msg().transfer.exportTitle}</DialogTitle>
         <DialogDescription className="truncate">{name}</DialogDescription>
       </DialogHeader>
       <fieldset className="flex min-w-0 flex-col gap-1" data-testid="export-formats">
-        <legend className="sr-only">格式</legend>
-        {(Object.keys(EXPORT_FORMAT_LABELS) as ExportFormat[]).map((f) => (
+        <legend className="sr-only">{msg().transfer.format}</legend>
+        {EXPORT_FORMATS.map((f) => (
           <label
             key={f}
             className={cn(
@@ -142,29 +137,29 @@ function ExportForm({ collectionId }: { collectionId: string }) {
               className="mt-1 accent-primary"
             />
             <span className="flex flex-col">
-              <span className="text-sm font-medium">{EXPORT_FORMAT_LABELS[f]}</span>
-              <span className="text-xs text-muted-foreground">{FORMAT_HINTS[f]}</span>
+              <span className="text-sm font-medium">{exportFormatLabel(f)}</span>
+              <span className="text-xs text-muted-foreground">{msg().transfer.hints[f]}</span>
             </span>
           </label>
         ))}
       </fieldset>
       {openApi && (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="export-env">伺服器網址與範例值使用的環境</Label>
+          <Label htmlFor="export-env">{msg().transfer.environment}</Label>
           <NativeSelect
             id="export-env"
             data-testid="export-env"
             value={environmentId}
             onChange={(e) => setEnvironmentId(e.target.value)}
           >
-            <option value="">不使用環境（只用 Collection 變數）</option>
+            <option value="">{msg().transfer.noEnvironment}</option>
             {environments.map((env) => (
               <option key={env.id} value={env.id}>
                 {env.name}
               </option>
             ))}
           </NativeSelect>
-          <p className="text-xs text-muted-foreground">機密變數的值不會寫進文件。</p>
+          <p className="text-xs text-muted-foreground">{msg().transfer.noSecrets}</p>
         </div>
       )}
       <DialogFooter>
@@ -173,10 +168,12 @@ function ExportForm({ collectionId }: { collectionId: string }) {
           variant="outline"
           onClick={() => useTransferStore.getState().setExportId(null)}
         >
-          取消
+          {msg().common.cancel}
         </Button>
         <Button type="submit" disabled={busy}>
-          {format === 'bruno' || format === 'bruno-yaml' ? '選擇資料夾…' : '匯出…'}
+          {format === 'bruno' || format === 'bruno-yaml'
+            ? msg().transfer.chooseFolder
+            : msg().transfer.export}
         </Button>
       </DialogFooter>
     </form>
@@ -221,16 +218,16 @@ function BrunoPickForm({ choice }: { choice: BrunoChoice }) {
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
       <DialogHeader>
-        <DialogTitle>匯入 Bruno Collection</DialogTitle>
+        <DialogTitle>{msg().transfer.brunoTitle}</DialogTitle>
         <DialogDescription>
-          {`「${choice.folder}」裡有 ${choice.collections.length} 個 Collection，勾選要匯入的項目。環境會命名為「Collection 名稱 / 環境名稱」。`}
+          {msg().transfer.brunoDescription(choice.folder, choice.collections.length)}
         </DialogDescription>
       </DialogHeader>
       <CheckboxLabel
         checked={all}
         onChange={() => setPicked(all ? new Set() : new Set(choice.collections.map((c) => c.path)))}
       >
-        全選
+        {msg().transfer.selectAll}
       </CheckboxLabel>
       <ul
         className="flex max-h-[50vh] flex-col gap-0.5 overflow-auto rounded-md border p-1"
@@ -259,10 +256,10 @@ function BrunoPickForm({ choice }: { choice: BrunoChoice }) {
           variant="outline"
           onClick={() => useTransferStore.getState().cancelBrunoChoice()}
         >
-          取消
+          {msg().common.cancel}
         </Button>
         <Button type="submit" disabled={busy || picked.size === 0}>
-          匯入 {picked.size} 個
+          {msg().transfer.importCount(picked.size)}
         </Button>
       </DialogFooter>
     </form>
@@ -324,7 +321,7 @@ export function TransferResultDialog() {
           ))}
         </div>
         <DialogFooter>
-          <Button onClick={close}>確定</Button>
+          <Button onClick={close}>{msg().common.ok}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -385,11 +382,8 @@ export function FileDropZone({
           data-testid="drop-overlay"
         >
           <FileDown className="size-8 text-primary" />
-          <p className="font-medium">放開以匯入</p>
-          <p className="text-muted-foreground">
-            Postman Collection / Environment、Bruno Collection（.json），或內容是 cURL
-            指令的文字檔（Bruno 資料夾請用「＋」→ 匯入 Bruno 資料夾…）
-          </p>
+          <p className="font-medium">{msg().transfer.dropTitle}</p>
+          <p className="text-muted-foreground">{msg().transfer.dropHint}</p>
         </div>
       )}
     </div>

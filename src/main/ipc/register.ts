@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { app, ipcMain, nativeTheme, shell, type BrowserWindow } from 'electron'
 import { APP_ID, APP_NAME } from '@shared/app-info'
+import type { Language } from '@shared/i18n'
 import { HachiError } from '@shared/errors'
 import type { HttpResult } from '@shared/http'
 import type { HttpSendInput, WorkspaceInfo, WsConnectInput } from '@shared/ipc/api'
@@ -27,8 +28,11 @@ import type { RunnerService } from '../services/runner-service'
 import { DataFileError, parseDataFile } from '@shared/runner'
 import { readFile, stat } from 'node:fs/promises'
 import { createHandler, forbidden, type Handler } from './handler'
+import { msg } from '@shared/i18n'
 
 export interface IpcContext {
+  /** What "follow the system" means for the interface language (issue #6). */
+  systemLanguage: Language
   config: ConfigService
   workspaces: WorkspaceService
   collections: CollectionService
@@ -85,7 +89,8 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       version: app.getVersion(),
       appId: APP_ID,
       platform: process.platform,
-      isPackaged: app.isPackaged
+      isPackaged: app.isPackaged,
+      systemLanguage: ctx.systemLanguage
     }),
     [INVOKE.appGetDefaultWorkspaceDir]: () => ctx.defaultWorkspaceDir,
     [INVOKE.appSetCloseGuard]: (input) => ctx.setCloseGuard(input.dirty),
@@ -156,7 +161,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       })
       if (!file) return null
       if ((await stat(file)).size > 10 * 1024 * 1024) {
-        throw new HachiError('INVALID_FILE', '資料檔太大（上限 10 MB）')
+        throw new HachiError('INVALID_FILE', msg().httpMain.dataFileTooLarge)
       }
       try {
         const rows = parseDataFile(file, await readFile(file, 'utf8'))
@@ -178,7 +183,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     },
     [INVOKE.variablesSet]: async (input) => {
       const change = [{ name: input.name, value: input.value }]
-      const missing = () => new HachiError('NOT_FOUND', `找不到變數「${input.name}」`)
+      const missing = () => new HachiError('NOT_FOUND', msg().httpMain.variableNotFound(input.name))
       if (input.scope === 'runtime') {
         if (!ctx.runtime.list(workspacePath()).some((v) => v.name === input.name)) throw missing()
         ctx.runtime.apply(workspacePath(), change) // emits variables:changed itself

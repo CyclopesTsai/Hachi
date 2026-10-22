@@ -8,6 +8,7 @@ import { readFile, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { FILE_VARIABLE_MAX_BYTES, parseFileVariable } from '@shared/variables'
+import { msg } from '@shared/i18n'
 
 export interface FileAccess {
   /** The current Workspace folder (relative paths start here); null when none is open. */
@@ -45,13 +46,13 @@ export async function loadFileVariables(
   for (const name of names) {
     const spec = parseFileVariable(name)
     if (!spec) {
-      return fail('FILE_ACCESS', `{{${name}}} 的格式應為 {{$file:base64:檔案路徑}}`)
+      return fail('FILE_ACCESS', msg().httpMain.file.format(name))
     }
     if (!spec.supported) {
-      return fail('FILE_ACCESS', `{{${name}}}：不支援的格式「${spec.format}」（目前只有 base64）`)
+      return fail('FILE_ACCESS', msg().httpMain.file.unsupported(name, spec.format))
     }
     const abs = resolveFilePath(spec.path, access.root)
-    if (!abs) return fail('FILE_ACCESS', `{{${name}}}：沒有開啟 Workspace，無法使用相對路徑`)
+    if (!abs) return fail('FILE_ACCESS', msg().httpMain.file.noWorkspace(name))
     if (!isInside(access.root, abs) && !access.trustedOutside) untrusted.push(abs)
     jobs.push({ name, abs })
   }
@@ -59,7 +60,7 @@ export async function loadFileVariables(
     return {
       ok: false,
       code: 'FILE_ACCESS',
-      message: `要讀取 Workspace 以外的檔案：${untrusted.join('、')}（請先允許這個 Workspace 讀取外部檔案）`,
+      message: msg().httpMain.file.untrusted(untrusted),
       untrusted
     }
   }
@@ -67,13 +68,16 @@ export async function loadFileVariables(
     let size: number
     try {
       const info = await stat(abs)
-      if (!info.isFile()) return fail('FILE_NOT_FOUND', `不是檔案：${abs}`)
+      if (!info.isFile()) return fail('FILE_NOT_FOUND', msg().httpMain.file.notFile(abs))
       size = info.size
     } catch {
-      return fail('FILE_NOT_FOUND', `找不到檔案：${abs}`)
+      return fail('FILE_NOT_FOUND', msg().httpMain.file.notFound(abs))
     }
     if (size > FILE_VARIABLE_MAX_BYTES) {
-      return fail('FILE_ACCESS', `檔案超過 ${FILE_VARIABLE_MAX_BYTES / 1024 / 1024} MB：${abs}`)
+      return fail(
+        'FILE_ACCESS',
+        msg().httpMain.file.tooLarge(FILE_VARIABLE_MAX_BYTES / 1024 / 1024, abs)
+      )
     }
     files.set(name, (await readFile(abs)).toString('base64'))
   }

@@ -7,6 +7,7 @@ import { useWrapPreference } from '@renderer/hooks/use-wrap-preference'
 import { cn } from '@renderer/lib/utils'
 import { JsonTree } from './JsonTree'
 import { ALL_COLLAPSED, ALL_EXPANDED, type TreeExpansion } from './json-tree-expansion'
+import { msg } from '@shared/i18n'
 
 function languageFor(contentType: string): CodeLanguage {
   if (/json/i.test(contentType)) return 'json'
@@ -84,7 +85,7 @@ export function ResponseBody({
           <div
             className="flex rounded-md border p-0.5"
             role="radiogroup"
-            aria-label="Body 檢視方式"
+            aria-label={msg().http.response.view}
           >
             {views.map((v) => (
               <button
@@ -115,7 +116,7 @@ export function ResponseBody({
               onClick={() => setExpansion(ALL_EXPANDED)}
             >
               <ChevronsUpDown />
-              全部展開
+              {msg().http.response.expandAll}
             </Button>
             <Button
               variant="ghost"
@@ -124,13 +125,13 @@ export function ResponseBody({
               onClick={() => setExpansion(ALL_COLLAPSED)}
             >
               <ChevronsDownUp />
-              全部收合
+              {msg().http.response.collapseAll}
             </Button>
           </>
         )}
         {text !== null && view !== 'preview' && (
           <CheckboxLabel checked={wrap} onChange={(e) => setWrap(e.target.checked)}>
-            自動換行
+            {msg().http.response.wrap}
           </CheckboxLabel>
         )}
         {actions}
@@ -141,7 +142,7 @@ export function ResponseBody({
       ) : view === 'preview' ? (
         // No scripts, no same-origin access; the app's CSP also blocks external resources.
         <iframe
-          title="HTML 預覽"
+          title={msg().http.response.htmlPreview}
           sandbox=""
           srcDoc={text}
           className="min-h-0 flex-1 rounded-md border bg-white"

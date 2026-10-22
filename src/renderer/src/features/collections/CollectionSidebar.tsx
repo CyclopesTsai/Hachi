@@ -74,34 +74,30 @@ import { MockActions, MockPanel } from '@renderer/features/mock/MockPanel'
 import { selectRenameInput } from './rename-input'
 import { ExampleRow } from './ExampleRow'
 import { TreeRow, type DropIndicator } from './TreeRow'
+import { msg } from '@shared/i18n'
 
 const AUTO_EXPAND_DELAY_MS = 600
-
-const KIND_LABEL: Record<TreeNode['kind'], string> = {
-  collection: 'Collection',
-  folder: '資料夾',
-  request: '請求'
-}
 
 function DeleteDialog({ node, onClose }: { node: TreeNode | null; onClose: () => void }) {
   const remove = useTreeStore((s) => s.remove)
   const count = node ? countDescendants(node) : 0
   const examples = node?.kind === 'request' ? (node.examples?.length ?? 0) : 0
+  const m = msg()
   return (
     <AlertDialog open={node !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent data-testid="delete-item-dialog">
         <AlertDialogHeader>
           <AlertDialogTitle>
-            刪除{node ? KIND_LABEL[node.kind] : ''}「{node?.name}」？
+            {m.tree.deleteTitle(node ? m.tree.kinds[node.kind] : '', node?.name ?? '')}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {count > 0 ? `其中的 ${count} 個項目也會一併刪除。` : ''}
-            {examples > 0 ? `${examples} 筆儲存的結果也會一併刪除。` : ''}
-            檔案會移到系統垃圾桶，需要時可以從垃圾桶還原。
+            {count > 0 ? m.tree.deleteChildren(count) : ''}
+            {examples > 0 ? m.tree.deleteExamples(examples) : ''}
+            {m.tree.toTrash}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{m.common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -109,7 +105,7 @@ function DeleteDialog({ node, onClose }: { node: TreeNode | null; onClose: () =>
               onClose()
             }}
           >
-            刪除
+            {m.common.delete}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -129,13 +125,11 @@ function DeleteExampleDialog({
     <AlertDialog open={example !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent data-testid="delete-example-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>刪除儲存的結果「{example?.name}」？</AlertDialogTitle>
-          <AlertDialogDescription>
-            檔案會移到系統垃圾桶，需要時可以從垃圾桶還原。
-          </AlertDialogDescription>
+          <AlertDialogTitle>{msg().tree.deleteExampleTitle(example?.name ?? '')}</AlertDialogTitle>
+          <AlertDialogDescription>{msg().tree.toTrash}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -143,7 +137,7 @@ function DeleteExampleDialog({
               onClose()
             }}
           >
-            刪除
+            {msg().common.delete}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -175,7 +169,7 @@ export function CollectionSidebar() {
       data-testid="collection-sidebar"
     >
       <div className="flex h-9 shrink-0 items-center gap-1 pr-1 pl-2">
-        <div role="tablist" aria-label="側欄" className="flex items-center gap-0.5">
+        <div role="tablist" aria-label={msg().tree.sidebar} className="flex items-center gap-0.5">
           {MODES.map((m) => (
             <button
               key={m.mode}
@@ -248,10 +242,10 @@ function TreeToolbar() {
         <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <input
           type="search"
-          aria-label="搜尋名稱"
+          aria-label={msg().tree.search}
           data-testid="global-search"
-          placeholder="搜尋名稱"
-          title="搜尋 Collection、資料夾與請求的名稱"
+          placeholder={msg().tree.search}
+          title={msg().tree.searchTitle}
           value={query}
           onChange={(e) => useTreeStore.getState().setQuery(e.target.value)}
           className="h-7 w-full rounded-md border border-input bg-background pr-2 pl-7 text-xs outline-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -261,8 +255,8 @@ function TreeToolbar() {
         variant="ghost"
         size="icon"
         className={iconButton}
-        title="在樹狀選單中找到目前分頁"
-        aria-label="定位目前分頁"
+        title={msg().tree.locateTitle}
+        aria-label={msg().tree.locate}
         data-testid="tree-focus"
         disabled={!activeItemId}
         onClick={() => activeItemId && focusActiveItem(activeItemId)}
@@ -273,8 +267,8 @@ function TreeToolbar() {
         variant="ghost"
         size="icon"
         className={iconButton}
-        title="全部展開"
-        aria-label="全部展開"
+        title={msg().tree.expandAll}
+        aria-label={msg().tree.expandAll}
         data-testid="tree-expand-all"
         onClick={() => useTreeStore.getState().expandAllContainers()}
       >
@@ -284,8 +278,8 @@ function TreeToolbar() {
         variant="ghost"
         size="icon"
         className={iconButton}
-        title="全部收合"
-        aria-label="全部收合"
+        title={msg().tree.collapseAll}
+        aria-label={msg().tree.collapseAll}
         data-testid="tree-collapse-all"
         onClick={() => useTreeStore.getState().collapseAll()}
       >
@@ -297,11 +291,12 @@ function TreeToolbar() {
 
 type NewKind = { kind: 'folder' } | { kind: 'request'; requestType: 'http' | 'websocket' }
 
-const NEW_LABELS: Record<string, string> = {
-  folder: '新增資料夾',
-  http: '新增 HTTP 請求',
-  websocket: '新增 WebSocket'
-}
+const newLabel = (what: NewKind) =>
+  what.kind === 'folder'
+    ? msg().tree.newFolder
+    : what.requestType === 'http'
+      ? msg().tree.newHttp
+      : msg().tree.newWebSocket
 
 /**
  * Where "＋" puts a folder / request (decision 106): inside the selected collection /
@@ -335,7 +330,7 @@ function PickCollectionDialog({ what, onClose }: { what: NewKind | null; onClose
   const collections = useMemo(() => all.filter((c) => !c.error), [all])
   const [target, setTarget] = useState('')
   const chosen = collections.find((c) => c.id === target) ?? collections[0]
-  const label = what ? NEW_LABELS[what.kind === 'folder' ? 'folder' : what.requestType] : ''
+  const label = what ? newLabel(what) : ''
   return (
     <Dialog open={what !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent data-testid="pick-collection-dialog">
@@ -349,10 +344,7 @@ function PickCollectionDialog({ what, onClose }: { what: NewKind | null; onClose
         >
           <DialogHeader>
             <DialogTitle>{label}</DialogTitle>
-            <DialogDescription>
-              左側沒有選取位置，要放在哪個 Collection？（先在左側選取 Collection
-              或資料夾，就會直接放進去）
-            </DialogDescription>
+            <DialogDescription>{msg().tree.pickCollection}</DialogDescription>
           </DialogHeader>
           <NativeSelect
             aria-label="Collection"
@@ -368,10 +360,10 @@ function PickCollectionDialog({ what, onClose }: { what: NewKind | null; onClose
           </NativeSelect>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              取消
+              {msg().common.cancel}
             </Button>
             <Button type="submit" disabled={!chosen}>
-              新增
+              {msg().tree.add}
             </Button>
           </DialogFooter>
         </form>
@@ -398,8 +390,8 @@ function CollectionActions() {
         variant="ghost"
         size="icon"
         className="size-7"
-        title="重新讀取整個 Workspace（套用在 Hachi 以外修改的檔案）"
-        aria-label="重新讀取 Workspace"
+        title={msg().tree.reloadWorkspaceTitle}
+        aria-label={msg().tree.reloadWorkspace}
         onClick={() => void useTabsStore.getState().reload({ scope: 'workspace' })}
       >
         <RefreshCw />
@@ -410,8 +402,8 @@ function CollectionActions() {
             variant="ghost"
             size="icon"
             className="size-7"
-            title="新增…"
-            aria-label="新增"
+            title={msg().tree.addTitle}
+            aria-label={msg().tree.add}
             data-testid="sidebar-add"
           >
             <Plus />
@@ -435,7 +427,7 @@ function CollectionActions() {
             }}
           >
             <Layers />
-            新增 Collection
+            {msg().tree.newCollection}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -443,31 +435,31 @@ function CollectionActions() {
             onSelect={() => add({ kind: 'request', requestType: 'http' })}
           >
             <FilePlus2 />
-            新增 HTTP 請求
+            {msg().tree.newHttp}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={!hasCollections}
             onSelect={() => add({ kind: 'request', requestType: 'websocket' })}
           >
             <Radio />
-            新增 WebSocket
+            {msg().tree.newWebSocket}
           </DropdownMenuItem>
           <DropdownMenuItem disabled={!hasCollections} onSelect={() => add({ kind: 'folder' })}>
             <FolderPlus />
-            新增資料夾
+            {msg().tree.newFolder}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void transfer.importFile()}>
             <FileDown />
-            匯入檔案（Postman / Bruno JSON）…
+            {msg().tree.importFile}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void transfer.importBrunoFolder()}>
             <FolderInput />
-            匯入 Bruno 資料夾…
+            {msg().tree.importBrunoFolder}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => transfer.setCurlOpen(true)}>
             <Terminal />
-            匯入 cURL…
+            {msg().tree.importCurl}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -561,15 +553,15 @@ function CollectionTree() {
       <div className="min-h-0 flex-1 overflow-auto px-1 pb-4" role="tree" aria-label="Collections">
         {search && rows.length === 0 && (
           <p className="px-2 py-3 text-sm text-muted-foreground" data-testid="tree-no-match">
-            找不到名稱含有「{query.trim()}」的項目。
+            {msg().tree.noMatch(query.trim())}
           </p>
         )}
         {loaded && !search && rows.length === 0 && (
           <div className="flex flex-col items-start gap-2 px-2 py-3 text-sm text-muted-foreground">
-            <p>還沒有任何 Collection。</p>
+            <p>{msg().tree.empty}</p>
             <Button variant="outline" size="sm" onClick={() => void createCollection()}>
               <Plus />
-              建立 Collection
+              {msg().tree.createCollection}
             </Button>
           </div>
         )}
@@ -610,7 +602,7 @@ function CollectionTree() {
           className="m-2 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive"
         >
           <span className="min-w-0 flex-1 break-words">{error}</span>
-          <button type="button" aria-label="關閉" onClick={dismissError}>
+          <button type="button" aria-label={msg().common.close} onClick={dismissError}>
             <X className="size-3.5" />
           </button>
         </div>

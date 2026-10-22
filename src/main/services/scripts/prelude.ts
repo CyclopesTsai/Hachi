@@ -13,6 +13,12 @@ export const PRELUDE = String.raw`
   var input = JSON.parse(globalThis.__hachiInput)
   delete globalThis.__hachiInput
   var L = input.limits
+  var T = input.text
+  /** A text of the current language; {0}, {1} … are the arguments. */
+  function t(key) {
+    var args = arguments
+    return T[key].replace(/\{(\d)\}/g, function (_, i) { return String(args[Number(i) + 1]) })
+  }
   var phase = input.phase
   var logs = []
   var tests = []
@@ -57,7 +63,7 @@ export const PRELUDE = String.raw`
       if ((m = /^\[\s*(\d+)\s*\]/.exec(rest))) { parts.push(Number(m[1])); rest = rest.slice(m[0].length); continue }
       if ((m = /^\[\s*(["'])((?:\\.|(?!\1).)*)\1\s*\]/.exec(rest))) { parts.push(m[2]); rest = rest.slice(m[0].length); continue }
       m = /^[^.[]+/.exec(rest)
-      if (!m) throw new Error('無效的路徑：' + path)
+      if (!m) throw new Error(t('invalidPath', path))
       parts.push(m[0]); rest = rest.slice(m[0].length)
     }
     return parts
@@ -89,9 +95,9 @@ export const PRELUDE = String.raw`
         parts.push(typeof a === 'string' ? a : fmt(a))
       }
       var text = parts.join(' ')
-      if (text.length > L.logText) text = text.slice(0, L.logText) + '…（已截斷）'
+      if (text.length > L.logText) text = text.slice(0, L.logText) + t('truncated')
       logs.push({ level: level, text: text })
-      if (logs.length === L.logs) logs.push({ level: 'warn', text: '輸出太多，後面的 console 訊息已省略' })
+      if (logs.length === L.logs) logs.push({ level: 'warn', text: t('tooManyLogs') })
     }
   }
   globalThis.console = {
@@ -106,11 +112,11 @@ export const PRELUDE = String.raw`
     collection: input.variables.collection ? Object.assign({}, input.variables.collection) : null
   }
   var MISSING = {
-    environment: '目前沒有選擇環境，無法設定環境變數',
-    collection: '這個請求不在 Collection 中，無法設定 Collection 變數'
+    environment: t('noEnvironment'),
+    collection: t('noCollection')
   }
   function record(scope, key, value) {
-    if (changes.length >= L.changes) throw new Error('變數變更太多（上限 ' + L.changes + '）')
+    if (changes.length >= L.changes) throw new Error(t('tooManyChanges', L.changes))
     changes.push({ scope: scope, name: key, value: value })
   }
   function makeScope(scope) {
@@ -122,10 +128,10 @@ export const PRELUDE = String.raw`
       has: function (key) { var s = scopes[scope]; return !!s && hasOwn(s, String(key)) },
       set: function (key, value) {
         key = String(key)
-        if (key.trim() === '') throw new Error('變數名稱不能是空白')
+        if (key.trim() === '') throw new Error(t('emptyName'))
         if (scopes[scope] === null) throw new Error(MISSING[scope])
         var text = toText(value)
-        if (text.length > L.value) throw new Error('變數值太長（上限 1 MB）：' + key)
+        if (text.length > L.value) throw new Error(t('valueTooLong', key))
         scopes[scope][key] = text
         record(scope, key, text)
       },
@@ -192,7 +198,7 @@ export const PRELUDE = String.raw`
   var req = input.request
   var requestChanged = false
   function editable() {
-    if (phase !== 'preRequest') throw new Error('Post-response 腳本不能修改請求')
+    if (phase !== 'preRequest') throw new Error(t('readOnlyRequest'))
     requestChanged = true
   }
   function headerKV(nameOrObj, value) {
@@ -238,7 +244,7 @@ export const PRELUDE = String.raw`
   var requestHeaders = headerList(req.headers, phase === 'preRequest')
   function setBody(text) {
     editable()
-    if (req.body === null) throw new Error('只有 JSON / Raw Body 可以在腳本中修改')
+    if (req.body === null) throw new Error(t('bodyNotEditable'))
     req.body = toText(text)
   }
   var hachiRequest = {
@@ -276,10 +282,10 @@ export const PRELUDE = String.raw`
 
   // ---- response --------------------------------------------------------------
   var res = input.response
-  function noResponse() { throw new Error('Pre-request 腳本中還沒有回應') }
+  function noResponse() { throw new Error(t('noResponse')) }
   function bodyText() {
     if (!res) noResponse()
-    if (res.body === null) throw new Error(res.bodyUnavailable || '無法讀取回應內容')
+    if (res.body === null) throw new Error(res.bodyUnavailable || t('cannotReadBody'))
     return res.body
   }
   var responseHeaders = res ? headerList(res.headers, false) : null
@@ -590,7 +596,7 @@ export const PRELUDE = String.raw`
   /** Postman / axios (Bruno) / Hachi request descriptions → { method, url, headers, body }. */
   function hostRequest(spec) {
     if (typeof spec === 'string') return { method: 'GET', url: spec, headers: [], body: null }
-    if (!spec || typeof spec !== 'object') throw new Error('sendRequest 需要網址或請求設定')
+    if (!spec || typeof spec !== 'object') throw new Error(t('sendRequestSpec'))
     var url = spec.url
     if (url && typeof url === 'object') url = url.raw !== undefined ? url.raw : String(url)
     url = String(url || '')
@@ -610,7 +616,7 @@ export const PRELUDE = String.raw`
         else if (b.mode === 'urlencoded') {
           body = formBody(b.urlencoded)
           if (!hasHeader(headers, 'content-type')) headers.push(['Content-Type', 'application/x-www-form-urlencoded'])
-        } else if (b.mode === 'formdata') throw new Error('sendRequest 不支援 formdata Body')
+        } else if (b.mode === 'formdata') throw new Error(t('sendRequestFormdata'))
       } else if (typeof b === 'object') {
         body = JSON.stringify(b)
         if (!hasHeader(headers, 'content-type')) headers.push(['Content-Type', 'application/json'])
@@ -628,7 +634,7 @@ export const PRELUDE = String.raw`
     return o
   }
   function bodyOf(r) {
-    if (r.body === null) throw new Error('回應不是文字或太大，腳本無法讀取')
+    if (r.body === null) throw new Error(t('sendRequestBody'))
     return r.body
   }
   function pmResponseOf(r) {
@@ -689,10 +695,10 @@ export const PRELUDE = String.raw`
   globalThis.clearTimeout = function (id) { delete timers[id] }
 
   function unsupported(name) {
-    return function () { throw new Error('Hachi 不支援 ' + name) }
+    return function () { throw new Error(t('unsupported', name)) }
   }
   var pmTest = function (name, fn) { test(name, fn); return pm }
-  pmTest.skip = function (name) { logger('info')('略過測試：' + name); return pm }
+  pmTest.skip = function (name) { logger('info')(t('skipped', name)); return pm }
   var pm = {
     info: {
       requestName: input.info.requestName,
@@ -828,7 +834,7 @@ export const PRELUDE = String.raw`
     var str = String(input), out = ''
     for (var i = 0; i < str.length; i += 3) {
       var a = str.charCodeAt(i), b = str.charCodeAt(i + 1), c = str.charCodeAt(i + 2)
-      if (a > 255 || b > 255 || c > 255) throw new Error('btoa: 只接受 Latin-1 字元')
+      if (a > 255 || b > 255 || c > 255) throw new Error(t('btoaLatin1'))
       var n = (a << 16) | ((b || 0) << 8) | (c || 0)
       out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + (i + 1 < str.length ? B64[(n >> 6) & 63] : '=') + (i + 2 < str.length ? B64[n & 63] : '=')
     }
@@ -838,7 +844,7 @@ export const PRELUDE = String.raw`
     var str = String(input).replace(/[\s=]+/g, ''), out = '', bits = 0, value = 0
     for (var i = 0; i < str.length; i++) {
       var idx = B64.indexOf(str[i])
-      if (idx < 0) throw new Error('atob: 不是有效的 Base64')
+      if (idx < 0) throw new Error(t('atobInvalid'))
       value = (value << 6) | idx
       bits += 6
       if (bits >= 8) { bits -= 8; out += String.fromCharCode((value >> bits) & 255) }
@@ -875,7 +881,7 @@ export const PRELUDE = String.raw`
   globalThis.atob = atob
   globalThis.require = function (name) {
     if (name === 'crypto-js' && typeof globalThis.CryptoJS !== 'undefined') return globalThis.CryptoJS
-    throw new Error("Hachi 不支援 require('" + name + "')（只有 crypto-js）")
+    throw new Error(t('requireUnsupported', name))
   }
   if (res) {
     globalThis.responseCode = { code: res.status, name: res.statusText, detail: res.statusText }
@@ -889,7 +895,7 @@ export const PRELUDE = String.raw`
   Object.defineProperty(globalThis, '__hachiFinish', {
     value: function () {
       Object.keys(legacyTests).forEach(function (k) {
-        tests.push(legacyTests[k] ? { name: k, passed: true } : { name: k, passed: false, error: 'tests["' + k + '"] 為 false' })
+        tests.push(legacyTests[k] ? { name: k, passed: true } : { name: k, passed: false, error: t('legacyFalse', k) })
       })
       return JSON.stringify({
         logs: logs,

@@ -18,6 +18,7 @@ import { cn } from '@renderer/lib/utils'
 import { useHistoryStore } from '@renderer/stores/history-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { groupByDay } from './history-model'
+import { localeOf, msg } from '@shared/i18n'
 
 const tone = {
   ok: 'text-emerald-700 dark:text-emerald-400',
@@ -30,11 +31,11 @@ const tone = {
 function statusOf(entry: HistoryEntry): { label: string; className: string } {
   if (entry.type === 'websocket') {
     const r = entry.result
-    if (r.error) return { label: '錯誤', className: tone.error }
+    if (r.error) return { label: msg().history.error, className: tone.error }
     if (r.closeCode === null) return { label: '—', className: tone.warn }
     return { label: String(r.closeCode), className: r.closeCode === 1000 ? tone.ok : tone.warn }
   }
-  if (entry.result.kind === 'error') return { label: '錯誤', className: tone.error }
+  if (entry.result.kind === 'error') return { label: msg().history.error, className: tone.error }
   const s = entry.result.status
   const className =
     s >= 500 ? tone.error : s >= 400 ? tone.warn : s >= 300 ? tone.redirect : tone.ok
@@ -48,9 +49,9 @@ function detailOf(entry: HistoryEntry): string {
     lines.unshift(`WebSocket ${entry.request.url}`)
     lines.push(
       r.error
-        ? `錯誤：${r.error}`
-        : `Close Code ${r.closeCode ?? '—'}${r.closeReason ? `：${r.closeReason}` : ''}`,
-      `送出 ${r.sent} 則 · 收到 ${r.received} 則`
+        ? msg().history.errorDetail(r.error)
+        : `Close Code ${r.closeCode ?? '—'}${r.closeReason ? msg().history.closeReason(r.closeReason) : ''}`,
+      msg().history.counts(r.sent, r.received)
     )
   } else {
     lines.unshift(`${entry.request.method} ${entry.request.url}`)
@@ -61,14 +62,14 @@ function detailOf(entry: HistoryEntry): string {
     )
   }
   lines.push(
-    entry.environmentName ? `環境：${entry.environmentName}` : null,
-    new Date(entry.sentAt).toLocaleString()
+    entry.environmentName ? msg().history.environment(entry.environmentName) : null,
+    new Date(entry.sentAt).toLocaleString(localeOf())
   )
   return lines.filter(Boolean).join('\n')
 }
 
 function HistoryRow({ entry }: { entry: HistoryEntry }) {
-  const time = new Date(entry.sentAt).toLocaleTimeString(undefined, {
+  const time = new Date(entry.sentAt).toLocaleTimeString(localeOf(), {
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23'
@@ -96,7 +97,7 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
           }
         />
         <span className="min-w-0 flex-1 truncate font-mono">
-          {entry.request.url || '（空白 URL）'}
+          {entry.request.url || msg().history.emptyUrl}
         </span>
         <span className={cn('shrink-0 font-mono text-[10px] font-semibold', status.className)}>
           {status.label}
@@ -106,7 +107,7 @@ function HistoryRow({ entry }: { entry: HistoryEntry }) {
         </span>
         <X
           className="hidden size-3.5 shrink-0 text-muted-foreground group-hover:block hover:text-destructive"
-          aria-label="刪除這筆紀錄"
+          aria-label={msg().history.deleteEntry}
           onClick={(e) => {
             e.stopPropagation()
             void useHistoryStore.getState().remove(entry.id)
@@ -128,13 +129,13 @@ export function HistoryPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="history-panel">
       <div className="flex h-8 shrink-0 items-center justify-between pr-1 pl-3">
-        <span className="text-xs text-muted-foreground">{entries.length} 筆（這個 Workspace）</span>
+        <span className="text-xs text-muted-foreground">{msg().history.count(entries.length)}</span>
         <Button
           variant="ghost"
           size="icon"
           className="size-7"
-          title="清除這個 Workspace 的歷史紀錄"
-          aria-label="清除歷史紀錄"
+          title={msg().history.clearTitle}
+          aria-label={msg().history.clearLabel}
           disabled={entries.length === 0}
           onClick={() => setConfirmClear(true)}
         >
@@ -143,9 +144,7 @@ export function HistoryPanel() {
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-1 pb-4">
         {loaded && entries.length === 0 && (
-          <p className="px-2 py-3 text-sm text-muted-foreground">
-            還沒有紀錄。每次發送請求都會自動記錄在這裡（不含回應內容）。
-          </p>
+          <p className="px-2 py-3 text-sm text-muted-foreground">{msg().history.empty}</p>
         )}
         {groups.map((group) => (
           <section key={group.label}>
@@ -164,18 +163,18 @@ export function HistoryPanel() {
       <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>清除歷史紀錄？</AlertDialogTitle>
+            <AlertDialogTitle>{msg().history.clearConfirmTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              會刪除這個 Workspace 的全部 {entries.length} 筆紀錄，無法復原。
+              {msg().history.clearConfirm(entries.length)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => void useHistoryStore.getState().clear()}
             >
-              清除
+              {msg().history.clear}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

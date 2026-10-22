@@ -97,7 +97,8 @@ export const inputSchemas = {
       .strictObject({
         requestBodyWrap: z.boolean().optional(),
         responseBodyWrap: z.boolean().optional(),
-        gitChangesTree: z.boolean().optional()
+        gitChangesTree: z.boolean().optional(),
+        language: z.enum(['system', 'zh-TW', 'en']).optional()
       })
       .optional(),
     history: historySettingsSchema.optional(),

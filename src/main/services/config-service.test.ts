@@ -40,7 +40,12 @@ describe('ConfigService', () => {
         username: '',
         password: ''
       },
-      ui: { requestBodyWrap: false, responseBodyWrap: false, gitChangesTree: true },
+      ui: {
+        requestBodyWrap: false,
+        responseBodyWrap: false,
+        gitChangesTree: true,
+        language: 'system'
+      },
       history: { maxEntries: 200 },
       websocket: { messageLimit: 100 },
       scripts: { trustedWorkspaces: [] },

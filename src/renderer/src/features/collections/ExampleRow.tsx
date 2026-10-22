@@ -13,6 +13,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { selectRenameInput } from './rename-input'
 import { InlineRename } from './TreeRow'
+import { msg } from '@shared/i18n'
 
 /**
  * A saved result under its request (decision 140): single click previews it, double
@@ -105,18 +106,18 @@ export function ExampleRow({
           <>
             <ContextMenuItem onSelect={() => open(false)}>
               <ExternalLink />
-              開啟
+              {msg().tree.open}
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => setEditing(example.id)}>
               <Pencil />
-              重新命名
+              {msg().common.rename}
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
         <ContextMenuItem variant="destructive" onSelect={() => onRequestDelete(example)}>
           <Trash2 />
-          刪除…
+          {msg().tree.deleteMenu}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

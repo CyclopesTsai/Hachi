@@ -1,12 +1,6 @@
 import { AlertTriangle, Download, Eye, Loader2, Send } from 'lucide-react'
 import { useState } from 'react'
-import {
-  formatBytes,
-  formatDuration,
-  type HttpErrorCode,
-  type HttpResponseData,
-  type HttpResult
-} from '@shared/http'
+import { formatBytes, formatDuration, type HttpResponseData, type HttpResult } from '@shared/http'
 import { Button } from '@renderer/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { cn } from '@renderer/lib/utils'
@@ -20,22 +14,7 @@ import { ConsolePanel, TestsPanel } from './ScriptResults'
 import { TlsCheckButton } from './TlsCheckDialog'
 import { tlsCheckInput } from './tls-check-input'
 import { TlsDiagnosisView } from './TlsDiagnosisView'
-
-const ERROR_TITLES: Record<HttpErrorCode, string> = {
-  INVALID_URL: 'URL 格式不正確',
-  TIMEOUT: '請求逾時',
-  CANCELLED: '已取消請求',
-  TLS: 'SSL / TLS 憑證驗證失敗（可在請求的 Settings 關閉 SSL 驗證）',
-  PROXY: 'Proxy 連線失敗',
-  NETWORK: '無法連線到伺服器',
-  TOO_LARGE: '回應超過 100 MB，已中止接收',
-  FILE_NOT_FOUND: '找不到檔案（Form-data 或 {{$file:…}}），請求沒有發送',
-  FILE_ACCESS: '無法讀取檔案，請求沒有發送',
-  TOO_MANY_REDIRECTS: '重新導向次數超過上限（可在 Workspace 設定調整）',
-  SCRIPT: '腳本錯誤，請求沒有發送',
-  AUTH: '驗證失敗，請求沒有發送',
-  UNKNOWN: '發送失敗'
-}
+import { msg } from '@shared/i18n'
 
 function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: string }) {
   const fullBody = useTabsStore((s) => s.fullBodies[result.runId])
@@ -59,18 +38,20 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
         result.body.kind !== 'empty' && (
           <Button variant="outline" size="sm" disabled={busy} onClick={() => void download()}>
             <Download />
-            下載
+            {msg().http.response.download}
           </Button>
         )
       }
     >
       {result.body.kind === 'empty' && (
-        <p className="text-sm text-muted-foreground">（回應沒有內容）</p>
+        <p className="text-sm text-muted-foreground">{msg().http.response.empty}</p>
       )}
       {result.body.kind === 'binary' && (
         <p className="text-sm text-muted-foreground">
-          二進位內容（{result.contentType || '未知類型'}，{formatBytes(result.bodyBytes)}
-          ），無法直接顯示，請下載後開啟。
+          {msg().http.response.binary(
+            result.contentType || msg().http.response.unknownType,
+            formatBytes(result.bodyBytes)
+          )}
         </p>
       )}
       {result.body.kind === 'large' && fullBody === undefined && (
@@ -78,9 +59,7 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
           className="flex flex-col items-start gap-3 rounded-md border border-dashed p-4"
           data-testid="large-body"
         >
-          <p className="text-sm">
-            回應內容較大（{formatBytes(result.bodyBytes)}），預設不顯示以免畫面卡頓。
-          </p>
+          <p className="text-sm">{msg().http.response.large(formatBytes(result.bodyBytes))}</p>
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -93,11 +72,11 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
               }}
             >
               <Eye />
-              顯示
+              {msg().http.response.show}
             </Button>
             <Button variant="outline" size="sm" disabled={busy} onClick={() => void download()}>
               <Download />
-              下載
+              {msg().http.response.download}
             </Button>
           </div>
         </div>
@@ -108,7 +87,7 @@ function BodyPanel({ result, tabKey }: { result: HttpResponseData; tabKey: strin
 
 function CookiesPanel({ result }: { result: HttpResponseData }) {
   if (result.cookies.length === 0) {
-    return <p className="p-3 text-sm text-muted-foreground">這個回應沒有設定 Cookie。</p>
+    return <p className="p-3 text-sm text-muted-foreground">{msg().http.response.noCookies}</p>
   }
   const columns = ['Name', 'Value', 'Domain', 'Path', 'Expires', 'HttpOnly', 'Secure', 'SameSite']
   return (
@@ -154,8 +133,8 @@ function UnresolvedNotice({ names }: { names: string[] }) {
     >
       <AlertTriangle className="mt-px size-3.5 shrink-0" />
       <span>
-        找不到變數，已照原樣送出：
-        <span className="font-mono">{names.map((n) => `{{${n}}}`).join('、')}</span>
+        {msg().http.response.unresolved}
+        <span className="font-mono">{msg().common.list(names.map((n) => `{{${n}}}`))}</span>
       </span>
     </p>
   )
@@ -170,9 +149,9 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
         <Loader2 className="size-5 animate-spin" />
-        發送中…
+        {msg().http.response.sending}
         <Button variant="outline" size="sm" onClick={() => void cancel()}>
-          取消
+          {msg().common.cancel}
         </Button>
       </div>
     )
@@ -181,7 +160,7 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
         <Send className="size-5" />
-        按下「發送」查看回應
+        {msg().http.response.idle}
       </div>
     )
   }
@@ -192,7 +171,7 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
         <div className="flex min-h-0 shrink flex-col gap-2 overflow-auto p-4">
           <p className="flex items-center gap-2 font-medium text-destructive">
             <AlertTriangle className="size-4" />
-            {ERROR_TITLES[result.code]}
+            {msg().http.response.errors[result.code]}
           </p>
           <p className="font-mono text-xs break-all text-muted-foreground select-text">
             {result.message}
@@ -207,7 +186,7 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
                 <div>
                   <TlsCheckButton
                     input={() => tlsCheckInput(tab)}
-                    label="檢查各平台（macOS / iOS、Windows、Mozilla）…"
+                    label={msg().http.response.checkPlatforms}
                     data-testid="tls-check-platforms"
                   />
                 </div>
@@ -296,7 +275,9 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
           {formatBytes(result.bodyBytes + result.headerBytes)}
         </span>
         {result.redirects > 0 && (
-          <span className="text-xs text-muted-foreground">重新導向 {result.redirects} 次</span>
+          <span className="text-xs text-muted-foreground">
+            {msg().http.response.redirects(result.redirects)}
+          </span>
         )}
         <SaveResultButton tab={tab} result={result} />
       </div>

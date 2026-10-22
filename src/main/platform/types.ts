@@ -2,6 +2,9 @@ import type { MenuItemConstructorOptions } from 'electron'
 
 /** The operating system's own verdict on a server's chain (decision 142). */
 export interface SystemTrustVerdict {
+  platform: 'darwin' | 'win32'
+  /** The chain ends in a root the OS does not trust (language-independent, for the advice). */
+  rootUntrusted: boolean
   /** e.g. "這台 Mac（系統驗證）". */
   label: string
   /** The clients that use this verifier. */

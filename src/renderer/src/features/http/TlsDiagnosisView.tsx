@@ -1,9 +1,14 @@
 import { ArrowDown, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
 import type { TlsCertInfo, TlsDiagnosis } from '@shared/http'
 import { cn } from '@renderer/lib/utils'
+import { msg } from '@shared/i18n'
 
 const ROLE = (cert: TlsCertInfo, index: number, total: number) =>
-  index === 0 ? '網站憑證' : cert.selfSigned || index === total - 1 ? '根憑證' : '中繼憑證'
+  index === 0
+    ? msg().tls.roles.leaf
+    : cert.selfSigned || index === total - 1
+      ? msg().tls.roles.root
+      : msg().tls.roles.intermediate
 
 const date = (iso: string) => iso.slice(0, 10)
 
@@ -39,6 +44,7 @@ function CertCard({
   hostProblem: boolean
 }) {
   const problem = cert.expired || cert.notYetValid || cert.badSignature || hostProblem
+  const b = msg().tls.badges
   return (
     <div
       className={cn('rounded-md border bg-card p-2.5 text-xs', problem && 'border-destructive/60')}
@@ -50,25 +56,25 @@ function CertCard({
           {cert.name}
         </span>
         <div className="flex-1" />
-        {cert.trusted && <Badge tone="ok">受信任的根憑證</Badge>}
-        {cert.source === 'trust-store' && <Badge tone="muted">來自信任清單</Badge>}
-        {cert.selfSigned && !cert.trusted && <Badge tone="bad">自簽、不受信任</Badge>}
-        {cert.expired && <Badge tone="bad">已過期</Badge>}
-        {cert.notYetValid && <Badge tone="bad">尚未生效</Badge>}
-        {cert.badSignature && <Badge tone="bad">簽章對不上</Badge>}
-        {hostProblem && <Badge tone="bad">網域不符</Badge>}
+        {cert.trusted && <Badge tone="ok">{b.trustedRoot}</Badge>}
+        {cert.source === 'trust-store' && <Badge tone="muted">{b.fromStore}</Badge>}
+        {cert.selfSigned && !cert.trusted && <Badge tone="bad">{b.selfSigned}</Badge>}
+        {cert.expired && <Badge tone="bad">{b.expired}</Badge>}
+        {cert.notYetValid && <Badge tone="bad">{b.notYetValid}</Badge>}
+        {cert.badSignature && <Badge tone="bad">{b.badSignature}</Badge>}
+        {hostProblem && <Badge tone="bad">{b.hostMismatch}</Badge>}
       </div>
       <dl className="mt-1.5 grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-muted-foreground select-text">
-        <dt>簽發者</dt>
+        <dt>{msg().tls.issuer}</dt>
         <dd className="break-all text-foreground">{cert.issuerName}</dd>
-        <dt>有效期間</dt>
+        <dt>{msg().tls.validity}</dt>
         <dd className={cn((cert.expired || cert.notYetValid) && 'text-destructive')}>
           {date(cert.validFrom)} – {date(cert.validTo)}
         </dd>
         {cert.altNames.length > 0 && (
           <>
-            <dt>適用名稱</dt>
-            <dd className="break-all">{cert.altNames.join('、')}</dd>
+            <dt>{msg().tls.names}</dt>
+            <dd className="break-all">{msg().common.list(cert.altNames)}</dd>
           </>
         )}
         <dt>SHA-256</dt>
@@ -107,14 +113,14 @@ export function TlsDiagnosisView({
     >
       <h3 className="flex items-center gap-1.5 text-sm font-medium">
         <Icon className="size-4 shrink-0" />
-        {title ?? `憑證檢查：${d.summary}`}
+        {title ?? msg().tls.heading(d.summary)}
       </h3>
       {d.advice && <p className="text-xs text-muted-foreground">{d.advice}</p>}
       {action}
       {d.chain.length > 0 && (
         <div className="flex flex-col">
           <p className="mb-1 text-xs text-muted-foreground">
-            {d.host}:{d.port} 送出的憑證鏈（上面的由下面的簽發）
+            {msg().tls.chainSent(`${d.host}:${d.port}`)}
           </p>
           {d.chain.map((cert, i) => (
             <div key={`${cert.fingerprint256}-${i}`}>
@@ -134,13 +140,13 @@ export function TlsDiagnosisView({
                 data-testid="tls-missing"
               >
                 <p>
-                  <span className="text-muted-foreground">缺少：</span>
+                  <span className="text-muted-foreground">{msg().tls.missing}</span>
                   <span className="font-medium">{d.missing.name}</span>
-                  {d.verdict === 'incomplete-chain' ? '（伺服器沒有送出）' : '（不在信任清單中）'}
+                  {d.verdict === 'incomplete-chain' ? msg().tls.notSent : msg().tls.notTrusted}
                 </p>
                 {d.missing.aiaUrl && (
                   <p className="mt-1 break-all text-muted-foreground select-text">
-                    憑證中的下載位置（AIA）：{d.missing.aiaUrl}
+                    {msg().tls.aia(d.missing.aiaUrl)}
                   </p>
                 )}
               </div>
@@ -149,7 +155,9 @@ export function TlsDiagnosisView({
         </div>
       )}
       {d.opensslError && (
-        <p className="font-mono text-[11px] text-muted-foreground">驗證錯誤：{d.opensslError}</p>
+        <p className="font-mono text-[11px] text-muted-foreground">
+          {msg().tls.verifyError(d.opensslError)}
+        </p>
       )}
     </section>
   )

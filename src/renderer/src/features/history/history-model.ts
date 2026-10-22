@@ -1,4 +1,5 @@
 import type { HistoryEntry } from '@shared/schemas/history'
+import { localeOf, msg } from '@shared/i18n'
 
 export interface HistoryGroup {
   label: string
@@ -19,10 +20,10 @@ export function groupByDay(entries: readonly HistoryEntry[], now: Date): History
     const key = dayKey(date)
     const label =
       key === today
-        ? '今天'
+        ? msg().history.today
         : key === yesterday
-          ? '昨天'
-          : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+          ? msg().history.yesterday
+          : date.toLocaleDateString(localeOf(), { year: 'numeric', month: 'short', day: 'numeric' })
     const last = groups.at(-1)
     if (last?.label === label) last.entries.push(entry)
     else groups.push({ label, entries: [entry] })

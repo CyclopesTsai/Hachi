@@ -8,6 +8,7 @@ import { useTreeStore } from '@renderer/stores/tree-store'
 import { DiffView } from './DiffView'
 import { fileIndex, labelFor } from './git-names'
 import { layoutGraph, type GraphRow } from './graph'
+import { msg } from '@shared/i18n'
 
 const ROW_HEIGHT = 28
 const COLUMN_WIDTH = 14
@@ -126,7 +127,7 @@ function CommitDetail() {
   const tree = useTreeStore((s) => s.tree)
   const index = useMemo(() => fileIndex(tree), [tree])
   if (!detail) {
-    return <p className="m-auto text-sm text-muted-foreground">選擇左側的 commit 查看內容</p>
+    return <p className="m-auto text-sm text-muted-foreground">{msg().git.history.pickCommit}</p>
   }
   const [subject, ...body] = detail.message.split('\n')
   return (
@@ -139,18 +140,20 @@ function CommitDetail() {
           </p>
         )}
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
-          <dt className="text-muted-foreground">作者</dt>
+          <dt className="text-muted-foreground">{msg().git.history.author}</dt>
           <dd className="truncate">
             {detail.author} &lt;{detail.email}&gt;
           </dd>
-          <dt className="text-muted-foreground">時間</dt>
+          <dt className="text-muted-foreground">{msg().git.history.time}</dt>
           <dd>{formatDate(detail.date)}</dd>
           <dt className="text-muted-foreground">Commit</dt>
           <dd className="font-mono select-text">{detail.hash}</dd>
           {detail.parents.length > 0 && (
             <>
               <dt className="text-muted-foreground">
-                {detail.parents.length > 1 ? '合併自' : '上一個'}
+                {detail.parents.length > 1
+                  ? msg().git.history.mergedFrom
+                  : msg().git.history.parent}
               </dt>
               <dd className="flex flex-wrap gap-2 font-mono">
                 {detail.parents.map((p) => (
@@ -175,8 +178,8 @@ function CommitDetail() {
           </div>
         )}
         <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          改了 {detail.files.length} 個檔案
-          {detail.parents.length > 1 ? '（相對於第一個上一個 commit）' : ''}
+          {msg().git.history.filesChanged(detail.files.length)}
+          {detail.parents.length > 1 ? msg().git.history.relativeToFirst : ''}
         </p>
         <ul className="flex flex-col">
           {detail.files.map((f) => {
@@ -201,7 +204,9 @@ function CommitDetail() {
                     {letter}
                   </span>
                   <span className="truncate">{title}</span>
-                  {!f.inWorkspace && <span className="shrink-0 text-[11px]">（Workspace 外）</span>}
+                  {!f.inWorkspace && (
+                    <span className="shrink-0 text-[11px]">{msg().git.history.outside}</span>
+                  )}
                 </button>
               </li>
             )
@@ -209,10 +214,10 @@ function CommitDetail() {
         </ul>
       </div>
       {commitDiff ? (
-        <DiffView diff={commitDiff} labels={['上一個 commit', '這個 commit']} />
+        <DiffView diff={commitDiff} labels={[msg().git.history.before, msg().git.history.after]} />
       ) : (
         <p className="m-auto text-sm text-muted-foreground">
-          {commitFile ? '讀取中…' : '選擇檔案查看這個 commit 改了什麼'}
+          {commitFile ? msg().git.loading : msg().git.history.pickFile}
         </p>
       )}
     </div>
@@ -235,23 +240,20 @@ export function GitHistory() {
     <div className="flex min-h-0 flex-1" data-testid="git-history">
       <section className="flex min-w-0 flex-[3] flex-col border-r">
         <div className="flex h-8 shrink-0 items-center gap-2 border-b px-3 text-xs text-muted-foreground">
-          <span>
-            所有分支（{log?.commits.length ?? 0}
-            {log?.more ? '+' : ''} 個 commit）
-          </span>
+          <span>{msg().git.history.allBranches(log?.commits.length ?? 0, !!log?.more)}</span>
           <div className="flex-1" />
           <button
             type="button"
             className="hover:text-foreground"
-            title="重新整理"
-            aria-label="重新整理歷史"
+            title={msg().git.refresh}
+            aria-label={msg().git.history.refresh}
             onClick={() => void useGitStore.getState().loadLog(true)}
           >
             <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
           </button>
         </div>
         {log && log.commits.length === 0 ? (
-          <p className="p-3 text-sm text-muted-foreground">還沒有任何 commit。</p>
+          <p className="p-3 text-sm text-muted-foreground">{msg().git.history.none}</p>
         ) : (
           <ul className="min-h-0 flex-1 overflow-auto py-1">
             {log?.commits.map((commit, i) => (
@@ -271,7 +273,7 @@ export function GitHistory() {
                   disabled={loading}
                   onClick={() => void useGitStore.getState().loadLog(false)}
                 >
-                  載入更多
+                  {msg().git.history.more}
                 </Button>
               </li>
             )}

@@ -32,6 +32,7 @@ import { reveal, revealLabel } from '@renderer/lib/reveal'
 import { useAppStore } from '@renderer/stores/app-store'
 import { CookiesDialog } from './CookiesDialog'
 import { DeleteWorkspaceDialog, RenameWorkspaceDialog } from './WorkspaceDialogs'
+import { msg } from '@shared/i18n'
 
 /** Main layout once a Workspace is open: header, Collection tree, item panel. */
 export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
@@ -72,11 +73,11 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
           <DropdownMenuContent align="start">
             <DropdownMenuItem onSelect={() => setRenaming(true)}>
               <Pencil />
-              重新命名 Workspace…
+              {msg().workspace.menu.rename}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
               <Settings />
-              Workspace 設定…
+              {msg().workspace.menu.settings}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setCookiesOpen(true)} data-testid="open-cookies">
               <Cookie />
@@ -88,12 +89,12 @@ export function WorkspaceShell({ workspace }: { workspace: WorkspaceInfo }) {
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => showWelcome()}>
               <ArrowLeftRight />
-              切換 Workspace…
+              {msg().workspace.menu.switch}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)}>
               <Trash2 />
-              刪除 Workspace…
+              {msg().workspace.menu.delete}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

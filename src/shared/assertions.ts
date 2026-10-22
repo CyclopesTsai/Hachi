@@ -10,41 +10,21 @@ import type {
   ExtractionSource
 } from './schemas/http-request'
 import type { AssertionResult, ExtractionResult } from './scripts'
+import { msg } from './i18n'
 
-export const ASSERTION_TARGET_LABELS: Record<AssertionTarget, string> = {
-  status: '狀態碼',
-  responseTime: '耗時（ms）',
-  header: 'Header',
-  jsonBody: 'JSON 欄位',
-  body: 'Body 文字'
-}
-
-export const ASSERTION_OPERATOR_LABELS: Record<AssertionOperator, string> = {
-  eq: '等於',
-  neq: '不等於',
-  contains: '包含',
-  notContains: '不包含',
-  exists: '存在',
-  notExists: '不存在',
-  gt: '大於',
-  gte: '大於或等於',
-  lt: '小於',
-  lte: '小於或等於',
-  matches: '符合 Regex',
-  isType: '型別是'
-}
+/** Labels in the interface language (issue #6). */
+export const assertionTargetLabel = (target: AssertionTarget): string =>
+  msg().scripts.targets[target]
+export const assertionOperatorLabel = (operator: AssertionOperator): string =>
+  msg().scripts.operators[operator]
 
 /** Operators that take no expected value. */
 export const UNARY_OPERATORS: readonly AssertionOperator[] = ['exists', 'notExists']
 
 export const VALUE_TYPES = ['string', 'number', 'boolean', 'object', 'array', 'null'] as const
 
-export const EXTRACTION_SOURCE_LABELS: Record<ExtractionSource, string> = {
-  jsonBody: 'JSON 欄位',
-  header: 'Header',
-  status: '狀態碼',
-  body: 'Body（Regex）'
-}
+export const extractionSourceLabel = (source: ExtractionSource): string =>
+  msg().scripts.sources[source]
 
 // ---------------------------------------------------------------------------------
 // JSON paths
@@ -75,7 +55,7 @@ export function parseJsonPath(path: string): (string | number)[] {
         rest = rest.slice(quoted[0].length)
         continue
       }
-      throw new JsonPathError(`無效的 JSON 路徑：${path}`)
+      throw new JsonPathError(msg().scripts.errors.invalidPath(path))
     }
     const key = /^[^.[]+/.exec(rest)?.[0] ?? ''
     parts.push(key)
@@ -161,7 +141,7 @@ export function equalsExpected(actual: unknown, expected: string): boolean {
 }
 
 export function formatValue(value: unknown, max = 200): string {
-  if (value === undefined) return '（不存在）'
+  if (value === undefined) return msg().scripts.errors.missing
   const text = typeof value === 'string' ? value : JSON.stringify(value)
   return text.length > max ? `${text.slice(0, max)}…` : text
 }
@@ -177,12 +157,13 @@ class BodyCache {
   constructor(private readonly body: string | null) {}
   json(): unknown {
     if (!this.parsed) {
-      if (this.body === null) this.parsed = { ok: false, error: '回應不是文字，無法讀取 JSON' }
+      if (this.body === null)
+        this.parsed = { ok: false, error: msg().scripts.errors.notTextForJson }
       else {
         try {
           this.parsed = { ok: true, value: JSON.parse(this.body) as unknown }
         } catch {
-          this.parsed = { ok: false, error: '回應不是有效的 JSON' }
+          this.parsed = { ok: false, error: msg().scripts.errors.notJson }
         }
       }
     }
@@ -194,8 +175,9 @@ class BodyCache {
 function compareNumbers(actual: unknown, expected: string, op: AssertionOperator): boolean {
   const a = typeof actual === 'number' ? actual : Number(actual)
   const e = Number(expected)
-  if (expected.trim() === '' || Number.isNaN(e)) throw new Error(`預期值不是數字：${expected}`)
-  if (Number.isNaN(a)) throw new Error('實際值不是數字')
+  if (expected.trim() === '' || Number.isNaN(e))
+    throw new Error(msg().scripts.errors.expectedNotNumber(expected))
+  if (Number.isNaN(a)) throw new Error(msg().scripts.errors.actualNotNumber)
   switch (op) {
     case 'gt':
       return a > e
@@ -217,9 +199,9 @@ function contains(actual: unknown, expected: string): boolean {
 }
 
 export function assertionLabel(row: Assertion, expected = row.expected): string {
-  const target = ASSERTION_TARGET_LABELS[row.target]
+  const target = assertionTargetLabel(row.target)
   const path = row.target === 'header' || row.target === 'jsonBody' ? ` ${row.path}` : ''
-  const op = ASSERTION_OPERATOR_LABELS[row.operator]
+  const op = assertionOperatorLabel(row.operator)
   return `${target}${path} ${op}${UNARY_OPERATORS.includes(row.operator) ? '' : ` ${expected}`}`
 }
 
@@ -253,7 +235,7 @@ export function evaluateAssertions(
           break
         }
         case 'body':
-          if (facts.body === null) throw new Error('回應不是文字')
+          if (facts.body === null) throw new Error(msg().scripts.errors.notText)
           actual = facts.body
           break
       }
@@ -288,7 +270,7 @@ export function evaluateAssertions(
           try {
             re = new RegExp(expected)
           } catch {
-            throw new Error(`無效的 Regex：${expected}`)
+            throw new Error(msg().scripts.errors.invalidRegex(expected))
           }
           passed =
             actual !== undefined &&
@@ -332,17 +314,17 @@ export function runExtractions(
           break
         case 'header':
           value = headerValue(facts.headers, row.path) ?? null
-          if (value === null) throw new Error(`找不到 Header：${row.path}`)
+          if (value === null) throw new Error(msg().scripts.errors.headerNotFound(row.path))
           break
         case 'jsonBody': {
           const found = getJsonPath(body.json(), row.path)
-          if (!found.found) throw new Error(`找不到 JSON 欄位：${row.path || '$'}`)
+          if (!found.found) throw new Error(msg().scripts.errors.jsonNotFound(row.path || '$'))
           value =
             typeof found.value === 'string' ? found.value : (JSON.stringify(found.value) ?? 'null')
           break
         }
         case 'body': {
-          if (facts.body === null) throw new Error('回應不是文字')
+          if (facts.body === null) throw new Error(msg().scripts.errors.notText)
           if (row.path.trim() === '') {
             value = facts.body
             break
@@ -351,10 +333,10 @@ export function runExtractions(
           try {
             re = new RegExp(row.path)
           } catch {
-            throw new Error(`無效的 Regex：${row.path}`)
+            throw new Error(msg().scripts.errors.invalidRegex(row.path))
           }
           const match = re.exec(facts.body)
-          if (!match) throw new Error('Regex 沒有符合的內容')
+          if (!match) throw new Error(msg().scripts.errors.regexNoMatch)
           value = match[1] ?? match[0]
           break
         }

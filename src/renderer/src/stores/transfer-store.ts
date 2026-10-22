@@ -11,6 +11,7 @@ import { useAppStore } from './app-store'
 import { useEnvStore } from './env-store'
 import { useTabsStore } from './tabs-store'
 import { useTreeStore } from './tree-store'
+import { msg } from '@shared/i18n'
 
 /** One block of the result dialog (one imported file, or the export). */
 export interface TransferResultEntry {
@@ -25,13 +26,14 @@ const MAX_DROP_BYTES = 50 * 1024 * 1024
 const MAX_DROP_FILES = 20
 
 /** Formats offered in the export dialog (decision 105). */
-export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
-  postman: 'Postman Collection v2.1',
-  'bruno-yaml': 'Bruno 資料夾（YAML）',
-  bruno: 'Bruno 資料夾（.bru）',
-  'openapi-html': 'OpenAPI 文件（HTML）',
-  'openapi-json': 'OpenAPI 3.0（JSON）'
-}
+export const EXPORT_FORMATS: ExportFormat[] = [
+  'postman',
+  'bruno-yaml',
+  'bruno',
+  'openapi-html',
+  'openapi-json'
+]
+export const exportFormatLabel = (format: ExportFormat): string => msg().transfer.formats[format]
 
 interface TransferState {
   curlOpen: boolean
@@ -64,16 +66,15 @@ interface TransferState {
 }
 
 function reportEntry(report: ImportReport): TransferResultEntry {
+  const r = msg().transfer.report
   const lines =
     report.kind === 'collection'
       ? [
-          `已建立 Collection「${report.name}」`,
-          `${report.requests} 個請求、${report.folders} 個資料夾、${report.variables} 個變數`,
-          ...(report.environments.length > 0
-            ? [`已建立環境：${report.environments.map((n) => `「${n}」`).join('、')}`]
-            : [])
+          r.createdCollection(report.name),
+          r.counts(report.requests, report.folders, report.variables),
+          ...(report.environments.length > 0 ? [r.createdEnvironments(report.environments)] : [])
         ]
-      : [`已建立環境「${report.name}」`, `${report.variables} 個變數`]
+      : [r.createdEnvironment(report.name), r.variables(report.variables)]
   return { title: report.fileName, lines, warnings: report.warnings }
 }
 
@@ -91,14 +92,19 @@ async function revealImported(report: ImportReport): Promise<void> {
 function outcomeEntry(outcome: ImportOutcome): TransferResultEntry {
   return outcome.report
     ? reportEntry(outcome.report)
-    : { title: outcome.fileName, lines: [], warnings: [], error: outcome.error ?? '匯入失敗' }
+    : {
+        title: outcome.fileName,
+        lines: [],
+        warnings: [],
+        error: outcome.error ?? msg().transfer.report.failed
+      }
 }
 
 /** Shows the results of importing several Bruno collections. */
 async function showOutcomes(outcomes: ImportOutcome[]): Promise<void> {
   for (const outcome of outcomes) if (outcome.report) await revealImported(outcome.report)
   useTransferStore.setState({
-    result: { title: '匯入結果', entries: outcomes.map(outcomeEntry) }
+    result: { title: msg().transfer.report.results, entries: outcomes.map(outcomeEntry) }
   })
 }
 
@@ -111,7 +117,9 @@ async function importWith(run: typeof window.hachi.transfer.importFile): Promise
     const report = await unwrap(run())
     if (!report) return
     await revealImported(report)
-    store.setState({ result: { title: '匯入完成', entries: [reportEntry(report)] } })
+    store.setState({
+      result: { title: msg().transfer.report.done, entries: [reportEntry(report)] }
+    })
   } catch (error) {
     useAppStore.getState().setNotice(errorMessage(error))
   } finally {
@@ -137,8 +145,8 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
     if (warnings.length > 0) {
       set({
         result: {
-          title: '已匯入 cURL',
-          entries: [{ title: request.name, lines: ['已開成未儲存的新分頁'], warnings }]
+          title: msg().transfer.report.curlImported,
+          entries: [{ title: request.name, lines: [msg().transfer.report.openedAsDraft], warnings }]
         }
       })
     }
@@ -162,7 +170,7 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
       const [only] = result.results
       if (result.results.length === 1 && only?.report) {
         await revealImported(only.report)
-        set({ result: { title: '匯入完成', entries: [reportEntry(only.report)] } })
+        set({ result: { title: msg().transfer.report.done, entries: [reportEntry(only.report)] } })
       } else {
         await showOutcomes(result.results)
       }
@@ -208,16 +216,20 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
       set({ exportId: null })
       const warnings = [...result.warnings]
       if (result.skipped.length > 0) {
-        warnings.push(`這個格式不支援 WebSocket，以下項目未匯出：${result.skipped.join('、')}`)
+        warnings.push(msg().transfer.report.noWebSocket(result.skipped))
       }
       if (result.unreadable.length > 0) {
-        warnings.push(`以下項目的檔案無法讀取，未匯出：${result.unreadable.join('、')}`)
+        warnings.push(msg().transfer.report.unreadable(result.unreadable))
       }
       set({
         result: {
-          title: '匯出完成',
+          title: msg().transfer.report.exported,
           entries: [
-            { title: EXPORT_FORMAT_LABELS[format], lines: [`已儲存到 ${result.path}`], warnings }
+            {
+              title: exportFormatLabel(format),
+              lines: [msg().transfer.report.savedTo(result.path)],
+              warnings
+            }
           ]
         }
       })
@@ -233,13 +245,13 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
     try {
       for (const file of files.slice(0, MAX_DROP_FILES)) {
         try {
-          if (file.size > MAX_DROP_BYTES) throw new Error('檔案太大（上限 50 MB）')
+          if (file.size > MAX_DROP_BYTES) throw new Error(msg().transfer.report.tooLarge)
           const text = await file.text()
           // A text file holding a cURL command opens as a new request.
           if (/^\s*(\$\s+)?curl(\.exe)?\s/i.test(text) && text.length <= MAX_CURL_TEXT) {
             const { request, warnings } = parseCurl(text)
             useTabsStore.getState().openDraft(request)
-            entries.push({ title: file.name, lines: ['cURL 已開成未儲存的新分頁'], warnings })
+            entries.push({ title: file.name, lines: [msg().transfer.report.curlFile], warnings })
             continue
           }
           const report = await unwrap(
@@ -253,13 +265,13 @@ export const useTransferStore = create<TransferState>()((set, get) => ({
       }
       if (files.length > MAX_DROP_FILES) {
         entries.push({
-          title: `其餘 ${files.length - MAX_DROP_FILES} 個檔案`,
+          title: msg().transfer.report.rest(files.length - MAX_DROP_FILES),
           lines: [],
           warnings: [],
-          error: `一次最多匯入 ${MAX_DROP_FILES} 個檔案`
+          error: msg().transfer.report.tooMany(MAX_DROP_FILES)
         })
       }
-      set({ result: { title: '匯入結果', entries } })
+      set({ result: { title: msg().transfer.report.results, entries } })
     } finally {
       set({ busy: false })
     }

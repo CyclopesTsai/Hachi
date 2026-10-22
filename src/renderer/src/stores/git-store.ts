@@ -13,6 +13,7 @@ import type {
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from './app-store'
 import { useTabsStore } from './tabs-store'
+import { msg } from '@shared/i18n'
 
 /** The Git screen that replaces the sidebar and tabs (decision 119); null = closed. */
 export type GitView = 'commit' | 'history'
@@ -276,7 +277,7 @@ export const useGitStore = create<GitState>()((set, get) => {
         // Files of the other branch: re-read the tree and every open tab.
         await useTabsStore.getState().reload({ scope: 'workspace' }, { keepUnsaved: true })
       } else {
-        useAppStore.getState().setNotice(get().error ?? '切換分支失敗')
+        useAppStore.getState().setNotice(get().error ?? msg().git.failed.switch)
       }
     },
 
@@ -291,7 +292,7 @@ export const useGitStore = create<GitState>()((set, get) => {
     async setRemote(url) {
       const ok = await operate(() => unwrap(window.hachi.git.setRemote({ url })))
       if (ok) await get().loadRemote()
-      else useAppStore.getState().setNotice(get().error ?? '設定遠端失敗')
+      else useAppStore.getState().setNotice(get().error ?? msg().git.failed.remote)
       return ok
     },
 
@@ -299,7 +300,8 @@ export const useGitStore = create<GitState>()((set, get) => {
       set({ running: 'fetch' })
       const ok = await operate(() => unwrap(window.hachi.git.fetch()))
       set({ running: null })
-      if (!ok && !options?.quiet) useAppStore.getState().setNotice(get().error ?? 'Fetch 失敗')
+      if (!ok && !options?.quiet)
+        useAppStore.getState().setNotice(get().error ?? msg().git.failed.fetch)
     },
 
     async pull() {
@@ -308,7 +310,7 @@ export const useGitStore = create<GitState>()((set, get) => {
       const ok = await operate(() => unwrap(window.hachi.git.pull()))
       set({ running: null })
       if (!ok) {
-        useAppStore.getState().setNotice(get().error ?? 'Pull 失敗')
+        useAppStore.getState().setNotice(get().error ?? msg().git.failed.pull)
         return
       }
       await useTabsStore.getState().reload({ scope: 'workspace' }, { keepUnsaved: true })
@@ -323,7 +325,7 @@ export const useGitStore = create<GitState>()((set, get) => {
       set({ running: 'push' })
       const ok = await operate(() => unwrap(window.hachi.git.push()))
       set({ running: null })
-      if (!ok) useAppStore.getState().setNotice(get().error ?? 'Push 失敗')
+      if (!ok) useAppStore.getState().setNotice(get().error ?? msg().git.failed.push)
     },
 
     async resolve(path, how) {
@@ -411,7 +413,7 @@ export const useGitStore = create<GitState>()((set, get) => {
 
     async createBranch(name) {
       const ok = await operate(() => unwrap(window.hachi.git.createBranch({ name })))
-      if (!ok) useAppStore.getState().setNotice(get().error ?? '建立分支失敗')
+      if (!ok) useAppStore.getState().setNotice(get().error ?? msg().git.failed.branch)
       return ok
     }
   }

@@ -17,6 +17,7 @@ import {
 } from '@codemirror/search'
 import { EditorSelection, type EditorState, type Extension } from '@codemirror/state'
 import { EditorView, type Panel, type ViewUpdate } from '@codemirror/view'
+import { msg } from '@shared/i18n'
 
 /** Matches counted for "3/12"; beyond it the count shows "1000+" (10 MB responses). */
 export const SEARCH_COUNT_MAX = 1000
@@ -75,10 +76,10 @@ export function matchCount(state: EditorState, query: SearchQuery): string | nul
   for (let r = cursor.next(); !r.done; r = cursor.next()) {
     total++
     if (r.value.from === sel.from && r.value.to === sel.to) current = total
-    if (total >= SEARCH_COUNT_MAX) return current ? `${current}/${total}+` : `${total}+ 筆`
+    if (total >= SEARCH_COUNT_MAX) return msg().editor.countMax(current, total)
   }
-  if (total === 0) return '沒有結果'
-  return current ? `${current}/${total}` : `${total} 筆`
+  if (total === 0) return msg().editor.none
+  return msg().editor.count(current, total)
 }
 
 /** Selects the first match at or after the selection (wrapping), as the user types. */
@@ -108,8 +109,8 @@ function createPanel(view: EditorView): Panel {
   const searchField = el('input', {
     class: 'cm-hachi-search-input',
     name: 'search',
-    placeholder: '搜尋',
-    'aria-label': '搜尋',
+    placeholder: msg().editor.search,
+    'aria-label': msg().editor.search,
     'main-field': 'true',
     autocomplete: 'off',
     spellcheck: 'false'
@@ -118,8 +119,8 @@ function createPanel(view: EditorView): Panel {
   const replaceField = el('input', {
     class: 'cm-hachi-search-input',
     name: 'replace',
-    placeholder: '取代',
-    'aria-label': '取代',
+    placeholder: msg().editor.replace,
+    'aria-label': msg().editor.replace,
     autocomplete: 'off',
     spellcheck: 'false'
   })
@@ -168,19 +169,20 @@ function createPanel(view: EditorView): Panel {
 
   const replaceRow = el('div', { class: 'cm-hachi-search-row', 'data-row': 'replace' }, [
     el('span', { class: 'cm-hachi-search-field' }, [replaceField]),
-    textButton('replace', '取代', () => replaceNext(view)),
-    textButton('replaceAll', '全部取代', () => replaceAll(view))
+    textButton('replace', msg().editor.replace, () => replaceNext(view)),
+    textButton('replaceAll', msg().editor.replaceAll, () => replaceAll(view))
   ])
   replaceRow.hidden = true
 
   const dom = el('div', { class: 'cm-hachi-search' })
   let expanded = false
-  const toggle = iconButton('toggle', '顯示取代', chevron(), () => {
+  const toggle = iconButton('toggle', msg().editor.showReplace, chevron(), () => {
     expanded = !expanded
     replaceRow.hidden = !expanded
     toggle.setAttribute('aria-expanded', String(expanded))
-    toggle.setAttribute('aria-label', expanded ? '隱藏取代' : '顯示取代')
-    toggle.title = expanded ? '隱藏取代' : '顯示取代'
+    const label = expanded ? msg().editor.hideReplace : msg().editor.showReplace
+    toggle.setAttribute('aria-label', label)
+    toggle.title = label
     dom.classList.toggle('cm-hachi-search-expanded', expanded)
   })
   toggle.classList.add('cm-hachi-search-toggle')
@@ -190,9 +192,9 @@ function createPanel(view: EditorView): Panel {
     el('span', { class: 'cm-hachi-search-field' }, [magnifier(), searchField]),
     count,
     el('span', { class: 'cm-hachi-search-divider' }),
-    iconButton('prev', '上一個（Shift+Enter）', arrowUp(), () => findPrevious(view)),
-    iconButton('next', '下一個（Enter）', arrowDown(), () => findNext(view)),
-    iconButton('close', '關閉（Esc）', cross(), () => closeSearchPanel(view))
+    iconButton('prev', msg().editor.previous, arrowUp(), () => findPrevious(view)),
+    iconButton('next', msg().editor.next, arrowDown(), () => findNext(view)),
+    iconButton('close', msg().editor.close, cross(), () => closeSearchPanel(view))
   ])
   dom.append(
     ...(editable ? [toggle] : []),

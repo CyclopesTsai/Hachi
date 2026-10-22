@@ -13,6 +13,7 @@ import { ContainerEditor } from './ContainerEditor'
 import { ExampleView } from './ExampleView'
 import { RequestEditor } from './RequestEditor'
 import { RunnerView } from '@renderer/features/runner/RunnerView'
+import { msg } from '@shared/i18n'
 
 function Placeholder({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -33,9 +34,9 @@ function StaticView({ itemId }: { itemId: string }) {
         <p className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span>
-            無法讀取這個檔案：{node.error}
+            {msg().http.host.fileError(node.error)}
             <br />
-            請修正 JSON 內容後按「重新讀取」，或從左側刪除。
+            {msg().http.host.fileErrorHint}
           </span>
         </p>
         <p className="font-mono text-xs text-muted-foreground">{node.relPath}</p>
@@ -52,12 +53,16 @@ function TabContent({ tab }: { tab: Tab }) {
   if (tab.status === 'error') {
     return (
       <Placeholder icon={<AlertTriangle className="size-6 text-destructive" />}>
-        無法開啟：{tab.loadError}
+        {msg().http.host.cannotOpen(tab.loadError ?? '')}
       </Placeholder>
     )
   }
   if (tab.status !== 'ready') {
-    return <Placeholder icon={<Loader2 className="size-5 animate-spin" />}>載入中…</Placeholder>
+    return (
+      <Placeholder icon={<Loader2 className="size-5 animate-spin" />}>
+        {msg().common.loading}
+      </Placeholder>
+    )
   }
   // A fresh editor per loaded content: no undo history leaking between loads.
   const key = `${tab.uid}:${tab.version}`
@@ -90,7 +95,7 @@ export function EditorHost() {
         <TabContent tab={active} />
       ) : (
         <Placeholder icon={<MousePointerClick className="size-6" />}>
-          從左側選擇一個請求，或按右鍵新增項目。
+          {msg().http.host.empty}
           <div className="mt-2 flex gap-2">
             <Button
               variant="outline"
@@ -98,7 +103,7 @@ export function EditorHost() {
               onClick={() => useTabsStore.getState().newRequest('http')}
             >
               <Plus />
-              新增 HTTP 請求
+              {msg().tree.newHttp}
             </Button>
             <Button
               variant="outline"
@@ -106,7 +111,7 @@ export function EditorHost() {
               onClick={() => useTabsStore.getState().newRequest('websocket')}
             >
               <Radio />
-              新增 WebSocket
+              {msg().tree.newWebSocket}
             </Button>
           </div>
         </Placeholder>

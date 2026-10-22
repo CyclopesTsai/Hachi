@@ -13,6 +13,7 @@ import { cn } from '@renderer/lib/utils'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { HeadersTable, ResponseBody } from './ResponseBody'
+import { localeOf, msg } from '@shared/i18n'
 
 const enabledRows = (rows: { key: string; value: string; enabled: boolean }[]) =>
   rows
@@ -48,14 +49,14 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 /** The body that was sent. */
 function SentBody({ body }: { body: ExampleSentBody }) {
-  if (body.kind === 'none') return <Empty>（沒有 Body）</Empty>
+  if (body.kind === 'none') return <Empty>{msg().http.example.noBody}</Empty>
   if (body.kind === 'form') {
     return (
       <HeadersTable
         testId="example-sent-body"
         headers={body.fields.map((f): [string, string] => [
           f.name,
-          f.file ? `（檔案）${f.value}` : f.value
+          f.file ? msg().http.example.file(f.value) : f.value
         ])}
       />
     )
@@ -82,7 +83,10 @@ function WrittenRequest({ request }: { request: HttpRequest }) {
           : body.mode === 'formData'
             ? body.formData
                 .filter((f) => f.enabled && f.key.trim() !== '')
-                .map((f) => `${f.key}: ${f.type === 'file' ? `（檔案）${f.filePath}` : f.value}`)
+                .map(
+                  (f) =>
+                    `${f.key}: ${f.type === 'file' ? msg().http.example.file(f.filePath ?? '') : f.value}`
+                )
                 .join('\n')
             : ''
   const headers = enabledRows(request.headers)
@@ -109,7 +113,9 @@ function WrittenRequest({ request }: { request: HttpRequest }) {
       )}
       {bodyText !== '' && (
         <section className="flex min-h-40 flex-col">
-          <h4 className="mb-1 font-medium text-muted-foreground">Body（{body.mode}）</h4>
+          <h4 className="mb-1 font-medium text-muted-foreground">
+            {msg().http.example.bodyTitle(body.mode)}
+          </h4>
           <TextBlock text={bodyText} testId="example-written-body" />
         </section>
       )}
@@ -152,10 +158,10 @@ function ResponseSide({ example }: { example: ExampleFile }) {
           text={body.encoding === 'text' && body.data !== '' ? body.data : null}
           contentType={response.contentType}
         >
-          {body.data === '' && <Empty>（回應沒有內容）</Empty>}
+          {body.data === '' && <Empty>{msg().http.example.empty}</Empty>}
           {image && (
             <img
-              alt="回應的圖片"
+              alt={msg().http.example.image}
               src={`data:${response.contentType.split(';')[0]};base64,${body.data}`}
               className="max-h-full max-w-full self-start rounded border object-contain"
               data-testid="example-image"
@@ -163,8 +169,10 @@ function ResponseSide({ example }: { example: ExampleFile }) {
           )}
           {body.encoding === 'base64' && !image && body.data !== '' && (
             <Empty>
-              二進位內容（{response.contentType || '未知類型'}，{formatBytes(response.bodyBytes)}
-              ），無法直接顯示。
+              {msg().http.example.binary(
+                response.contentType || msg().http.response.unknownType,
+                formatBytes(response.bodyBytes)
+              )}
             </Empty>
           )}
         </ResponseBody>
@@ -192,11 +200,11 @@ export function ExampleView({ tab, title }: { tab: ExampleTab; title: string }) 
           {title}
         </h2>
         <span className="shrink-0 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
-          儲存的結果（唯讀）
+          {msg().http.example.readOnly}
         </span>
         {savedAt && !Number.isNaN(savedAt.getTime()) && (
           <span className="shrink-0 text-xs text-muted-foreground" data-testid="example-saved-at">
-            {savedAt.toLocaleString()}
+            {savedAt.toLocaleString(localeOf())}
           </span>
         )}
         <div className="flex-1" />
@@ -207,7 +215,7 @@ export function ExampleView({ tab, title }: { tab: ExampleTab; title: string }) 
             onClick={() => useTabsStore.getState().openItem(requestId, { preview: false })}
           >
             <ExternalLink />
-            開啟請求
+            {msg().http.example.openRequest}
           </Button>
         )}
       </div>

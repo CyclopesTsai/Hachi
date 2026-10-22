@@ -8,8 +8,33 @@ import type {
   WorkspaceCreateInput,
   WorkspaceInfo
 } from '@shared/ipc/api'
+import {
+  effectiveLanguage,
+  localeOf,
+  setLanguage,
+  systemLanguage,
+  type Language
+} from '@shared/i18n'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useTabsStore } from './tabs-store'
+
+/**
+ * The interface language (issue #6): the setting, or the system's. Also sets the language
+ * texts are read in (`msg()`) and `<html lang>`.
+ */
+function applyLanguage(language: Language): { language: Language } {
+  setLanguage(language)
+  document.documentElement.lang = localeOf(language)
+  return { language }
+}
+
+const languageOf = (config: AppConfig, info: AppInfo | null): { language: Language } =>
+  applyLanguage(
+    effectiveLanguage(
+      config.ui.language,
+      info?.systemLanguage ?? systemLanguage(navigator.languages)
+    )
+  )
 
 /** Leaving the current Workspace asks about unsaved tabs first. */
 const guardLeave = () => useTabsStore.getState().guardLeave()
@@ -21,6 +46,8 @@ interface AppState {
   bootError: string | null
   info: AppInfo | null
   config: AppConfig | null
+  /** Interface language in use; the screen is rebuilt when it changes. */
+  language: Language
   currentWorkspace: WorkspaceInfo | null
   recent: RecentWorkspaceEntry[]
   defaultWorkspaceDir: string
@@ -62,6 +89,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   bootError: null,
   info: null,
   config: null,
+  // Until the config is read: the browser's idea of the system language.
+  ...applyLanguage(systemLanguage(navigator.languages)),
   currentWorkspace: null,
   recent: [],
   defaultWorkspaceDir: '',
@@ -88,7 +117,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   async updateConfig(input) {
-    set({ config: await unwrap(window.hachi.config.update(input)) })
+    const config = await unwrap(window.hachi.config.update(input))
+    set({ config, ...languageOf(config, get().info) })
   },
 
   setAppSettingsOpen(open) {
@@ -109,7 +139,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
         unwrap(api.workspace.listRecent()),
         unwrap(api.app.getDefaultWorkspaceDir())
       ])
-      set({ status: 'ready', info, config, currentWorkspace, recent, defaultWorkspaceDir })
+      set({
+        status: 'ready',
+        info,
+        config,
+        ...languageOf(config, info),
+        currentWorkspace,
+        recent,
+        defaultWorkspaceDir
+      })
     } catch (error) {
       set({ status: 'error', bootError: errorMessage(error) })
     }
@@ -174,7 +212,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   configChanged(config) {
-    set({ config })
+    set({ config, ...languageOf(config, get().info) })
   },
 
   showWelcome(options) {

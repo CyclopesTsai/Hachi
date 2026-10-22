@@ -8,6 +8,7 @@
 import type { VariableMap } from '@shared/variables'
 import { unwrap, errorMessage } from './ipc'
 import { describeVariable } from './variables'
+import { msg } from '@shared/i18n'
 
 export interface HoverToken {
   name: string
@@ -17,13 +18,6 @@ export interface HoverToken {
 const SHOW_DELAY_MS = 300
 const HIDE_DELAY_MS = 250
 const CARD_WIDTH = 320
-
-const SOURCE_LABEL = {
-  runtime: '暫存變數',
-  data: '資料檔',
-  environment: '環境',
-  collection: 'Collection'
-} as const
 
 let card: HTMLDivElement | null = null
 let shownName: string | null = null
@@ -88,7 +82,7 @@ function build(name: string, map: VariableMap): HTMLDivElement {
     const info = describeVariable(name, map)
     const p = document.createElement('p')
     p.className = 'break-all text-muted-foreground'
-    p.textContent = variable ? `${info.detail}（這裡不能修改）` : info.detail
+    p.textContent = variable ? msg().vars.readOnly(info.detail) : info.detail
     el.append(p)
     return el
   }
@@ -98,8 +92,8 @@ function build(name: string, map: VariableMap): HTMLDivElement {
     'ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground'
   badge.textContent =
     variable.source === 'runtime'
-      ? SOURCE_LABEL.runtime
-      : `${SOURCE_LABEL[variable.source]}「${variable.sourceName}」`
+      ? msg().vars.sources.runtime
+      : msg().vars.named(msg().vars.sources[variable.source], variable.sourceName)
   head.append(badge)
 
   const row = document.createElement('div')
@@ -109,7 +103,7 @@ function build(name: string, map: VariableMap): HTMLDivElement {
     'h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 font-mono text-xs outline-none focus-visible:border-ring'
   input.value = variable.value
   input.spellcheck = false
-  input.setAttribute('aria-label', `${name} 的值`)
+  input.setAttribute('aria-label', msg().vars.valueOf(name))
   input.type = variable.secret ? 'password' : 'text'
   row.append(input)
   if (variable.secret) {
@@ -117,13 +111,13 @@ function build(name: string, map: VariableMap): HTMLDivElement {
     eye.type = 'button'
     eye.className =
       'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground'
-    eye.setAttribute('aria-label', '顯示值')
+    eye.setAttribute('aria-label', msg().vars.show)
     eye.innerHTML = EYE
     eye.addEventListener('click', () => {
       const show = input.type === 'password'
       input.type = show ? 'text' : 'password'
       eye.innerHTML = show ? EYE_OFF : EYE
-      eye.setAttribute('aria-label', show ? '隱藏值' : '顯示值')
+      eye.setAttribute('aria-label', show ? msg().vars.hide : msg().vars.show)
       input.focus()
     })
     row.append(eye)
@@ -132,7 +126,7 @@ function build(name: string, map: VariableMap): HTMLDivElement {
 
   const hint = document.createElement('p')
   hint.className = 'text-[11px] text-muted-foreground'
-  hint.textContent = `Enter 儲存、Esc 取消${variable.secret ? '（機密值只存在 .hachi-secrets.json）' : ''}`
+  hint.textContent = `${msg().vars.editHint}${variable.secret ? msg().vars.secretHint : ''}`
   el.append(hint)
 
   let done = false

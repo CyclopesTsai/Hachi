@@ -46,17 +46,18 @@ import { buildChangeTree, type ChangeFolder, type ChangeNode } from './change-tr
 import { DiffView } from './DiffView'
 import { GitHistory } from './GitHistory'
 import { fileIndex, gitInstallHint, labelFor, type FileLabel } from './git-names'
+import { msg } from '@shared/i18n'
 
 /** While the Git screen is open, changes made by saving files show up without a click. */
 const POLL_MS = 4000
 
-const KINDS: Record<GitChangeKind, { letter: string; label: string; className: string }> = {
-  modified: { letter: 'M', label: '已修改', className: 'text-amber-600 dark:text-amber-400' },
-  added: { letter: 'A', label: '新增', className: 'text-emerald-600 dark:text-emerald-400' },
-  untracked: { letter: 'U', label: '新檔案', className: 'text-emerald-600 dark:text-emerald-400' },
-  deleted: { letter: 'D', label: '已刪除', className: 'text-red-600 dark:text-red-400' },
-  renamed: { letter: 'R', label: '已更名', className: 'text-sky-600 dark:text-sky-400' },
-  conflicted: { letter: '!', label: '衝突', className: 'text-red-600 dark:text-red-400' }
+const KINDS: Record<GitChangeKind, { letter: string; className: string }> = {
+  modified: { letter: 'M', className: 'text-amber-600 dark:text-amber-400' },
+  added: { letter: 'A', className: 'text-emerald-600 dark:text-emerald-400' },
+  untracked: { letter: 'U', className: 'text-emerald-600 dark:text-emerald-400' },
+  deleted: { letter: 'D', className: 'text-red-600 dark:text-red-400' },
+  renamed: { letter: 'R', className: 'text-sky-600 dark:text-sky-400' },
+  conflicted: { letter: '!', className: 'text-red-600 dark:text-red-400' }
 }
 
 function NoGit() {
@@ -66,7 +67,7 @@ function NoGit() {
       className="flex flex-col gap-2 px-3 py-3 text-sm text-muted-foreground"
       data-testid="git-missing"
     >
-      <p>找不到 git。Hachi 使用這台電腦安裝的 git：{gitInstallHint(platform)}</p>
+      <p>{msg().git.missing(gitInstallHint(platform))}</p>
       <Button
         variant="outline"
         size="sm"
@@ -74,7 +75,7 @@ function NoGit() {
         onClick={() => void useGitStore.getState().refresh()}
       >
         <RefreshCw />
-        重新偵測
+        {msg().git.detectAgain}
       </Button>
     </div>
   )
@@ -87,10 +88,8 @@ function NotRepo() {
       className="flex flex-col gap-2 px-3 py-3 text-sm text-muted-foreground"
       data-testid="git-not-repo"
     >
-      <p>這個 Workspace 不在 Git repo 中。</p>
-      <p className="text-xs">
-        建立後會在 Workspace 資料夾中產生 .git；機密變數與歷史紀錄已在 .gitignore 中，不會被提交。
-      </p>
+      <p>{msg().git.notRepo}</p>
+      <p className="text-xs">{msg().git.notRepoHint}</p>
       <Button
         variant="outline"
         size="sm"
@@ -98,7 +97,7 @@ function NotRepo() {
         disabled={busy}
         onClick={() => void useGitStore.getState().init()}
       >
-        建立 Git repo（git init）
+        {msg().git.init}
       </Button>
     </div>
   )
@@ -122,7 +121,7 @@ function FileRow({
   depth?: number
   name?: string
 }) {
-  const kind = KINDS[file.kind]
+  const kind = { ...KINDS[file.kind], label: msg().git.kinds[file.kind] }
   const open = () => {
     if (!label.itemId) return
     useGitStore.getState().closeView()
@@ -139,7 +138,7 @@ function FileRow({
       aria-selected={selected}
       data-testid="git-file"
       data-path={file.path}
-      title={`${file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}${label.itemId ? '（按兩下開啟）' : ''}`}
+      title={`${file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}${label.itemId ? msg().git.openHint : ''}`}
       onClick={() => void useGitStore.getState().select(file.path)}
       onDoubleClick={open}
     >
@@ -170,8 +169,8 @@ function FileRow({
         <button
           type="button"
           className="hidden shrink-0 text-muted-foreground group-hover:block hover:text-foreground"
-          title="捨棄變更…"
-          aria-label={`捨棄 ${label.title} 的變更`}
+          title={msg().git.discardTitle}
+          aria-label={msg().git.discardLabel(label.title)}
           onClick={(e) => {
             e.stopPropagation()
             onDiscard()
@@ -218,7 +217,7 @@ function FolderRow({
       <input
         type="checkbox"
         className="size-3.5 shrink-0 accent-primary"
-        aria-label={`Commit ${folder.name} 內的檔案`}
+        aria-label={msg().git.commitFolder(folder.name)}
         checked={checkedCount === folder.paths.length}
         ref={(el) => {
           if (el) el.indeterminate = checkedCount > 0 && checkedCount < folder.paths.length
@@ -253,25 +252,23 @@ function DiscardDialog({
     <AlertDialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent data-testid="git-discard-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>捨棄「{target?.label.title}」的變更？</AlertDialogTitle>
+          <AlertDialogTitle>{msg().git.discardConfirm(target?.label.title ?? '')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {isNew
-              ? '這是還沒 commit 過的新檔案，會移到系統垃圾桶。'
-              : '檔案會還原成最後一次 commit 的內容，目前的修改無法復原。'}
+            {isNew ? msg().git.discardNew : msg().git.discardModified}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <p className="rounded bg-muted px-2 py-1 font-mono text-xs break-all">
           {target?.file.path}
         </p>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
               if (target) void useGitStore.getState().discard(target.file.path, target.label.itemId)
             }}
           >
-            捨棄變更
+            {msg().git.discard}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -297,13 +294,11 @@ function IdentityDialog() {
       <DialogContent data-testid="git-identity-dialog">
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>設定 Git 使用者</DialogTitle>
-            <DialogDescription>
-              Commit 會記錄作者的名稱與 Email（git config user.name / user.email）。
-            </DialogDescription>
+            <DialogTitle>{msg().git.identityTitle}</DialogTitle>
+            <DialogDescription>{msg().git.identityDescription}</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="git-name">名稱</Label>
+            <Label htmlFor="git-name">{msg().git.name}</Label>
             <Input id="git-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -316,7 +311,7 @@ function IdentityDialog() {
             />
           </div>
           <CheckboxLabel checked={global} onChange={(e) => setGlobal(e.target.checked)}>
-            用於這台電腦的所有 repo（git config --global）
+            {msg().git.identityGlobal}
           </CheckboxLabel>
           <DialogFooter>
             <Button
@@ -324,10 +319,10 @@ function IdentityDialog() {
               variant="outline"
               onClick={() => useGitStore.getState().cancelIdentity()}
             >
-              取消
+              {msg().common.cancel}
             </Button>
             <Button type="submit" disabled={busy || name.trim() === '' || email.trim() === ''}>
-              儲存並 Commit
+              {msg().git.saveAndCommit}
             </Button>
           </DialogFooter>
         </form>
@@ -401,7 +396,10 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
             {status.branch ?? `HEAD ${status.head ?? ''}`}
           </span>
           {status.upstream && (status.ahead > 0 || status.behind > 0) && (
-            <span className="flex shrink-0 items-center gap-1" title={`相對於 ${status.upstream}`}>
+            <span
+              className="flex shrink-0 items-center gap-1"
+              title={msg().git.relativeTo(status.upstream)}
+            >
               {status.ahead > 0 && (
                 <span className="flex items-center">
                   <ArrowUp className="size-3" />
@@ -420,8 +418,8 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
           <button
             type="button"
             className="text-muted-foreground hover:text-foreground"
-            title="重新整理"
-            aria-label="重新整理 Git 狀態"
+            title={msg().git.refresh}
+            aria-label={msg().git.refreshStatus}
             onClick={() => void useGitStore.getState().refresh()}
           >
             <RefreshCw className="size-3.5" />
@@ -429,7 +427,7 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
         </div>
         <div className="flex items-center gap-2 px-1">
           <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            變更（{status.files.length}）
+            {msg().git.changes(status.files.length)}
           </span>
           <div className="flex-1" />
           {status.files.length > 0 && (
@@ -437,14 +435,18 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
               checked={allChecked}
               onChange={() => useGitStore.getState().setAll(!allChecked)}
             >
-              全選
+              {msg().git.selectAll}
             </CheckboxLabel>
           )}
-          <div className="flex items-center rounded-md border" role="group" aria-label="顯示方式">
+          <div
+            className="flex items-center rounded-md border"
+            role="group"
+            aria-label={msg().git.viewMode}
+          >
             {(
               [
-                [true, ListTree, '樹狀顯示'],
-                [false, List, '清單顯示']
+                [true, ListTree, msg().git.treeView],
+                [false, List, msg().git.listView]
               ] as const
             ).map(([value, Icon, title]) => (
               <button
@@ -467,7 +469,7 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
         </div>
         {status.files.length === 0 ? (
           <p className="flex-1 px-1 text-sm text-muted-foreground" data-testid="git-clean">
-            沒有變更。
+            {msg().git.clean}
           </p>
         ) : (
           <ul
@@ -499,10 +501,10 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
         ) : (
           <>
             <textarea
-              aria-label="Commit 訊息"
+              aria-label={msg().git.message}
               data-testid="git-message"
               disabled={committing}
-              placeholder="Commit 訊息"
+              placeholder={msg().git.message}
               rows={4}
               value={message}
               onChange={(e) => useGitStore.getState().setMessage(e.target.value)}
@@ -516,11 +518,11 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
               onClick={() => void useGitStore.getState().commit()}
             >
               {committing && <Loader2 className="animate-spin" />}
-              {committing ? 'Commit 中…' : `Commit（${checkedCount} 個檔案）`}
+              {committing ? msg().git.committing : msg().git.commit(checkedCount)}
             </Button>
             {committing && (
               <p className="text-xs text-muted-foreground" data-testid="git-committing">
-                正在 commit {checkedCount} 個檔案，檔案多時可能需要一些時間…
+                {msg().git.committingHint(checkedCount)}
               </p>
             )}
           </>
@@ -532,7 +534,7 @@ function RepoScreen({ status }: { status: GitRepoStatus }) {
           <DiffView diff={diff} />
         ) : (
           <p className="m-auto text-sm text-muted-foreground">
-            {selected ? '讀取中…' : '選擇左側的檔案查看與最後一次 commit 的差異'}
+            {selected ? msg().git.loading : msg().git.pickFile}
           </p>
         )}
       </section>
@@ -551,9 +553,7 @@ function MergeBox({ conflicts }: { conflicts: number }) {
       data-testid="git-merge"
     >
       <p className="font-medium">
-        {conflicts > 0
-          ? `合併中：還有 ${conflicts} 個衝突的檔案（標示 !）。點檔案選擇保留哪一邊。`
-          : '衝突都解決了，可以完成合併。'}
+        {conflicts > 0 ? msg().git.merging(conflicts) : msg().git.mergeReady}
       </p>
       <div className="flex gap-2">
         <Button
@@ -563,27 +563,25 @@ function MergeBox({ conflicts }: { conflicts: number }) {
           disabled={busy || conflicts > 0}
           onClick={() => void useGitStore.getState().finishMerge()}
         >
-          完成合併
+          {msg().git.finishMerge}
         </Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => setAborting(true)}>
-          放棄合併…
+          {msg().git.abortMergeMenu}
         </Button>
       </div>
       <AlertDialog open={aborting} onOpenChange={setAborting}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>放棄這次合併？</AlertDialogTitle>
-            <AlertDialogDescription>
-              回到 Pull 之前的狀態（git merge --abort），合併中做的選擇都會取消。
-            </AlertDialogDescription>
+            <AlertDialogTitle>{msg().git.abortTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{msg().git.abortDescription}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => void useGitStore.getState().abortMerge()}
             >
-              放棄合併
+              {msg().git.abortMerge}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -602,19 +600,19 @@ function ConflictBar({ path }: { path: string }) {
       className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-amber-500/10 px-3 py-2 text-xs"
       data-testid="git-conflict"
     >
-      <span className="font-medium">這個檔案有衝突：</span>
+      <span className="font-medium">{msg().git.conflict}</span>
       <Button size="sm" variant="outline" disabled={busy} onClick={() => resolve('ours')}>
-        保留我的
+        {msg().git.ours}
       </Button>
       <Button size="sm" variant="outline" disabled={busy} onClick={() => resolve('theirs')}>
-        使用遠端的
+        {msg().git.theirs}
       </Button>
-      <span className="text-muted-foreground">或</span>
+      <span className="text-muted-foreground">{msg().git.or}</span>
       <Button size="sm" variant="ghost" onClick={() => void useGitStore.getState().openFile(path)}>
-        用其他程式編輯
+        {msg().git.editExternally}
       </Button>
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => resolve('resolved')}>
-        標記已解決
+        {msg().git.markResolved}
       </Button>
     </div>
   )
@@ -646,7 +644,7 @@ function RemoteButtons() {
         onClick={() => void useGitStore.getState().pull()}
       >
         {spin('pull') ?? <ArrowDownToLine />}
-        Pull{status.behind > 0 ? `（${status.behind}）` : ''}
+        Pull{status.behind > 0 ? msg().git.count(status.behind) : ''}
       </Button>
       <Button
         variant="outline"
@@ -656,7 +654,7 @@ function RemoteButtons() {
         onClick={() => void useGitStore.getState().push()}
       >
         {spin('push') ?? <ArrowUpFromLine />}
-        Push{status.ahead > 0 ? `（${status.ahead}）` : ''}
+        Push{status.ahead > 0 ? msg().git.count(status.ahead) : ''}
       </Button>
     </div>
   )
@@ -690,7 +688,7 @@ export function GitScreen() {
           onClick={() => useGitStore.getState().closeView()}
         >
           <ArrowLeft />
-          返回
+          {msg().git.back}
         </Button>
         <div role="tablist" aria-label="Git" className="flex items-center gap-0.5">
           {(

@@ -17,6 +17,7 @@ import type { AnyRequest } from '@shared/schemas/request'
 import type { WsMessageFormat, WsRequest } from '@shared/schemas/ws-request'
 import type { SessionData, SessionTab } from '@shared/schemas/session'
 import { findExample, findNode, isContainer, type TreeNode, type WorkspaceTree } from '@shared/tree'
+import { msg } from '@shared/i18n'
 
 export type TabKey = string
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -325,9 +326,10 @@ export function tabTitle(
   tree: WorkspaceTree,
   mocks: readonly { id: string; name: string }[] = []
 ): string {
-  if (tab.kind === 'environments') return '環境'
-  if (tab.kind === 'mock') return `Mock：${mocks.find((m) => m.id === tab.mockId)?.name ?? ''}`
-  if (tab.kind === 'runner') return `執行：${findNode(tree, tab.itemId)?.node.name ?? ''}`
+  if (tab.kind === 'environments') return msg().tabs.environments
+  if (tab.kind === 'mock')
+    return msg().tabs.mock(mocks.find((m) => m.id === tab.mockId)?.name ?? '')
+  if (tab.kind === 'runner') return msg().tabs.runner(findNode(tree, tab.itemId)?.node.name ?? '')
   if (tab.kind === 'example') {
     return findExample(tree, tab.exampleId)?.example.name ?? tab.data?.name ?? ''
   }

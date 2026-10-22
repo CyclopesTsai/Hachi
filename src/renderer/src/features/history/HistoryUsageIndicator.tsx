@@ -1,5 +1,6 @@
 import { cn } from '@renderer/lib/utils'
 import { useHistoryStore } from '@renderer/stores/history-store'
+import { msg } from '@shared/i18n'
 
 const RADIUS = 6
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
@@ -26,10 +27,10 @@ export function HistoryUsageIndicator() {
       data-percent={percent}
       className="flex items-center gap-1.5 rounded-sm px-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
       title={[
-        `歷史紀錄：${usage.total} / ${usage.max} 筆（所有 Workspace 共用）`,
-        `目前 Workspace：${usage.workspace} 筆`,
-        ratio >= 1 ? '已達上限：新的紀錄會取代最舊的紀錄' : null,
-        '上限可在 App 設定調整；點一下開啟歷史紀錄'
+        msg().history.usage(usage.total, usage.max),
+        msg().history.usageWorkspace(usage.workspace),
+        ratio >= 1 ? msg().history.usageFull : null,
+        msg().history.usageHint
       ]
         .filter(Boolean)
         .join('\n')}
@@ -48,7 +49,7 @@ export function HistoryUsageIndicator() {
           className={cn(tone)}
         />
       </svg>
-      <span>歷史 {percent}%</span>
+      <span>{msg().history.usageShort(percent)}</span>
     </button>
   )
 }

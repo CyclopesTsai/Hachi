@@ -8,6 +8,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { OAuth2Auth } from '@shared/schemas/collection'
 import type { OAuth2TokenStatus } from '@shared/http'
+import { msg } from '@shared/i18n'
 
 export class OAuth2Error extends Error {
   constructor(message: string) {
@@ -65,15 +66,15 @@ export function tokenKey(auth: OAuth2Auth): string {
 
 export function requireUrl(value: string, label: string): string {
   const text = value.trim()
-  if (text === '') throw new OAuth2Error(`OAuth 2.0 的 ${label} 是空的`)
+  if (text === '') throw new OAuth2Error(msg().httpMain.oauth2.empty(label))
   let url: URL
   try {
     url = new URL(text)
   } catch {
-    throw new OAuth2Error(`OAuth 2.0 的 ${label} 不是有效的網址：${text}`)
+    throw new OAuth2Error(msg().httpMain.oauth2.invalidUrl(label, text))
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new OAuth2Error(`OAuth 2.0 的 ${label} 需要 http:// 或 https://`)
+    throw new OAuth2Error(msg().httpMain.oauth2.needHttp(label))
   }
   return url.toString()
 }
@@ -112,11 +113,11 @@ export function parseTokenResponse(status: number, body: string, now = Date.now(
     const ok = status >= 200 && status < 300
     const detail =
       reason.length > 0
-        ? reason.join('：')
+        ? reason.join(msg().httpMain.oauth2.reasonJoin)
         : ok
-          ? '回應中沒有 access_token'
-          : body.slice(0, 200) || '沒有內容'
-    throw new OAuth2Error(`取得 OAuth 2.0 Token 失敗（HTTP ${status}）：${detail}`)
+          ? msg().httpMain.oauth2.noAccessToken
+          : body.slice(0, 200) || msg().httpMain.oauth2.noContent
+    throw new OAuth2Error(msg().httpMain.oauth2.tokenFailed(status, detail))
   }
   const expiresIn = Number(text(data.expires_in))
   return {
@@ -145,11 +146,11 @@ export function parseCallbackUrl(value: string): { host: string; port: number; p
   try {
     url = new URL(text)
   } catch {
-    throw new OAuth2Error(`Callback URL 不是有效的網址：${text}`)
+    throw new OAuth2Error(msg().httpMain.oauth2.badCallback(text))
   }
   const host = url.hostname.replace(/^\[|\]$/g, '')
   if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '::1'].includes(host)) {
-    throw new OAuth2Error('Callback URL 需要是 http://127.0.0.1、http://localhost 或 http://[::1]')
+    throw new OAuth2Error(msg().httpMain.oauth2.callbackLoopback)
   }
   return { host, port: url.port === '' ? 80 : Number(url.port), path: url.pathname }
 }
@@ -192,34 +193,41 @@ export async function authorizationCodeFlow(
         }
         const finish = (ok: boolean, text: string) => {
           res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8' })
-          res.end(PAGE(ok ? '已完成授權' : '授權失敗', escapeHtml(text)))
+          res.end(
+            PAGE(
+              ok ? msg().httpMain.oauth2.pageOk : msg().httpMain.oauth2.pageFailed,
+              escapeHtml(text)
+            )
+          )
         }
         const error = url.searchParams.get('error')
         if (error) {
           const description = url.searchParams.get('error_description')
           finish(false, description ?? error)
-          reject(new OAuth2Error(`授權失敗：${error}${description ? `：${description}` : ''}`))
+          reject(new OAuth2Error(msg().httpMain.oauth2.failed(error, description)))
           return
         }
         if (url.searchParams.get('state') !== state) {
-          finish(false, 'state 不符，已忽略這個回應')
+          finish(false, msg().httpMain.oauth2.stateMismatch)
           return
         }
         const code = url.searchParams.get('code')
         if (!code) {
-          finish(false, '回應中沒有 code')
-          reject(new OAuth2Error('授權伺服器沒有回傳 code'))
+          finish(false, msg().httpMain.oauth2.noCodeInResponse)
+          reject(new OAuth2Error(msg().httpMain.oauth2.noCode))
           return
         }
-        finish(true, '可以關閉這個分頁，回到 Hachi。')
+        finish(true, msg().httpMain.oauth2.pageClose)
         resolve({ code, redirectUri: redirectUriOf(server, callback) })
       })
-      server.on('error', (e) => reject(new OAuth2Error(`無法啟動 Callback 伺服器：${e.message}`)))
+      server.on('error', (e) =>
+        reject(new OAuth2Error(msg().httpMain.oauth2.serverFailed(e.message)))
+      )
       timer = setTimeout(
-        () => reject(new OAuth2Error('等待瀏覽器授權逾時')),
+        () => reject(new OAuth2Error(msg().httpMain.oauth2.timeout)),
         deps.timeoutMs ?? AUTHORIZE_TIMEOUT_MS
       )
-      onAbort = () => reject(new OAuth2Error('已取消'))
+      onAbort = () => reject(new OAuth2Error(msg().httpMain.oauth2.cancelled))
       deps.signal.addEventListener('abort', onAbort)
     })
     result.catch(() => undefined)
@@ -228,7 +236,9 @@ export async function authorizationCodeFlow(
       server?.once('error', reject)
       server?.listen(callback.port, callback.host, () => resolve())
     }).catch((e: Error) => {
-      throw new OAuth2Error(`無法在 ${callback.host}:${callback.port} 接收 Callback：${e.message}`)
+      throw new OAuth2Error(
+        msg().httpMain.oauth2.cannotListen(callback.host, callback.port, e.message)
+      )
     })
     const redirectUri = redirectUriOf(server, callback)
     authUrl.searchParams.set('response_type', 'code')
@@ -330,9 +340,7 @@ export class OAuth2Service {
       }
       if (auth.grantType === 'authorization_code') {
         throw new OAuth2Error(
-          cached
-            ? 'OAuth 2.0 Token 已過期，請在 Auth 分頁按「取得 Token」重新授權'
-            : '還沒有 OAuth 2.0 Token，請先在 Auth 分頁按「取得 Token」'
+          cached ? msg().httpMain.oauth2.expired : msg().httpMain.oauth2.missing
         )
       }
       return this.fetchToken(auth)

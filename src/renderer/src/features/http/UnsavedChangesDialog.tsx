@@ -14,6 +14,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useMockStore } from '@renderer/stores/mock-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isLive, useWsStore } from '@renderer/stores/ws-store'
+import { msg } from '@shared/i18n'
 
 /**
  * Asks what to do with unsaved tabs before closing them, leaving the Workspace,
@@ -42,17 +43,17 @@ export function UnsavedChangesDialog() {
         <AlertDialogHeader>
           <AlertDialogTitle>
             {isReload
-              ? '放棄未儲存的修改？'
+              ? msg().http.prompt.reloadTitle
               : disconnectOnly
-                ? '中斷連線並關閉？'
-                : '要儲存修改嗎？'}
+                ? msg().http.prompt.disconnectTitle
+                : msg().http.prompt.saveTitle}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {isReload
-              ? '重新讀取會以磁碟上的檔案內容取代下列分頁未儲存的修改：'
+              ? msg().http.prompt.reloadDescription
               : disconnectOnly
-                ? '下列 WebSocket 分頁仍在連線中，關閉後連線會中斷，訊息紀錄也會清除：'
-                : '下列分頁有未儲存的修改或仍在連線中：'}
+                ? msg().http.prompt.disconnectDescription
+                : msg().http.prompt.saveDescription}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <ul className="max-h-48 list-disc overflow-auto pl-6 text-sm" data-testid="unsaved-list">
@@ -60,36 +61,36 @@ export function UnsavedChangesDialog() {
             <li key={t.key}>
               {tabTitle(t, tree, useMockStore.getState().list)}
               {isTabDirty(t) && isDraftTab(t) && (
-                <span className="text-muted-foreground">（新請求，儲存時會詢問位置）</span>
+                <span className="text-muted-foreground">{msg().http.prompt.newRequest}</span>
               )}
               {!isReload && live(t) && (
                 <span className="text-muted-foreground">
-                  （連線中{isTabDirty(t) ? '，有未儲存的修改' : ''}）
+                  {msg().http.prompt.connected(isTabDirty(t))}
                 </span>
               )}
             </li>
           ))}
         </ul>
         {!isReload && hasDrafts && (
-          <p className="text-xs text-muted-foreground">選擇「不儲存」時，新請求的內容會遺失。</p>
+          <p className="text-xs text-muted-foreground">{msg().http.prompt.draftsLost}</p>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
           {isReload ? (
             <AlertDialogAction variant="destructive" onClick={() => void resolvePrompt('discard')}>
-              放棄並重新讀取
+              {msg().http.prompt.discardReload}
             </AlertDialogAction>
           ) : disconnectOnly ? (
             <AlertDialogAction variant="destructive" onClick={() => void resolvePrompt('discard')}>
-              中斷並關閉
+              {msg().http.prompt.disconnectClose}
             </AlertDialogAction>
           ) : (
             <>
               <Button variant="outline" onClick={() => void resolvePrompt('discard')}>
-                不儲存
+                {msg().http.prompt.dontSave}
               </Button>
               <AlertDialogAction onClick={() => void resolvePrompt('save')}>
-                {dirty.length > 1 ? '全部儲存' : '儲存'}
+                {dirty.length > 1 ? msg().http.prompt.saveAll : msg().common.save}
               </AlertDialogAction>
             </>
           )}

@@ -4,6 +4,7 @@ import type { KeyValue } from '@shared/schemas/collection'
 import { VariableInput } from '@renderer/components/variable-input'
 import { newKeyValue } from '@renderer/lib/key-value'
 import { cn } from '@renderer/lib/utils'
+import { msg } from '@shared/i18n'
 
 export interface KeyValueTableProps<T extends KeyValue> {
   rows: T[]
@@ -59,7 +60,7 @@ export function KeyValueTable<T extends KeyValue>({
           {!isBlank && (
             <input
               type="checkbox"
-              aria-label="啟用"
+              aria-label={msg().vars.enabled}
               className="size-3.5 accent-primary align-middle"
               checked={row.enabled}
               disabled={readOnly}
@@ -99,7 +100,7 @@ export function KeyValueTable<T extends KeyValue>({
           {!isBlank && !readOnly && (
             <button
               type="button"
-              aria-label="刪除此列"
+              aria-label={msg().vars.deleteRow}
               className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
               onClick={() => remove(row.id)}
             >

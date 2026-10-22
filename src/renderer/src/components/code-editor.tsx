@@ -204,7 +204,7 @@ export function CodeEditor({
         extensions: [
           editorSetup,
           editorTheme,
-          editorPhrases,
+          editorPhrases(),
           c.language.of(languageExtension(language)),
           c.wrap.of(wrap ? EditorView.lineWrapping : []),
           c.variables.of(variableExtension(variables)),

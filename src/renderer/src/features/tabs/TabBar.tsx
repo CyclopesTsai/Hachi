@@ -43,6 +43,7 @@ import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useMockStore } from '@renderer/stores/mock-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { isDraftTab, isTabDirty, tabItemId, tabTitle, type Tab } from './tab-model'
+import { msg } from '@shared/i18n'
 
 /** "WS" badge with a green dot while connected. */
 function WsTabIcon({ uid }: { uid: string }) {
@@ -57,7 +58,7 @@ function WsTabIcon({ uid }: { uid: string }) {
             'absolute -top-1 -right-1.5 size-1.5 rounded-full',
             open ? 'bg-emerald-500' : 'bg-amber-500'
           )}
-          aria-label="連線中"
+          aria-label={msg().tabs.connected}
           data-testid="tab-live"
         />
       )}
@@ -127,7 +128,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
           data-dirty={dirty || undefined}
           data-draft={isDraftTab(tab) || undefined}
           data-dragging={isDragging || undefined}
-          title={tab.preview ? `${title}（預覽：編輯或雙擊後固定）` : title}
+          title={tab.preview ? msg().tabs.previewTitle(title) : title}
           className={cn(
             'group relative flex h-full max-w-56 min-w-28 shrink-0 cursor-default items-center gap-1.5 border-r pr-1 pl-2.5 text-xs select-none',
             active
@@ -152,7 +153,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
           <span className={cn('min-w-0 flex-1 truncate', tab.preview && 'italic')}>{title}</span>
           <button
             type="button"
-            aria-label={`關閉 ${title}`}
+            aria-label={msg().tabs.closeLabel(title)}
             data-testid="tab-close"
             className="relative flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-accent"
             onClick={(e) => {
@@ -163,7 +164,7 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
             {dirty && (
               <span
                 className="size-2 rounded-full bg-primary group-hover:hidden"
-                aria-label="有未儲存的修改"
+                aria-label={msg().tabs.unsaved}
               />
             )}
             <X
@@ -177,15 +178,19 @@ function TabButton({ tab, active }: { tab: Tab; active: boolean }) {
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onSelect={() => void store.close(tab.key)}>關閉</ContextMenuItem>
-        <ContextMenuItem onSelect={() => void store.closeOthers(tab.key)}>
-          關閉其他分頁
+        <ContextMenuItem onSelect={() => void store.close(tab.key)}>
+          {msg().tabs.close}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => void store.closeAll()}>關閉所有分頁</ContextMenuItem>
+        <ContextMenuItem onSelect={() => void store.closeOthers(tab.key)}>
+          {msg().tabs.closeOthers}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void store.closeAll()}>
+          {msg().tabs.closeAll}
+        </ContextMenuItem>
         {tab.preview && (
           <>
             <ContextMenuSeparator />
-            <ContextMenuItem onSelect={() => store.pin(tab.key)}>固定分頁</ContextMenuItem>
+            <ContextMenuItem onSelect={() => store.pin(tab.key)}>{msg().tabs.pin}</ContextMenuItem>
           </>
         )}
       </ContextMenuContent>
@@ -236,7 +241,7 @@ export function TabBar() {
     <div className="flex h-9 shrink-0 border-b bg-muted/40" data-testid="tab-bar">
       <div
         role="tablist"
-        aria-label="開啟的分頁"
+        aria-label={msg().tabs.open}
         className="tab-strip flex min-w-0 overflow-x-auto"
         onMouseEnter={(e) => pointerOver(e.currentTarget, true)}
         onMouseLeave={(e) => pointerOver(e.currentTarget, false)}
@@ -258,8 +263,8 @@ export function TabBar() {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="新增"
-            title="新增請求（尚未儲存，可直接使用）"
+            aria-label={msg().tabs.add}
+            title={msg().tabs.addTitle}
             data-testid="new-tab"
             className="flex w-9 shrink-0 items-center justify-center text-muted-foreground hover:bg-background/60 hover:text-foreground"
           >
@@ -268,7 +273,7 @@ export function TabBar() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuItem onSelect={() => useTabsStore.getState().newRequest('http')}>
-            HTTP 請求
+            {msg().tabs.http}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => useTabsStore.getState().newRequest('websocket')}>
             WebSocket

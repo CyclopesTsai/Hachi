@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react'
 import { memo, useState } from 'react'
 import { cn } from '@renderer/lib/utils'
 import type { TreeExpansion } from './json-tree-expansion'
+import { msg } from '@shared/i18n'
 
 /** Children shown per object / array before 「再顯示」 (big arrays stay responsive). */
 const TREE_PAGE = 100
@@ -42,7 +43,7 @@ export function JsonTree({
       )}
       data-testid="json-tree"
       role="tree"
-      aria-label="JSON 樹狀檢視"
+      aria-label={msg().http.response.jsonTree}
     >
       <Node
         value={value as Json}
@@ -110,7 +111,9 @@ const Node = memo(function Node({
   const count = (
     <span className="text-muted-foreground">
       {' '}
-      {isArray ? `${entries.length} 項` : `${entries.length} 個 key`}
+      {isArray
+        ? msg().http.response.items(entries.length)
+        : msg().http.response.keys(entries.length)}
     </span>
   )
 
@@ -120,7 +123,9 @@ const Node = memo(function Node({
         {depth > 0 && entries.length > 0 ? (
           <button
             type="button"
-            aria-label={expanded ? `收合 ${path}` : `展開 ${path}`}
+            aria-label={
+              expanded ? msg().http.response.collapse(path) : msg().http.response.expand(path)
+            }
             onClick={() => onToggle(path)}
             className="inline-flex w-4 items-center justify-center align-[-2px] text-muted-foreground hover:text-foreground"
           >
@@ -169,7 +174,10 @@ const Node = memo(function Node({
                 className="font-sans text-primary hover:underline"
                 onClick={() => setShown((n) => n + TREE_PAGE)}
               >
-                再顯示 {Math.min(TREE_PAGE, entries.length - shown)} 項（共 {entries.length} 項）
+                {msg().http.response.showMore(
+                  Math.min(TREE_PAGE, entries.length - shown),
+                  entries.length
+                )}
               </button>
             </div>
           )}

@@ -6,6 +6,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { msg } from '@shared/i18n'
 import type { SystemTrustVerdict } from './types'
 import { isSafeHostName, runCommand } from './trust-common'
 
@@ -14,48 +15,22 @@ const SYSTEM_ROOTS = '/System/Library/Keychains/SystemRootCertificates.keychain'
 /** Missing intermediates may be downloaded (AIA), so allow some time. */
 const VERIFY_TIMEOUT_MS = 20_000
 
-const LABEL = '這台 Mac（系統驗證）'
-const CLIENTS = 'Safari、macOS App（URLSession）、系統 curl'
-
-/** The bracketed keys `security verify-cert -v` prints for each certificate's errors. */
-const ERROR_TEXT: Record<string, string> = {
-  AnchorTrusted: '根憑證不受信任',
-  MissingIntermediate: '找不到簽發它的憑證（少了中繼憑證，或根憑證不受信任）',
-  SSLHostname: '網域不符',
-  TemporalValidity: '已過期或尚未生效',
-  OtherTrustValidityPeriod: '有效期超過 Apple 的上限（398 天）',
-  ValidityPeriodMaximums: '有效期超過 Apple 的上限',
-  ServerAuthEKU: 'Extended Key Usage 沒有 serverAuth（不能用於網站）',
-  ExtendedKeyUsage: 'Extended Key Usage 不允許用於網站',
-  KeyUsage: 'Key Usage 不允許用於網站',
-  KeySize: '金鑰長度不足（RSA 至少 2048 位元）',
-  WeakKeySize: '金鑰長度不足（RSA 至少 2048 位元）',
-  WeakSignature: '簽章演算法太弱（例如 SHA-1）',
-  SignatureHashAlgorithms: '簽章演算法太弱（例如 SHA-1）',
-  SystemTrustedWeakHash: '簽章演算法太弱（例如 SHA-1）',
-  CTRequired: '缺少 Certificate Transparency 紀錄（SCT）',
-  Revocation: '憑證已被撤銷',
-  BlackListedLeaf: '憑證已被 Apple 封鎖',
-  BlackListedKey: '金鑰已被 Apple 封鎖',
-  GrayListedLeaf: '憑證被 Apple 列為不信任',
-  GrayListedKey: '金鑰被 Apple 列為不信任',
-  BasicConstraints: 'Basic Constraints 不符（不是 CA 卻簽發了憑證）',
-  BasicConstraintsCA: 'Basic Constraints 不符（不是 CA 卻簽發了憑證）',
-  NameConstraints: '違反 Name Constraints',
-  NonEmptySubject: 'Subject 欄位不符規定',
-  IdLinkage: '簽發者與被簽發者的金鑰識別碼對不上',
-  CriticalExtensions: '有無法識別的關鍵擴充欄位',
-  ChainLength: '憑證鏈太長'
-}
+const base = () => ({
+  platform: 'darwin' as const,
+  label: msg().tlsCheck.system.macLabel,
+  clients: msg().tlsCheck.system.macClients
+})
 
 /** Pure parser of `security verify-cert -v` output (tests feed it samples). */
 export function parseVerifyCert(code: number | null, raw: string): SystemTrustVerdict {
+  const m = msg().tlsCheck.system
   // Colors (ESC [ … m) around the results.
   const output = raw.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'), '')
   const ct = /Certificate Transparency \(CT\) status:\s*(not verified|verified)/.exec(output)
   const ctVerified = ct ? ct[1] === 'verified' : null
   const ok = code === 0 && /certificate verification successful/.test(output)
   const reasons: string[] = []
+  let rootUntrusted = false
   const section = /Certificate errors\n([\s\S]*?)\n---/.exec(output)?.[1] ?? ''
   let certName = ''
   for (const line of section.split('\n')) {
@@ -66,14 +41,21 @@ export function parseVerifyCert(code: number | null, raw: string): SystemTrustVe
     }
     const key = /\[([A-Za-z]+)\]\s*$/.exec(line)?.[1]
     if (!key) continue
-    const text = `${ERROR_TEXT[key] ?? `其他問題（${key}）`}：${certName}`
+    if (key === 'AnchorTrusted') rootUntrusted = true
+    const text = m.reason(m.darwin[key] ?? m.other(key), certName)
     if (!reasons.includes(text)) reasons.push(text)
   }
   if (!ok && reasons.length === 0) {
     const result = /Cert Verify Result:\s*(.+)/.exec(output)?.[1]?.trim()
-    reasons.push(result ? `驗證失敗：${result}` : '驗證失敗')
+    reasons.push(result ? m.failedWith(result) : m.failed)
   }
-  return { label: LABEL, clients: CLIENTS, ok, reasons: ok ? [] : reasons, ctVerified }
+  return {
+    ...base(),
+    ok,
+    reasons: ok ? [] : reasons,
+    ctVerified,
+    rootUntrusted: !ok && rootUntrusted
+  }
 }
 
 export async function verifyWithSecurity(
@@ -82,11 +64,11 @@ export async function verifyWithSecurity(
 ): Promise<SystemTrustVerdict> {
   if (!isSafeHostName(host) || pems.length === 0) {
     return {
-      label: LABEL,
-      clients: CLIENTS,
+      ...base(),
       ok: false,
-      reasons: ['無法檢查這個主機名稱'],
-      ctVerified: null
+      reasons: [msg().tlsCheck.system.badHost],
+      ctVerified: null,
+      rootUntrusted: false
     }
   }
   const dir = await mkdtemp(path.join(os.tmpdir(), 'hachi-tls-'))
@@ -101,11 +83,11 @@ export async function verifyWithSecurity(
     const result = await runCommand(SECURITY, args, { timeoutMs: VERIFY_TIMEOUT_MS })
     if (result.failure) {
       return {
-        label: LABEL,
-        clients: CLIENTS,
+        ...base(),
         ok: false,
-        reasons: [`無法執行系統驗證：${result.failure}`],
-        ctVerified: null
+        reasons: [msg().tlsCheck.system.cannotRun(result.failure)],
+        ctVerified: null,
+        rootUntrusted: false
       }
     }
     return parseVerifyCert(result.code, result.output)

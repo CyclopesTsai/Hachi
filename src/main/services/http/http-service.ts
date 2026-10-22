@@ -47,6 +47,7 @@ import {
   type Exchange
 } from './saved-result'
 import type { PortableExample } from '@shared/transfer/portable'
+import { msg } from '@shared/i18n'
 
 interface StoredResponse {
   body: Buffer
@@ -166,7 +167,9 @@ export class HttpService {
       : null
     this.oauth2 = new OAuth2Service({
       postForm: (request) => this.postForm(request),
-      openBrowser: deps.openBrowser ?? (() => Promise.reject(new OAuth2Error('無法開啟瀏覽器')))
+      openBrowser:
+        deps.openBrowser ??
+        (() => Promise.reject(new OAuth2Error(msg().httpMain.oauth2.openBrowser)))
     })
   }
 
@@ -347,12 +350,12 @@ export class HttpService {
         ['service', 'Service']
       ] as const) {
         if (auth[field].trim() === '') {
-          throw new HttpBuildError('AUTH', `AWS Signature 的 ${label} 是空的`)
+          throw new HttpBuildError('AUTH', msg().httpMain.aws.empty(label))
         }
       }
       const s3 = auth.service.trim().toLowerCase() === 's3'
       if (built.body !== null && typeof built.body !== 'string' && !s3) {
-        throw new HttpBuildError('AUTH', 'AWS Signature 無法簽署 form-data Body（S3 除外）')
+        throw new HttpBuildError('AUTH', msg().httpMain.aws.formData)
       }
       const signed = signAwsSigV4({
         method: built.method,
@@ -417,7 +420,7 @@ export class HttpService {
       signal: new AbortController().signal
     })
     if (result.kind === 'error') {
-      throw new OAuth2Error(`無法連到 Access Token URL：${result.message}`)
+      throw new OAuth2Error(msg().httpMain.oauth2.tokenUrl(result.message))
     }
     return { status: result.status, body: body ? body.toString('utf8') : '' }
   }
@@ -448,8 +451,10 @@ export class HttpService {
       signal: new AbortController().signal,
       maxResponseBytes: CCADB_MAX_REPORT_BYTES
     })
-    if (result.kind === 'error') throw new Error(`無法下載 CCADB 資料：${result.message}`)
-    if (result.status !== 200) throw new Error(`無法下載 CCADB 資料：HTTP ${result.status}`)
+    if (result.kind === 'error')
+      throw new Error(msg().tlsCheck.programs.downloadFailed(result.message))
+    if (result.status !== 200)
+      throw new Error(msg().tlsCheck.programs.downloadFailed(`HTTP ${result.status}`))
     return body ? body.toString('utf8') : ''
   }
 
@@ -519,13 +524,12 @@ export class HttpService {
           const value = `${auth.headerPrefix.trim()} ${token.accessToken}`.trim()
           built.request.headers.push(['Authorization', value])
         } else {
-          authNote =
-            '還沒有有效的 OAuth 2.0 Token，程式碼中沒有 Authorization（可先送出一次或按「取得 Token」）'
+          authNote = msg().httpMain.code.oauth2
         }
       } else if (auth.type === 'digest') {
-        authNote = 'Digest 驗證要先收到伺服器的 401 才能計算，程式碼中沒有 Authorization'
+        authNote = msg().httpMain.code.digest
       } else if (auth.type === 'awsSigV4') {
-        authNote = 'AWS Signature 每次送出時才簽署（有時效），程式碼中沒有簽章'
+        authNote = msg().httpMain.code.aws
       }
     }
     return { ...built, unresolvedVariables: [...resolver.unresolved].sort(), authNote }
@@ -539,13 +543,13 @@ export class HttpService {
     const layers = await this.deps.getVariableLayers(input.parentId, input.environmentId)
     const resolver = new VariableResolver(buildVariableMap(layers))
     let text = resolver.resolve(input.url).trim()
-    if (text === '') throw new HachiError('VALIDATION_ERROR', '請先輸入網址')
+    if (text === '') throw new HachiError('VALIDATION_ERROR', msg().httpMain.tls.needUrl)
     if (!/^[a-z][a-z\d+.-]*:\/\//i.test(text)) text = `https://${text}`
     let url: URL
     try {
       url = new URL(text)
     } catch {
-      throw new HachiError('VALIDATION_ERROR', `網址無效：${text}`)
+      throw new HachiError('VALIDATION_ERROR', msg().httpMain.tls.invalidUrl(text))
     }
     if (url.protocol === 'http:' || url.protocol === 'ws:') {
       // Unencrypted: no certificate; the dialog explains what that means.
@@ -554,7 +558,7 @@ export class HttpService {
       return {
         host,
         port,
-        diagnosis: unavailable(host, port, '', '未加密的連線'),
+        diagnosis: unavailable(host, port, '', msg().httpMain.tls.unencrypted),
         trust: [],
         checks: [],
         advice: [],
@@ -563,7 +567,7 @@ export class HttpService {
       }
     }
     if (url.protocol !== 'https:' && url.protocol !== 'wss:') {
-      throw new HachiError('VALIDATION_ERROR', '只能檢查 https:// 或 wss:// 的網址')
+      throw new HachiError('VALIDATION_ERROR', msg().httpMain.tls.httpsOnly)
     }
     const target = url.toString().replace(/^wss:/i, 'https:')
     let proxyUrl: string | null
@@ -607,7 +611,7 @@ export class HttpService {
   savedResult(runId: string, name: string, savedAt: string): PortableExample {
     const stored = this.requireStored(runId)
     if (!stored.exchange) {
-      throw new HachiError('NOT_FOUND', '這個回應已不在暫存中，請重新送出後再儲存')
+      throw new HachiError('NOT_FOUND', msg().httpMain.saveResult.gone)
     }
     try {
       return exampleFromExchange(stored.exchange, stored.body, name, savedAt)

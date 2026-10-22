@@ -78,6 +78,7 @@
     "password": "" // 以明文存在這台電腦的 app-config.json（不寫進 Workspace）
   },
   "ui": {
+    "language": "system", // 介面語言："system"（跟隨系統：系統語言是中文 → 繁體中文，其他 → 英文）| "zh-TW" | "en"
     "requestBodyWrap": false, // 請求 Body 編輯器自動換行（僅影響顯示）
     "responseBodyWrap": false, // 回應 Body 自動換行（僅影響顯示）
     "gitChangesTree": true // Git Commit 畫面的變更以樹狀顯示（false = 清單）

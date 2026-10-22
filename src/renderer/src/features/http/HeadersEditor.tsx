@@ -3,6 +3,7 @@ import type { InheritedSettings } from '@shared/http'
 import type { KeyValue } from '@shared/schemas/collection'
 import { KeyValueTable } from '@renderer/components/key-value-table'
 import { cn } from '@renderer/lib/utils'
+import { msg } from '@shared/i18n'
 
 /** Own headers (editable) plus the inherited ones (read-only, with their source). */
 export function HeadersEditor({
@@ -29,7 +30,7 @@ export function HeadersEditor({
         <div className="flex flex-col gap-2" data-testid="inherited-headers">
           <p className="flex items-center gap-1 text-xs text-muted-foreground">
             <ArrowUpRight className="size-3.5" />
-            從上層繼承（唯讀，請到來源修改；同名的 Header 以這裡設定的為準）
+            {msg().http.headers.inherited}
           </p>
           <table className="w-full table-fixed overflow-hidden rounded-md border text-xs">
             <tbody>
@@ -54,7 +55,9 @@ export function HeadersEditor({
                       {h.value}
                     </td>
                     <td className="w-40 px-2 py-1.5 text-muted-foreground">
-                      {overridden ? '已被覆寫' : `來自 ${h.sourceName}`}
+                      {overridden
+                        ? msg().http.headers.overridden
+                        : msg().http.headers.from(h.sourceName)}
                     </td>
                   </tr>
                 )

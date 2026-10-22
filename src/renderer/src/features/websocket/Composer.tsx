@@ -9,20 +9,23 @@ import type { WsTab } from '@renderer/features/tabs/tab-model'
 import { useVariables } from '@renderer/lib/variables'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useWsStore, type WsContext } from '@renderer/stores/ws-store'
+import { msg } from '@shared/i18n'
 
-const FORMAT_LABELS: Record<WsMessageFormat, string> = {
-  text: 'Text',
-  json: 'JSON',
-  'binary-hex': 'Binary（Hex）',
-  'binary-base64': 'Binary（Base64）'
-}
+const formatLabel = (format: WsMessageFormat): string =>
+  format === 'text'
+    ? 'Text'
+    : format === 'json'
+      ? 'JSON'
+      : format === 'binary-hex'
+        ? msg().ws.composer.binaryHex
+        : msg().ws.composer.binaryBase64
 
-const PLACEHOLDERS: Record<WsMessageFormat, string> = {
-  text: '',
-  json: '',
-  'binary-hex': '例如 01 02 ff',
-  'binary-base64': '例如 AQL/'
-}
+const placeholderOf = (format: WsMessageFormat): string =>
+  format === 'binary-hex'
+    ? msg().ws.composer.hexPlaceholder
+    : format === 'binary-base64'
+      ? msg().ws.composer.base64Placeholder
+      : ''
 
 function jsonError(text: string): string | null {
   if (text.trim() === '') return null
@@ -64,7 +67,7 @@ export function Composer({
     <div className="flex h-full min-h-0 flex-col" data-testid="ws-composer">
       <div className="flex items-center gap-2 border-b px-2 py-1.5">
         <NativeSelect
-          aria-label="訊息格式"
+          aria-label={msg().ws.composer.format}
           className="h-7 text-xs"
           value={format}
           onChange={(e) =>
@@ -73,7 +76,7 @@ export function Composer({
         >
           {WS_MESSAGE_FORMATS.map((f) => (
             <option key={f} value={f}>
-              {FORMAT_LABELS[f]}
+              {formatLabel(f)}
             </option>
           ))}
         </NativeSelect>
@@ -83,7 +86,7 @@ export function Composer({
           size="sm"
           className="h-7 px-2 text-xs"
           disabled={!open}
-          title="送出 WebSocket Ping，收到 Pong 時顯示延遲"
+          title={msg().ws.composer.pingTitle}
           onClick={() => void ws.ping(tab.uid)}
         >
           <Radar />
@@ -94,13 +97,13 @@ export function Composer({
           size="sm"
           className="h-7 px-2 text-xs"
           disabled={content.trim() === ''}
-          title="把目前的內容存成範本（存在請求檔中，需要儲存）"
+          title={msg().ws.composer.saveTemplateTitle}
           onClick={() =>
             setTemplates([
               ...templates,
               {
                 id: crypto.randomUUID(),
-                name: `範本 ${templates.length + 1}`,
+                name: msg().ws.composer.templateName(templates.length + 1),
                 format,
                 content
               }
@@ -108,12 +111,12 @@ export function Composer({
           }
         >
           <BookmarkPlus />
-          存成範本
+          {msg().ws.composer.saveTemplate}
         </Button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 p-2">
         <CodeEditor
-          aria-label="訊息內容"
+          aria-label={msg().ws.composer.content}
           data-testid="ws-message-editor"
           className="min-h-20 flex-1"
           language={format === 'json' ? 'json' : 'text'}
@@ -122,10 +125,12 @@ export function Composer({
           value={content}
           onChange={(text) => tabs.updateComposer(tab.key, { format, content: text })}
         />
-        {PLACEHOLDERS[format] && content === '' && (
-          <p className="text-[11px] text-muted-foreground">{PLACEHOLDERS[format]}</p>
+        {placeholderOf(format) && content === '' && (
+          <p className="text-[11px] text-muted-foreground">{placeholderOf(format)}</p>
         )}
-        {json && <p className="truncate text-[11px] text-amber-600">JSON 格式有誤：{json}</p>}
+        {json && (
+          <p className="truncate text-[11px] text-amber-600">{msg().ws.composer.jsonError(json)}</p>
+        )}
         {error && (
           <p className="flex items-center gap-1 text-[11px] text-destructive" role="alert">
             <AlertTriangle className="size-3.5 shrink-0" />
@@ -137,20 +142,20 @@ export function Composer({
             size="sm"
             disabled={!open || content === ''}
             onClick={() => send(format, content)}
-            title={open ? '送出（{{變數}} 會在送出時替換）' : '請先連線'}
+            title={open ? msg().ws.composer.sendTitle : msg().ws.composer.connectFirst}
           >
             <Send />
-            送出
+            {msg().ws.composer.send}
           </Button>
         </div>
       </div>
       <div className="max-h-[45%] shrink-0 overflow-auto border-t" data-testid="ws-templates">
         <p className="px-2 pt-1.5 text-[11px] font-semibold text-muted-foreground">
-          訊息範本（{templates.length}）
+          {msg().ws.composer.templates(templates.length)}
         </p>
         {templates.length === 0 && (
           <p className="px-2 pb-2 text-[11px] text-muted-foreground">
-            把常用的訊息存成範本，之後一鍵送出。範本存在請求檔裡，機密內容請用 {'{{變數}}'}。
+            {msg().ws.composer.templatesEmpty}
           </p>
         )}
         <ul className="px-1 pb-1">
@@ -161,7 +166,7 @@ export function Composer({
               data-testid="ws-template"
             >
               <Input
-                aria-label="範本名稱"
+                aria-label={msg().ws.composer.templateNameLabel}
                 className="h-6 min-w-0 flex-1 border-transparent bg-transparent px-1 text-xs shadow-none"
                 value={tpl.name}
                 onChange={(e) =>
@@ -171,14 +176,14 @@ export function Composer({
                 }
               />
               <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">
-                {FORMAT_LABELS[tpl.format]}
+                {formatLabel(tpl.format)}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
                 className="size-6"
-                aria-label={`送出範本 ${tpl.name}`}
-                title="送出"
+                aria-label={msg().ws.composer.sendTemplate(tpl.name)}
+                title={msg().ws.composer.send}
                 disabled={!open}
                 onClick={() => send(tpl.format, tpl.content)}
               >
@@ -188,8 +193,8 @@ export function Composer({
                 variant="ghost"
                 size="icon"
                 className="size-6"
-                aria-label={`載入範本 ${tpl.name}`}
-                title="載入到編輯區"
+                aria-label={msg().ws.composer.loadTemplate(tpl.name)}
+                title={msg().ws.composer.loadTitle}
                 onClick={() =>
                   tabs.updateComposer(tab.key, { format: tpl.format, content: tpl.content })
                 }
@@ -200,8 +205,8 @@ export function Composer({
                 variant="ghost"
                 size="icon"
                 className="size-6 hover:text-destructive"
-                aria-label={`刪除範本 ${tpl.name}`}
-                title="刪除"
+                aria-label={msg().ws.composer.deleteTemplate(tpl.name)}
+                title={msg().ws.composer.delete}
                 onClick={() => setTemplates(templates.filter((_, i) => i !== index))}
               >
                 <Trash2 className="size-3.5" />

@@ -16,6 +16,7 @@ import {
   type HttpBody,
   type HttpRequest
 } from '../schemas/http-request'
+import { msg } from '../i18n'
 
 export class CurlParseError extends Error {
   constructor(message: string) {
@@ -77,7 +78,7 @@ function ansiC(text: string, start: number): { value: string; end: number } {
       value += `\\${n}`
     }
   }
-  throw new CurlParseError("引號沒有結束（$'…'）")
+  throw new CurlParseError(msg().transferMain.curl.unclosedDollar)
 }
 
 /** Splits a POSIX shell command line into words (quotes, escapes, line continuations). */
@@ -106,7 +107,7 @@ export function tokenizePosix(text: string): string[] {
       }
     } else if (c === "'") {
       const end = text.indexOf("'", i + 1)
-      if (end < 0) throw new CurlParseError("引號沒有結束（'）")
+      if (end < 0) throw new CurlParseError(msg().transferMain.curl.unclosedSingle)
       word += text.slice(i + 1, end)
       inWord = true
       i = end + 1
@@ -140,7 +141,7 @@ export function tokenizePosix(text: string): string[] {
         word += d
         i++
       }
-      if (!closed) throw new CurlParseError('引號沒有結束（"）')
+      if (!closed) throw new CurlParseError(msg().transferMain.curl.unclosedDouble)
       inWord = true
     } else if (c === ' ' || c === '\t' || c === '\n' || c === '\r') {
       flush()
@@ -212,7 +213,7 @@ export function tokenizeCmd(text: string): string[] {
       inWord = true
     }
   }
-  if (quoted) throw new CurlParseError('引號沒有結束（"）')
+  if (quoted) throw new CurlParseError(msg().transferMain.curl.unclosedDouble)
   if (inWord) words.push(word)
   return words
 }
@@ -423,7 +424,7 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
       if (at < 0) {
         // "Name;" sends an empty header; anything else is not a header.
         if (v.endsWith(';')) p.headers.push([v.slice(0, -1).trim(), ''])
-        else warnOnce(p, `無法解析的 Header：${v}`)
+        else warnOnce(p, msg().transferMain.curl.badHeader(v))
         return
       }
       const key = v.slice(0, at).trim()
@@ -436,7 +437,7 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
     case 'data-ascii':
     case 'data-binary':
       if (v.startsWith('@')) {
-        warnOnce(p, `不支援從檔案讀取 Body（${v}），請手動貼上內容`)
+        warnOnce(p, msg().transferMain.curl.bodyFromFile(v))
         return
       }
       p.data.push({ kind: 'data', value: v })
@@ -446,14 +447,14 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
       return
     case 'data-urlencode':
       if (/^[^=]*@/.test(v) && !v.includes('=')) {
-        warnOnce(p, `不支援從檔案讀取 Body（${v}），請手動貼上內容`)
+        warnOnce(p, msg().transferMain.curl.bodyFromFile(v))
         return
       }
       p.data.push({ kind: 'urlencode', value: v })
       return
     case 'json':
       if (v.startsWith('@')) {
-        warnOnce(p, `不支援從檔案讀取 Body（${v}），請手動貼上內容`)
+        warnOnce(p, msg().transferMain.curl.bodyFromFile(v))
         return
       }
       p.data.push({ kind: 'raw', value: v })
@@ -468,7 +469,7 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
     case 'form-string': {
       const eq = v.indexOf('=')
       if (eq < 0) {
-        warnOnce(p, `無法解析的 Form 欄位：${v}`)
+        warnOnce(p, msg().transferMain.curl.badForm(v))
         return
       }
       const key = v.slice(0, eq)
@@ -482,7 +483,7 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
         return
       }
       if (name === 'form' && content.startsWith('<')) {
-        warnOnce(p, `不支援從檔案讀取 Form 欄位內容（${key}）`)
+        warnOnce(p, msg().transferMain.curl.formFromFile(key))
         return
       }
       if (name === 'form') content = content.replace(/;type=[^;]*$/, '')
@@ -509,7 +510,7 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
       return
     case 'cookie':
       if (v.includes('=')) p.cookies.push(v)
-      else warnOnce(p, `不支援從檔案讀取 Cookie（${v}）`)
+      else warnOnce(p, msg().transferMain.curl.cookieFromFile(v))
       return
     case 'max-time': {
       const seconds = Number(v)
@@ -535,20 +536,20 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
     case 'noproxy':
     case 'preproxy':
     case 'proxy-header':
-      warnOnce(p, 'cURL 的 Proxy 設定不會匯入（Hachi 使用 App 的 Proxy 設定）')
+      warnOnce(p, msg().transferMain.curl.proxy)
       return
     case 'digest':
     case 'ntlm':
     case 'negotiate':
     case 'anyauth':
-      warnOnce(p, `不支援 --${name} 驗證，請在 Auth 分頁重新設定`)
+      warnOnce(p, msg().transferMain.curl.auth(name))
       return
     case 'upload-file':
-      warnOnce(p, `不支援上傳檔案（-T ${v}）`)
+      warnOnce(p, msg().transferMain.curl.upload(v))
       return
     default:
       if (IGNORED.has(name)) return
-      warnOnce(p, `忽略不支援的選項 ${name.startsWith('-') ? name : `--${name}`}`)
+      warnOnce(p, msg().transferMain.curl.ignored(name.startsWith('-') ? name : `--${name}`))
   }
 }
 
@@ -626,12 +627,12 @@ export function parseCurl(
   text: string,
   newId: () => string = () => globalThis.crypto.randomUUID()
 ): CurlImport {
-  if (text.length > MAX_CURL_TEXT) throw new CurlParseError('指令太長')
+  if (text.length > MAX_CURL_TEXT) throw new CurlParseError(msg().transferMain.curl.tooLong)
   const trimmed = text.trim().replace(/^\$\s+/, '')
   const words = looksLikeCmd(trimmed) ? tokenizeCmd(trimmed) : tokenizePosix(trimmed)
   const first = words[0] ?? ''
   if (!/(^|[\\/])curl(\.exe)?$/i.test(first)) {
-    throw new CurlParseError('不是 cURL 指令（需要以 curl 開頭）')
+    throw new CurlParseError(msg().transferMain.curl.notCurl)
   }
 
   const p: Parsed = {
@@ -656,7 +657,8 @@ export function parseCurl(
     } else if (!endOfOptions && word.startsWith('--') && word.length > 2) {
       const name = word.slice(2)
       if (LONG_WITH_VALUE.has(name)) {
-        if (i + 1 >= words.length) throw new CurlParseError(`--${name} 缺少值`)
+        if (i + 1 >= words.length)
+          throw new CurlParseError(msg().transferMain.curl.missingValue(`--${name}`))
         applyOption(p, name, words[++i])
       } else {
         applyOption(p, name, undefined)
@@ -669,7 +671,8 @@ export function parseCurl(
         if (SHORT_WITH_VALUE.has(letter)) {
           let value = word.slice(j + 1)
           if (value === '') {
-            if (i + 1 >= words.length) throw new CurlParseError(`-${letter} 缺少值`)
+            if (i + 1 >= words.length)
+              throw new CurlParseError(msg().transferMain.curl.missingValue(`-${letter}`))
             value = words[++i] as string
           }
           applyOption(p, name, value)
@@ -680,10 +683,10 @@ export function parseCurl(
     } else if (p.url === null) {
       p.url = word
     } else {
-      warnOnce(p, `忽略多餘的網址：${word}`)
+      warnOnce(p, msg().transferMain.curl.extraUrl(word))
     }
   }
-  if (p.url === null || p.url.trim() === '') throw new CurlParseError('找不到網址')
+  if (p.url === null || p.url.trim() === '') throw new CurlParseError(msg().transferMain.curl.noUrl)
 
   const headers: KeyValue[] = p.headers.map(([key, value]) => ({
     id: newId(),
@@ -712,7 +715,7 @@ export function parseCurl(
       params.push({ id: newId(), key, value, enabled: true })
     }
   } else if (p.form.length > 0) {
-    if (p.data.length > 0) warnOnce(p, '同時有 -d 與 -F，只匯入 -F 的欄位')
+    if (p.data.length > 0) warnOnce(p, msg().transferMain.curl.dataAndForm)
     const formData: FormDataField[] = p.form.map((f) => ({
       id: newId(),
       key: f.key,
@@ -751,7 +754,7 @@ export function parseCurl(
 
   let method = p.method ?? (p.head ? 'HEAD' : body.mode !== 'none' ? 'POST' : 'GET')
   if (!(HTTP_METHODS as readonly string[]).includes(method)) {
-    warnOnce(p, `不支援的 HTTP 方法「${method}」，已改為 GET`)
+    warnOnce(p, msg().transferMain.methodUnsupported(method))
     method = 'GET'
   }
 

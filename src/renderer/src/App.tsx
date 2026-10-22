@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
+import { msg } from '@shared/i18n'
 import { EVENTS } from '@shared/ipc/channels'
 import {
   AlertDialog,
@@ -93,18 +94,18 @@ function useMainProcessEvents(): void {
           // Importing needs an open Workspace (the welcome screen has nowhere to put it).
           case 'import.file':
             if (store().currentWorkspace) void useTransferStore.getState().importFile()
-            else store().setNotice('請先建立或開啟 Workspace 再匯入')
+            else store().setNotice(msg().common.needWorkspaceToImport)
             break
           case 'help.shortcuts':
             useShortcutsDialog.getState().setOpen(true)
             break
           case 'import.bruno':
             if (store().currentWorkspace) void useTransferStore.getState().importBrunoFolder()
-            else store().setNotice('請先建立或開啟 Workspace 再匯入')
+            else store().setNotice(msg().common.needWorkspaceToImport)
             break
           case 'import.curl':
             if (store().currentWorkspace) useTransferStore.getState().setCurlOpen(true)
-            else store().setNotice('請先建立或開啟 Workspace 再匯入')
+            else store().setNotice(msg().common.needWorkspaceToImport)
             break
         }
       })
@@ -205,11 +206,11 @@ function NoticeDialog() {
     <AlertDialog open={notice !== null} onOpenChange={(open) => !open && setNotice(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>操作失敗</AlertDialogTitle>
+          <AlertDialogTitle>{msg().common.operationFailed}</AlertDialogTitle>
           <AlertDialogDescription>{notice}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogAction>確定</AlertDialogAction>
+          <AlertDialogAction>{msg().common.ok}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -221,6 +222,8 @@ export function App() {
   useMainProcessEvents()
   useSessionPersistence()
   const { status, bootError, currentWorkspace, welcomeRequested, bootstrap } = useAppStore()
+  // Changing the language rebuilds the screen, so every text is read again (issue #6).
+  const language = useAppStore((s) => s.language)
 
   useEffect(() => {
     void bootstrap()
@@ -236,19 +239,21 @@ export function App() {
 
   if (status === 'loading') {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">載入中…</div>
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        {msg().common.loading}
+      </div>
     )
   }
   if (status === 'error') {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-        <p className="font-medium text-destructive">Hachi 啟動失敗</p>
+        <p className="font-medium text-destructive">{msg().common.bootFailed}</p>
         <p className="text-sm text-muted-foreground">{bootError}</p>
       </div>
     )
   }
   return (
-    <>
+    <Fragment key={language}>
       {!currentWorkspace || welcomeRequested ? (
         <WelcomeScreen />
       ) : (
@@ -266,6 +271,6 @@ export function App() {
       <GitPromptDialog />
       <TransferResultDialog />
       <NoticeDialog />
-    </>
+    </Fragment>
   )
 }

@@ -3,6 +3,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-select'
 import { useAppStore } from '@renderer/stores/app-store'
+import { msg } from '@shared/i18n'
 
 type TriState = 'default' | 'on' | 'off'
 const toTri = (v: boolean | null): TriState => (v === null ? 'default' : v ? 'on' : 'off')
@@ -28,7 +29,8 @@ export function RequestSettingsTab({
   const ws = useAppStore((s) => s.workspaceSettings)
   const proxyMode = useAppStore((s) => s.config?.proxy.mode ?? 'none')
   const set = (patch: Partial<HttpRequestSettings>) => onChange({ ...settings, ...patch })
-  const onOff = (v: boolean | undefined) => (v === undefined ? '' : v ? '：開' : '：關')
+  const m = msg().http.settings
+  const onOff = (v: boolean | undefined) => (v === undefined ? '' : v ? m.on : m.off)
 
   return (
     <div className="flex max-w-xl flex-col gap-4 p-4" data-testid="request-settings">
@@ -37,7 +39,8 @@ export function RequestSettingsTab({
           checked={settings.timeoutMs === null}
           onChange={(e) => set({ timeoutMs: e.target.checked ? null : (ws?.timeoutMs ?? 30000) })}
         >
-          使用 Workspace 預設{ws ? `（${ws.timeoutMs === 0 ? '不限' : `${ws.timeoutMs} ms`}）` : ''}
+          {m.workspaceDefault}
+          {ws ? m.timeoutDefault(ws.timeoutMs === 0 ? m.noLimit : `${ws.timeoutMs} ms`) : ''}
         </CheckboxLabel>
         {settings.timeoutMs !== null && (
           <>
@@ -51,43 +54,49 @@ export function RequestSettingsTab({
                 set({ timeoutMs: Math.max(0, Math.floor(Number(e.target.value) || 0)) })
               }
             />
-            <span className="text-xs text-muted-foreground">ms（0 = 不限）</span>
+            <span className="text-xs text-muted-foreground">{m.timeoutUnit}</span>
           </>
         )}
       </Row>
-      <Row label="SSL 憑證驗證">
+      <Row label={m.ssl}>
         <NativeSelect
-          aria-label="SSL 憑證驗證"
+          aria-label={m.ssl}
           value={toTri(settings.validateSSL)}
           onChange={(e) => set({ validateSSL: fromTri(e.target.value as TriState) })}
         >
-          <option value="default">Workspace 預設{onOff(ws?.validateSSL)}</option>
-          <option value="on">開</option>
-          <option value="off">關（不驗證憑證）</option>
+          <option value="default">
+            {m.workspaceDefault}
+            {onOff(ws?.validateSSL)}
+          </option>
+          <option value="on">{m.sslOn}</option>
+          <option value="off">{m.sslOff}</option>
         </NativeSelect>
       </Row>
-      <Row label="跟隨重新導向">
+      <Row label={m.redirects}>
         <NativeSelect
-          aria-label="跟隨重新導向"
+          aria-label={m.redirects}
           value={toTri(settings.followRedirects)}
           onChange={(e) => set({ followRedirects: fromTri(e.target.value as TriState) })}
         >
-          <option value="default">Workspace 預設{onOff(ws?.followRedirects)}</option>
-          <option value="on">跟隨</option>
-          <option value="off">不跟隨</option>
+          <option value="default">
+            {m.workspaceDefault}
+            {onOff(ws?.followRedirects)}
+          </option>
+          <option value="on">{m.redirectsOn}</option>
+          <option value="off">{m.redirectsOff}</option>
         </NativeSelect>
-        {ws && <span className="text-xs text-muted-foreground">最多 {ws.maxRedirects} 次</span>}
+        {ws && (
+          <span className="text-xs text-muted-foreground">{m.maxRedirects(ws.maxRedirects)}</span>
+        )}
       </Row>
       <Row label="Proxy">
         <CheckboxLabel
           checked={settings.useProxy}
           onChange={(e) => set({ useProxy: e.target.checked })}
         >
-          使用 App 的 Proxy 設定
+          {m.useProxy}
         </CheckboxLabel>
-        <span className="text-xs text-muted-foreground">
-          目前：{proxyMode === 'none' ? '未設定' : proxyMode === 'system' ? '系統 Proxy' : '自訂'}
-        </span>
+        <span className="text-xs text-muted-foreground">{m.proxyNow(proxyMode)}</span>
       </Row>
       <Row label="Cookie">
         <CheckboxLabel
@@ -95,9 +104,9 @@ export function RequestSettingsTab({
           data-testid="use-cookie-jar"
           onChange={(e) => set({ useCookieJar: e.target.checked })}
         >
-          使用 Workspace 的 Cookie Jar
+          {m.useCookieJar}
         </CheckboxLabel>
-        <span className="text-xs text-muted-foreground">自動帶上並保存 Cookie</span>
+        <span className="text-xs text-muted-foreground">{m.cookieJarHint}</span>
       </Row>
     </div>
   )

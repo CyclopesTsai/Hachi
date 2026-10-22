@@ -9,6 +9,7 @@ import {
   type WsLogEntry,
   type WsMessageEntry
 } from '@shared/ws'
+import { msg } from '@shared/i18n'
 
 export type LogFilter = 'all' | 'sent' | 'received' | 'events'
 export type BinaryView = 'hex' | 'base64' | 'text'
@@ -53,27 +54,30 @@ export function prettyJson(text: string): string | null {
 export function describeEvent(entry: WsEventEntry): string {
   switch (entry.event) {
     case 'connecting':
-      return `連線中 ${entry.url ?? ''}`.trim()
+      return msg().ws.log.connecting(entry.url ?? '')
     case 'open':
-      return entry.protocol ? `已連線（子協定 ${entry.protocol}）` : '已連線'
+      return msg().ws.log.opened(entry.protocol)
     case 'closed': {
       const name = entry.code !== undefined ? (WS_CLOSE_CODE_NAMES[entry.code] ?? '') : ''
-      const reason = entry.reason ? `：${entry.reason}` : ''
-      const who = entry.message === 'user' ? '（由你中斷）' : ''
-      return `已關閉 ${entry.code ?? ''} ${name}${reason}${who}`.replace(/\s+/g, ' ').trim()
+      const reason = entry.reason ? msg().ws.closeReason(entry.reason) : ''
+      const who = entry.message === 'user' ? msg().ws.log.closedByUser : ''
+      return msg()
+        .ws.log.closed(`${entry.code ?? ''} ${name}${reason}${who}`)
+        .replace(/\s+/g, ' ')
+        .trim()
     }
     case 'error':
-      return `錯誤：${entry.message ?? ''}`
+      return msg().ws.log.error(entry.message ?? '')
     case 'ping':
       return entry.direction === 'received'
-        ? '收到伺服器的 Ping（已自動回應 Pong）'
+        ? msg().ws.log.pingReceived
         : entry.heartbeat
-          ? '送出 Ping（心跳）'
-          : '送出 Ping'
+          ? msg().ws.log.pingSentHeartbeat
+          : msg().ws.log.pingSent
     case 'pong':
-      return entry.latencyMs !== undefined
-        ? `收到 Pong（${Math.round(entry.latencyMs)} ms）`
-        : '收到 Pong'
+      return msg().ws.log.pong(
+        entry.latencyMs !== undefined ? Math.round(entry.latencyMs) : undefined
+      )
   }
 }
 

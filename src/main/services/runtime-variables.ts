@@ -1,5 +1,6 @@
 import type { RuntimeVariable } from '@shared/ipc/api'
 import type { VariableLayer } from '@shared/variables'
+import { msg } from '@shared/i18n'
 
 /**
  * Runtime variables (decision 71): set by scripts (`hachi.variables.set`) and extraction
@@ -31,7 +32,7 @@ export class RuntimeVariables {
     if (!vars || vars.size === 0) return null
     return {
       source: 'runtime',
-      sourceName: '暫存變數',
+      sourceName: msg().vars.sources.runtime,
       variables: Array.from(vars, ([name, value]) => ({
         id: `runtime:${name}`,
         key: name,

@@ -25,14 +25,15 @@ import { isLive, useWsStore } from '@renderer/stores/ws-store'
 import { Composer } from './Composer'
 import { MessageLog } from './MessageLog'
 import { WsSettingsTab } from './WsSettingsTab'
+import { msg } from '@shared/i18n'
 
-const STATUS: Record<WsConnState['status'] | 'idle', { label: string; dot: string }> = {
-  idle: { label: '未連線', dot: 'bg-muted-foreground/40' },
-  connecting: { label: '連線中', dot: 'bg-amber-500 animate-pulse' },
-  open: { label: '已連線', dot: 'bg-emerald-500' },
-  closing: { label: '中斷中', dot: 'bg-amber-500' },
-  closed: { label: '已關閉', dot: 'bg-muted-foreground/60' },
-  error: { label: '錯誤', dot: 'bg-red-500' }
+const STATUS_DOT: Record<WsConnState['status'] | 'idle', string> = {
+  idle: 'bg-muted-foreground/40',
+  connecting: 'bg-amber-500 animate-pulse',
+  open: 'bg-emerald-500',
+  closing: 'bg-amber-500',
+  closed: 'bg-muted-foreground/60',
+  error: 'bg-red-500'
 }
 
 function statusDetail(state: WsConnState | null): string | undefined {
@@ -40,13 +41,14 @@ function statusDetail(state: WsConnState | null): string | undefined {
   if (state.error) return state.error
   if (state.closeCode !== undefined) {
     const name = WS_CLOSE_CODE_NAMES[state.closeCode] ?? ''
-    return `Close Code ${state.closeCode} ${name}${state.closeReason ? `：${state.closeReason}` : ''}`
+    return `Close Code ${state.closeCode} ${name}${state.closeReason ? msg().ws.closeReason(state.closeReason) : ''}`
   }
   return state.url
 }
 
 export function WsStatusBadge({ state }: { state: WsConnState | null }) {
-  const status = STATUS[state?.status ?? 'idle']
+  const key = state?.status ?? 'idle'
+  const status = { label: msg().ws.status[key], dot: STATUS_DOT[key] }
   const closeCode = state?.status === 'closed' ? state.closeCode : undefined
   return (
     <span
@@ -120,11 +122,14 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
           </h2>
           {isDraft && (
             <span className="shrink-0 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
-              尚未儲存的 WebSocket
+              {msg().ws.unsavedWs}
             </span>
           )}
           {dirty && (
-            <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="有未儲存的修改" />
+            <span
+              className="size-2 shrink-0 rounded-full bg-primary"
+              aria-label={msg().http.unsaved}
+            />
           )}
           <div className="flex-1" />
           {tab.saveError && (
@@ -138,10 +143,10 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
             size="sm"
             disabled={(!dirty && !isDraft) || tab.saving}
             onClick={() => void store.save(tab.key)}
-            title="儲存（CmdOrCtrl+S）"
+            title={msg().http.saveTitle}
           >
             <Save />
-            {isDraft ? '儲存到…' : '儲存'}
+            {isDraft ? msg().http.saveTo : msg().common.save}
           </Button>
         </div>
 
@@ -153,19 +158,19 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
             data-testid="ws-url-input"
             className="h-9 flex-1 rounded-md border border-input bg-background shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50 dark:bg-input/30"
             textClassName="px-3 font-mono text-sm"
-            placeholder="wss://echo.example.com/socket  或  {{wsUrl}}"
+            placeholder={msg().ws.urlPlaceholder}
             value={draft.url}
             onChange={(e) => set({ url: e.target.value })}
           />
           {live ? (
             <Button variant="outline" className="w-24" onClick={disconnect}>
               {state?.status === 'connecting' ? <X /> : <Unplug />}
-              {state?.status === 'connecting' ? '取消' : '中斷'}
+              {state?.status === 'connecting' ? msg().common.cancel : msg().ws.disconnect}
             </Button>
           ) : (
             <Button className="w-24" onClick={connect}>
               <Plug />
-              連線
+              {msg().ws.connect}
             </Button>
           )}
         </div>
@@ -181,11 +186,11 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
               <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="ws-tls">
                 <span className="flex items-center gap-1">
                   <ShieldAlert className="size-3.5 shrink-0" />
-                  憑證檢查：{state.tls.summary}
+                  {msg().ws.tlsSummary(state.tls.summary)}
                 </span>
                 <TlsCheckButton
                   input={() => tlsCheckInput(tab)}
-                  label="查看憑證鏈與各平台…"
+                  label={msg().ws.tlsDetails}
                   variant="link"
                   data-testid="ws-tls-check"
                 />
@@ -193,8 +198,10 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
             )}
             {unresolved.length > 0 && (
               <p className="text-amber-700 dark:text-amber-400" data-testid="ws-unresolved">
-                找不到變數，已照原樣送出：
-                <span className="font-mono">{unresolved.map((n) => `{{${n}}}`).join('、')}</span>
+                {msg().http.response.unresolved}
+                <span className="font-mono">
+                  {msg().common.list(unresolved.map((n) => `{{${n}}}`))}
+                </span>
               </p>
             )}
           </div>
@@ -218,12 +225,10 @@ export function WebSocketEditor({ tab, title }: { tab: WsTab; title: string }) {
                   <KeyValueTable
                     rows={draft.params}
                     onChange={(params) => set({ params })}
-                    keyPlaceholder="Query 參數"
+                    keyPlaceholder={msg().http.queryParam}
                     data-testid="params-table"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    啟用的參數會在連線時加到 URL 後面。
-                  </p>
+                  <p className="text-xs text-muted-foreground">{msg().ws.paramsHint}</p>
                 </div>
               </TabsContent>
               <TabsContent value="headers" className="overflow-auto">

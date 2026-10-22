@@ -5,6 +5,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-select'
 import { useAppStore } from '@renderer/stores/app-store'
+import { msg } from '@shared/i18n'
 
 type TriState = 'default' | 'on' | 'off'
 const toTri = (v: boolean | null): TriState => (v === null ? 'default' : v ? 'on' : 'off')
@@ -36,6 +37,8 @@ export function WsSettingsTab({
 }) {
   const ws = useAppStore((s) => s.workspaceSettings)
   const proxyMode = useAppStore((s) => s.config?.proxy.mode ?? 'none')
+  const m = msg().ws.settings
+  const h = msg().http.settings
   const set = (patch: Partial<WsSettings>) => onChange({ ...settings, ...patch })
   const hb = settings.heartbeat
   const setHb = (patch: Partial<WsSettings['heartbeat']>) => set({ heartbeat: { ...hb, ...patch } })
@@ -46,53 +49,53 @@ export function WsSettingsTab({
 
   return (
     <div className="flex max-w-2xl flex-col gap-4 p-4" data-testid="ws-settings">
-      <Row label="子協定">
+      <Row label={m.subprotocols}>
         <textarea
-          aria-label="子協定"
+          aria-label={m.subprotocols}
           className="min-h-16 w-72 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs outline-none select-text focus-visible:ring-2 focus-visible:ring-ring/50"
-          placeholder={'每行一個，例如\nchat.v2'}
+          placeholder={m.subprotocolsPlaceholder}
           spellCheck={false}
           value={subprotocols.join('\n')}
           onChange={(e) => onSubprotocolsChange(e.target.value.split('\n'))}
         />
-        <span className="text-xs text-muted-foreground">
-          Sec-WebSocket-Protocol，可用 {'{{變數}}'}
-        </span>
+        <span className="text-xs text-muted-foreground">{m.subprotocolsHint}</span>
       </Row>
-      <Row label="連線逾時">
+      <Row label={m.timeout}>
         <CheckboxLabel
           checked={settings.connectTimeoutMs === null}
           onChange={(e) =>
             set({ connectTimeoutMs: e.target.checked ? null : (ws?.timeoutMs ?? 30000) })
           }
         >
-          使用 Workspace 預設{ws ? `（${ws.timeoutMs === 0 ? '不限' : `${ws.timeoutMs} ms`}）` : ''}
+          {h.workspaceDefault}
+          {ws ? h.timeoutDefault(ws.timeoutMs === 0 ? h.noLimit : `${ws.timeoutMs} ms`) : ''}
         </CheckboxLabel>
         {settings.connectTimeoutMs !== null && (
           <>
             <Input
-              aria-label="連線逾時 (ms)"
+              aria-label={m.timeoutLabel}
               type="number"
               min={0}
               className="h-8 w-32"
               value={settings.connectTimeoutMs}
               onChange={(e) => set({ connectTimeoutMs: int(e.target.value, 0, 3_600_000) })}
             />
-            <span className="text-xs text-muted-foreground">ms（0 = 不限）</span>
+            <span className="text-xs text-muted-foreground">{h.timeoutUnit}</span>
           </>
         )}
       </Row>
-      <Row label="SSL 憑證驗證">
+      <Row label={h.ssl}>
         <NativeSelect
-          aria-label="SSL 憑證驗證"
+          aria-label={h.ssl}
           value={toTri(settings.validateSSL)}
           onChange={(e) => set({ validateSSL: fromTri(e.target.value as TriState) })}
         >
           <option value="default">
-            Workspace 預設{ws ? (ws.validateSSL ? '：開' : '：關') : ''}
+            {h.workspaceDefault}
+            {ws ? (ws.validateSSL ? h.on : h.off) : ''}
           </option>
-          <option value="on">開</option>
-          <option value="off">關（不驗證憑證）</option>
+          <option value="on">{h.sslOn}</option>
+          <option value="off">{h.sslOff}</option>
         </NativeSelect>
       </Row>
       <Row label="Proxy">
@@ -100,41 +103,39 @@ export function WsSettingsTab({
           checked={settings.useProxy}
           onChange={(e) => set({ useProxy: e.target.checked })}
         >
-          使用 App 的 Proxy 設定
+          {h.useProxy}
         </CheckboxLabel>
-        <span className="text-xs text-muted-foreground">
-          目前：{proxyMode === 'none' ? '未設定' : proxyMode === 'system' ? '系統 Proxy' : '自訂'}
-        </span>
+        <span className="text-xs text-muted-foreground">{h.proxyNow(proxyMode)}</span>
       </Row>
-      <Row label="心跳">
+      <Row label={m.heartbeat}>
         <CheckboxLabel checked={hb.enabled} onChange={(e) => setHb({ enabled: e.target.checked })}>
-          定時送出
+          {m.heartbeatOn}
         </CheckboxLabel>
         {hb.enabled && (
           <>
             <NativeSelect
-              aria-label="心跳方式"
+              aria-label={m.heartbeatMode}
               value={hb.mode}
               onChange={(e) => setHb({ mode: e.target.value as 'ping' | 'text' })}
             >
               <option value="ping">WebSocket Ping</option>
-              <option value="text">文字訊息</option>
+              <option value="text">{m.heartbeatText}</option>
             </NativeSelect>
-            <span className="text-xs text-muted-foreground">每</span>
+            <span className="text-xs text-muted-foreground">{m.every}</span>
             <Input
-              aria-label="心跳間隔（秒）"
+              aria-label={m.intervalLabel}
               type="number"
               min={1}
               className="h-8 w-20"
               value={Math.round(hb.intervalMs / 1000)}
               onChange={(e) => setHb({ intervalMs: int(e.target.value, 1, 3600) * 1000 })}
             />
-            <span className="text-xs text-muted-foreground">秒</span>
+            <span className="text-xs text-muted-foreground">{m.seconds}</span>
             {hb.mode === 'text' && (
               <Input
-                aria-label="心跳訊息"
+                aria-label={m.payloadLabel}
                 className="h-8 w-56 font-mono text-xs"
-                placeholder='例如 {"type":"ping"}'
+                placeholder={m.payloadPlaceholder}
                 value={hb.payload}
                 onChange={(e) => setHb({ payload: e.target.value })}
               />
@@ -142,7 +143,7 @@ export function WsSettingsTab({
           </>
         )}
       </Row>
-      <Row label="中斷時送出">
+      <Row label={m.onClose}>
         <span className="text-xs text-muted-foreground">Close Code</span>
         <Input
           aria-label="Close Code"
@@ -157,9 +158,9 @@ export function WsSettingsTab({
           }}
         />
         <Input
-          aria-label="Close 原因"
+          aria-label={m.reasonLabel}
           className="h-8 w-56"
-          placeholder="原因（選填）"
+          placeholder={m.reasonPlaceholder}
           value={settings.closeReason}
           onChange={(e) => {
             if (utf8Bytes(e.target.value) <= 123) set({ closeReason: e.target.value })
@@ -168,14 +169,10 @@ export function WsSettingsTab({
         <span
           className={closeCodeValid ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}
         >
-          {closeCodeValid
-            ? `1000 或 3000–4999；原因 ${reasonBytes}/123 bytes`
-            : '必須是 1000 或 3000–4999'}
+          {closeCodeValid ? m.closeHint(reasonBytes) : m.closeInvalid}
         </span>
       </Row>
-      <p className="text-xs text-muted-foreground">
-        設定在下次連線時生效。不提供自動重連：斷線後請按「連線」重新連線。
-      </p>
+      <p className="text-xs text-muted-foreground">{m.note}</p>
     </div>
   )
 }

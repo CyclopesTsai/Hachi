@@ -17,6 +17,7 @@ import { contextParentId, type RequestTab } from '@renderer/features/tabs/tab-mo
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useEnvStore } from '@renderer/stores/env-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
+import { msg } from '@shared/i18n'
 
 const LANGUAGE_KEY = 'hachi.codegen.language'
 
@@ -66,7 +67,7 @@ function CodeView({ tab }: { tab: RequestTab }) {
     <div className="flex min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <NativeSelect
-          aria-label="語言"
+          aria-label={msg().http.code.language}
           data-testid="codegen-language"
           className="h-8 w-48 text-xs"
           value={language}
@@ -90,19 +91,19 @@ function CodeView({ tab }: { tab: RequestTab }) {
             checked={revealSecrets}
             onChange={(e) => setRevealSecrets(e.target.checked)}
           />
-          顯示機密值
+          {msg().http.code.reveal}
         </label>
         <div className="flex-1" />
         <Button size="sm" variant="outline" disabled={code === ''} onClick={() => void copy()}>
           {copied ? <Check /> : <Copy />}
-          {copied ? '已複製' : '複製'}
+          {copied ? msg().http.code.copied : msg().http.code.copy}
         </Button>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {resolved?.urlError && (
         <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
           <AlertTriangle className="size-3.5 shrink-0" />
-          {resolved.urlError}（程式碼使用輸入的網址）
+          {msg().http.code.urlError(resolved.urlError)}
         </p>
       )}
       {resolved?.authNote && (
@@ -114,7 +115,7 @@ function CodeView({ tab }: { tab: RequestTab }) {
       {resolved && resolved.unresolvedVariables.length > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
           <AlertTriangle className="size-3.5 shrink-0" />
-          找不到的變數：{resolved.unresolvedVariables.map((n) => `{{${n}}}`).join('、')}
+          {msg().common.unresolvedVars(resolved.unresolvedVariables)}
         </p>
       )}
       <div
@@ -124,10 +125,8 @@ function CodeView({ tab }: { tab: RequestTab }) {
         <CodeEditor value={code} language={editorLanguage} readOnly className="h-full" />
       </div>
       <p className="text-xs text-muted-foreground">
-        {revealSecrets
-          ? '機密變數已替換成實際的值，分享程式碼前請留意。'
-          : '機密變數保留為 {{名稱}}，勾選「顯示機密值」可替換成實際的值。'}
-        {language === 'curl' && ' cURL 指令以 macOS / Linux 的 shell 引號規則產生。'}
+        {revealSecrets ? msg().http.code.revealed : msg().http.code.kept}
+        {language === 'curl' && msg().http.code.curl}
       </p>
     </div>
   )
@@ -146,10 +145,8 @@ export function CodeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>產生程式碼</DialogTitle>
-          <DialogDescription>
-            以目前編輯中的內容（含沿用的 Headers / Auth 與目前環境的變數）產生。
-          </DialogDescription>
+          <DialogTitle>{msg().http.code.title}</DialogTitle>
+          <DialogDescription>{msg().http.code.description}</DialogDescription>
         </DialogHeader>
         {open && tab.draft && <CodeView tab={tab} />}
       </DialogContent>

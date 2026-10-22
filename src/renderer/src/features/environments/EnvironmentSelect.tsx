@@ -9,6 +9,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { useEnvStore } from '@renderer/stores/env-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { msg } from '@shared/i18n'
 
 /** Header dropdown: the environment used for `{{variables}}`, and "管理環境…". */
 export function EnvironmentSelect() {
@@ -27,7 +28,7 @@ export function EnvironmentSelect() {
         >
           <Globe className="text-muted-foreground" />
           <span className="truncate" data-testid="active-environment">
-            {activeName ?? '無環境'}
+            {activeName ?? msg().env.none}
           </span>
           <ChevronDown className="text-muted-foreground" />
         </Button>
@@ -35,7 +36,7 @@ export function EnvironmentSelect() {
       <DropdownMenuContent align="end" className="min-w-48">
         <DropdownMenuItem onSelect={() => void setActive(null)}>
           <span className="flex size-4 items-center">{activeId === null && <Check />}</span>
-          無環境
+          {msg().env.none}
         </DropdownMenuItem>
         {list
           .filter((e) => !e.error)
@@ -52,7 +53,7 @@ export function EnvironmentSelect() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => useTabsStore.getState().openEnvironments()}>
           <Settings2 />
-          管理環境…
+          {msg().env.manage}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

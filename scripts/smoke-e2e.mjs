@@ -195,7 +195,8 @@ let lastPage = null
 /** Process of the latest launch, stopped before cleaning up (Windows can't delete files it holds). */
 let lastProcess = null
 
-async function launch() {
+/** `env` adds to the environment of the App (e.g. another system language). */
+async function launch(env = {}) {
   const app = await electron.launch({
     executablePath: packagedApp ?? electronPath,
     args,
@@ -209,7 +210,10 @@ async function launch() {
       NODE_EXTRA_CA_CERTS: path.join(chainDir, 'chain-root.pem'),
       // Git sees no user.name / email of this computer: the identity dialog is tested.
       GIT_CONFIG_GLOBAL: path.join(tmp, 'gitconfig'),
-      GIT_CONFIG_NOSYSTEM: '1'
+      GIT_CONFIG_NOSYSTEM: '1',
+      // The checks read Chinese texts: a Chinese system language whatever the OS (issue #6).
+      HACHI_SYSTEM_LANGUAGE: 'zh-TW',
+      ...env
     }
   })
   // Deleted items go to a folder of the test instead of the real Trash of this computer.
@@ -233,6 +237,15 @@ async function launch() {
   lastPage = page
   lastProcess = app.process()
   return { app, page }
+}
+
+/** Closing the window quits the app on every platform, macOS too (decision 110). */
+async function closeWindow(app) {
+  const exited = app.waitForEvent('close')
+  void app
+    .evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
+    .catch(() => undefined)
+  await exited
 }
 
 function step(name) {
@@ -2746,13 +2759,198 @@ try {
   assert.equal(config2.lastWorkspacePath, null)
   step('delete Workspace: folder moved to trash, removed from recent list, back to welcome')
 
-  // Closing the window quits the app on every platform, macOS too (decision 110).
-  const exited = app.waitForEvent('close')
+  // ---- Issue #6: interface language ----
+  // The launches above run with a Chinese system language (HACHI_SYSTEM_LANGUAGE).
+  const languageSelect = page.getByTestId('language-select')
+  await languageSelect.selectOption('en')
+  await page.getByText('Create a Workspace').waitFor()
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'en-US')
+  await waitUntil(
+    async () => (await readJson(path.join(userData, 'app-config.json'))).ui.language === 'en',
+    'language saved in app-config.json'
+  )
+  assert.deepEqual(
+    await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map((i) => i.label)),
+    menu.map((m) => m.label),
+    'the native menu stays English'
+  )
+  await languageSelect.selectOption('system')
+  await page.getByText('建立新的 Workspace').waitFor()
+  step('welcome screen: the language switches at once and is saved (跟隨系統 → Chinese here)')
+
+  await closeWindow(app)
+  step('closing the window quits the app (macOS too)')
+
+  // A system in English: "follow the system" shows English, every screen without Chinese.
+  ;({ app, page } = await launch({ HACHI_SYSTEM_LANGUAGE: 'en-US' }))
+  await page.getByTestId('welcome-screen').waitFor()
+  await page.setViewportSize({ width: 1280, height: 820 })
+  await page.getByText('Create a Workspace').waitFor()
+  /** No Chinese on screen (user data here is English) and nothing pushed out of place. */
+  async function englishScreen(name) {
+    await page.waitForTimeout(200)
+    const problems = await page.evaluate(() => {
+      // CJK punctuation, ideographs and full-width forms.
+      const CJK = (text) =>
+        [...text].some((c) => {
+          const p = c.codePointAt(0)
+          return (
+            (p >= 0x3000 && p <= 0x303f) ||
+            (p >= 0x4e00 && p <= 0x9fff) ||
+            (p >= 0xff00 && p <= 0xffef)
+          )
+        })
+      const own = (text) => text.replace('繁體中文', '')
+      const found = []
+      for (const line of document.body.innerText.split('\n')) {
+        if (CJK(own(line))) found.push(`text: ${line.trim().slice(0, 100)}`)
+      }
+      for (const el of document.querySelectorAll('[placeholder],[title],[aria-label]')) {
+        for (const attr of ['placeholder', 'title', 'aria-label']) {
+          const value = el.getAttribute(attr)
+          if (value && CJK(own(value))) found.push(`${attr}: ${value.slice(0, 100)}`)
+        }
+      }
+      for (const el of document.querySelectorAll(
+        'button, label, [role="tab"], [role="menuitem"]'
+      )) {
+        const box = el.getBoundingClientRect()
+        if (box.width === 0) continue
+        if (box.right > window.innerWidth + 1) found.push(`outside the window: ${el.innerText}`)
+        const style = getComputedStyle(el)
+        if (
+          el.scrollWidth > el.clientWidth + 1 &&
+          style.overflowX !== 'visible' &&
+          style.textOverflow !== 'ellipsis'
+        ) {
+          found.push(`cut off: ${el.innerText}`)
+        }
+      }
+      return [...new Set(found)]
+    })
+    await page.screenshot({ path: path.join(shots, `en-${name}.png`) })
+    assert.deepEqual(problems, [], `English screen "${name}"`)
+  }
+  await englishScreen('welcome')
+  await page.getByLabel('Name').fill('Shop API')
+  await page.getByLabel('Location').fill(docs)
+  await page.getByRole('button', { name: 'Create Workspace' }).click()
+  await page.getByTestId('workspace-shell').waitFor()
+  await englishScreen('workspace')
+  assert.equal(
+    (await readJson(path.join(userData, 'app-config.json'))).ui.language,
+    'system',
+    'still following the system'
+  )
+  step('English system + 跟隨系統: the App starts in English')
+
+  // The proxy checks above left the App on an unreachable proxy.
+  await clickMenu(app, 'Settings…')
+  const enSettings = page.getByTestId('app-settings-dialog')
+  await enSettings.getByRole('radio', { name: 'No proxy' }).click()
+  await enSettings.getByRole('button', { name: 'Save' }).click()
+  await waitUntil(
+    async () => (await readJson(path.join(userData, 'app-config.json'))).proxy?.mode === 'none',
+    'proxy off'
+  )
+
+  t = treeHelpers(page)
+  await page.getByTestId('sidebar-add').click()
+  await page.getByRole('menuitem', { name: 'New Collection' }).click()
+  await t.typeName('Shop')
+  await t.contextAction('Shop', 'New Folder')
+  await t.typeName('Admin')
+  await t.contextAction('Shop', 'New HTTP Request')
+  await t.typeName('Get item')
+  const enEditor = page.getByTestId('request-editor')
+  await page.getByTestId('url-input').fill(`${testServer.url}/json?q={{missing}}`)
+  await enEditor.getByRole('button', { name: 'Send' }).click()
+  await page.getByTestId('response-viewer').waitFor()
+  await page.getByTestId('unresolved-variables').getByText('Variables not found').waitFor()
+  await englishScreen('response')
+  for (const tab of [/^Params/, /^Headers/, /^Body/, 'Auth', /^Scripts/, /^Tests/, 'Settings']) {
+    await enEditor.getByRole('tab', { name: tab }).first().click()
+    await englishScreen(`request-${String(tab).replace(/\W/g, '').toLowerCase()}`)
+  }
+  await page.getByTestId('codegen-button').click()
+  await englishScreen('code')
+  await page.keyboard.press('Escape')
+  await page.getByTestId('tls-check-button').click()
+  await page.getByTestId('tls-check').getByText('Unencrypted connection').first().waitFor()
+  await englishScreen('certificate-http')
+  await page.keyboard.press('Escape')
+  step('English request editor, response, code and certificate check')
+
+  // Messages made in main and in the script process follow the language too.
+  await enEditor.getByRole('tab', { name: /^Scripts/ }).click()
+  await page.locator('[data-testid="script-editor"] .cm-content').click()
+  await page.keyboard.insertText("hachi.variables.set(' ', 1)")
+  await enEditor.getByRole('button', { name: 'Send' }).click()
+  const enTrust = page.getByTestId('script-trust-dialog')
+  await enTrust.waitFor()
+  await englishScreen('script-trust')
+  await enTrust.getByRole('button', { name: 'Trust and Run' }).click()
+  await page
+    .getByTestId('response-error')
+    .getByText('Pre-request script error: Variable names cannot be blank')
+    .waitFor()
+  await englishScreen('script-error')
+  step('script errors from the sandbox are in English')
+
+  await t.row('Shop').click()
+  await englishScreen('collection')
+  await page.getByTestId('environment-select').click()
+  await page.getByRole('menuitem', { name: 'Manage environments…' }).click()
+  await page
+    .getByTestId('environments-editor')
+    .getByRole('button', { name: 'Create environment' })
+    .click()
+  await englishScreen('environments')
+  await page.getByTestId('sidebar-history').click()
+  await page.getByTestId('history-row').first().waitFor()
+  await englishScreen('history')
+  await page.getByTestId('sidebar-mocks').click()
+  await page.getByTestId('mock-add').click()
+  await englishScreen('mock-dialog')
+  await page.getByTestId('mock-name-dialog').getByRole('button', { name: 'Create' }).click()
+  await page.getByTestId('mock-editor').waitFor()
+  await englishScreen('mock')
+  await page.getByTestId('sidebar-collections').click()
+  await t.contextAction('Shop', 'Run…')
+  await page.getByTestId('runner-view').waitFor()
+  await englishScreen('runner')
+  await page.getByTestId('git-menu').click()
+  await englishScreen('git-menu')
+  await page.keyboard.press('Escape')
+  await page.getByTestId('workspace-menu').click()
+  await page.getByRole('menuitem', { name: 'Workspace Settings…' }).click()
+  await englishScreen('workspace-settings')
+  await page.keyboard.press('Escape')
+  await clickMenu(app, 'Settings…')
+  await page.getByTestId('app-settings-dialog').waitFor()
+  await englishScreen('app-settings')
+  await page.keyboard.press('Escape')
+  await clickMenu(app, 'Keyboard Shortcuts')
+  await englishScreen('shortcuts')
+  await page.keyboard.press('Escape')
+  await clickMenu(app, 'Import cURL…')
+  await page.getByTestId('curl-input').fill('wget https://example.com')
+  await page.getByRole('button', { name: 'Import', exact: true }).click()
+  await page.getByText('Not a cURL command').waitFor()
+  await englishScreen('import-curl')
+  await page.keyboard.press('Escape')
+  step('English collection, environments, history, Mock, Runner, Git, settings and import screens')
+
+  // Get item has an unsaved script: closing asks first.
+  const enExited = app.waitForEvent('close')
   void app
     .evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
     .catch(() => undefined)
-  await exited
-  step('closing the window quits the app (macOS too)')
+  await page.getByRole('button', { name: 'Don’t Save' }).waitFor()
+  await englishScreen('close-prompt')
+  await page.getByRole('button', { name: 'Don’t Save' }).click()
+  await enExited
+  step('English close prompt; Don’t Save quits')
 
   console.log(`\nAll smoke checks passed. Screenshots: ${shots}`)
 } catch (error) {

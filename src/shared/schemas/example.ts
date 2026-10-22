@@ -14,8 +14,6 @@ export const EXAMPLE_VERSION = 1
 export const EXAMPLES_DIR_SUFFIX = '.examples'
 /** Response bodies above this (decoded size) cannot be saved. */
 export const EXAMPLE_BODY_MAX_BYTES = 1024 * 1024
-/** Stands in for credential header values. */
-export const HIDDEN_VALUE = '（已隱藏）'
 /** Header values that carry credentials (OAuth tokens, signatures, Basic, cookies): never saved. */
 export const CREDENTIAL_REQUEST_HEADERS = ['authorization', 'proxy-authorization', 'cookie']
 export const CREDENTIAL_RESPONSE_HEADERS = ['set-cookie']

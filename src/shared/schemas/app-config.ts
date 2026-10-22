@@ -51,7 +51,9 @@ export const uiSettingsSchema = z.object({
   /** Soft-wrap long lines in the response body viewer (display only). */
   responseBodyWrap: z.boolean().default(false),
   /** Git Commit screen: changes as a tree of collections / folders (false = flat list). */
-  gitChangesTree: z.boolean().default(true)
+  gitChangesTree: z.boolean().default(true),
+  /** Interface language (issue #6): follow the system, or one language. */
+  language: z.enum(['system', 'zh-TW', 'en']).default('system')
 })
 export type UiSettings = z.infer<typeof uiSettingsSchema>
 

@@ -27,6 +27,7 @@ import type {
   PortableItem
 } from './portable'
 import { TransferWarnings } from './warnings'
+import { msg } from '../i18n'
 
 export const POSTMAN_SCHEMA_V21 =
   'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
@@ -82,12 +83,12 @@ export function detectImportFormat(json: unknown): ImportFormat | null {
 /** Explains why a file cannot be imported (for files detectImportFormat rejected). */
 export function unsupportedReason(json: unknown): string {
   if (isObject(json) && Array.isArray(json.requests) && Array.isArray(json.order)) {
-    return '這是 Postman v1 格式，請在 Postman 中重新匯出成 Collection v2.1'
+    return msg().transferMain.postman.v1
   }
   if (isObject(json) && isObject(json.info)) {
-    return '不支援這個 Collection 格式版本（需要 Postman Collection v2.0 / v2.1）'
+    return msg().transferMain.postman.version
   }
-  return '無法辨識的檔案：目前支援 Postman Collection（v2.0 / v2.1）與 Postman Environment'
+  return msg().transferMain.postman.unknownFile
 }
 
 // ---------------------------------------------------------------------------------
@@ -209,11 +210,11 @@ function parseAuth(raw: unknown, fallback: Auth, where: string, warnings: Transf
         } as const
       )[grant]
       if (!grantType) {
-        warnings.add(`不支援的 OAuth 2.0 Grant Type「${grant}」，已改為 None`, where)
+        warnings.add(msg().transferMain.grantUnsupported(grant), where)
         return { type: 'none' }
       }
       if (get('addTokenTo') === 'queryParams') {
-        warnings.add('OAuth 2.0 Token 加在 Query 的設定不支援，改用 Header', where)
+        warnings.add(msg().transferMain.postman.tokenInQuery, where)
       }
       return {
         type: 'oauth2',
@@ -232,7 +233,7 @@ function parseAuth(raw: unknown, fallback: Auth, where: string, warnings: Transf
       }
     }
     default:
-      warnings.add(`不支援的 Auth 類型「${type || '未知'}」，已改為 None`, where)
+      warnings.add(msg().transferMain.authUnsupported(type || msg().transferMain.unknown), where)
       return { type: 'none' }
   }
 }
@@ -263,13 +264,13 @@ function parseScripts(events: unknown, where: string, warnings: TransferWarnings
     const code = (Array.isArray(exec) ? exec.map(asString).join('\n') : asString(exec)).trim()
     if (code === '') continue
     if (event.disabled === true) {
-      warnings.add('停用的腳本未匯入', where)
+      warnings.add(msg().transferMain.postman.disabledScript, where)
       continue
     }
     const listen = asString(event.listen)
     const unsupported = unsupportedScriptApis(code)
     if (unsupported.length > 0) {
-      warnings.add(`腳本使用了 Hachi 不支援的寫法：${unsupported.join('、')}`, where)
+      warnings.add(msg().transferMain.scriptUnsupported(unsupported), where)
     }
     if (listen === 'prerequest') scripts.preRequest = code
     else if (listen === 'test') scripts.postResponse = code
@@ -326,7 +327,7 @@ function parseBody(
           const src = row.src
           const files = (Array.isArray(src) ? src : [src]).map(asString).filter((s) => s !== '')
           if (isFile && files.length > 1) {
-            warnings.add('Form-data 欄位有多個檔案，只匯入第一個', where)
+            warnings.add(msg().transferMain.postman.multiFiles, where)
           }
           return {
             id: ctx.newId(),
@@ -338,7 +339,7 @@ function parseBody(
           }
         })
       if (fields.some((f) => f.type === 'file')) {
-        warnings.add('Form-data 檔案路徑來自原本的電腦，可能需要重新選擇檔案', where)
+        warnings.add(msg().transferMain.postman.formFile, where)
       }
       return { mode: 'formData', formData: fields }
     }
@@ -351,23 +352,23 @@ function parseBody(
         try {
           vars = JSON.parse(varsText) as unknown
         } catch {
-          warnings.add('GraphQL variables 不是有效的 JSON，未匯入', where)
+          warnings.add(msg().transferMain.graphqlVarsInvalid, where)
         }
       }
       const payload =
         vars === undefined
           ? { query: asString(gql.query) }
           : { query: asString(gql.query), variables: vars }
-      warnings.add('GraphQL Body 已轉成 JSON Body', where)
+      warnings.add(msg().transferMain.postman.graphql, where)
       return { mode: 'json', json: JSON.stringify(payload, null, 2) }
     }
     case 'file':
-      warnings.add('不支援 Binary（檔案）Body，已改為 none', where)
+      warnings.add(msg().transferMain.postman.binaryBody, where)
       return { mode: 'none' }
     case '':
       return { mode: 'none' }
     default:
-      warnings.add(`不支援的 Body 類型「${mode}」，已改為 none`, where)
+      warnings.add(msg().transferMain.bodyUnsupported(mode), where)
       return { mode: 'none' }
   }
 }
@@ -411,7 +412,7 @@ function parseUrl(
     url = url.replace(new RegExp(`/:${escapeRegExp(key)}(?=[/?#]|$)`, 'g'), `/${value}`)
   }
   if (/\/:[A-Za-z_][\w-]*(?=[/?#]|$)/.test(url)) {
-    warnings.add('網址中有 Path 變數（:name），Hachi 沒有對應功能，請改用 {{變數}}', where)
+    warnings.add(msg().transferMain.postman.pathVars, where)
   }
 
   const params: KeyValue[] = query.map((row) => {
@@ -431,7 +432,7 @@ function parseUrl(
 function parseMethod(raw: unknown, where: string, warnings: TransferWarnings): HttpMethod {
   const method = (asString(raw) || 'GET').toUpperCase()
   if ((HTTP_METHODS as readonly string[]).includes(method)) return method as HttpMethod
-  warnings.add(`不支援的 HTTP 方法「${method}」，已改為 GET`, where)
+  warnings.add(msg().transferMain.methodUnsupported(method), where)
   return 'GET'
 }
 
@@ -486,7 +487,7 @@ function parseExamples(
     const name = itemName(raw.name, 'Example')
     const body = asString(raw.body)
     if (new TextEncoder().encode(body).length > EXAMPLE_BODY_MAX_BYTES) {
-      state.warnings.add(`範例「${name}」的回應超過 1 MB，未匯入`, where)
+      state.warnings.add(msg().transferMain.postman.exampleTooLarge(name), where)
       continue
     }
     const headers = asArray(raw.header).flatMap((h): [string, string][] =>
@@ -538,16 +539,16 @@ function parseItems(
     const name = itemName(raw.name, isFolder ? 'Folder' : 'Untitled')
     const where = [...path, name].join(' / ')
     if (++state.items > MAX_ITEMS) {
-      throw new TransferError(`項目超過 ${MAX_ITEMS} 個，無法匯入`)
+      throw new TransferError(msg().transferMain.postman.tooManyItems(MAX_ITEMS))
     }
     if (isFolder) {
       if (depth >= MAX_DEPTH) {
-        state.warnings.add(`資料夾超過 ${MAX_DEPTH} 層，更深的項目未匯入`, where)
+        state.warnings.add(msg().transferMain.postman.tooDeep(MAX_DEPTH), where)
         continue
       }
       const scripts = parseScripts(raw.event, where, state.warnings)
       if (Array.isArray(raw.variable) && raw.variable.length > 0) {
-        state.warnings.add('Postman 資料夾變數不支援，未匯入', where)
+        state.warnings.add(msg().transferMain.postman.folderVars, where)
       }
       result.push({
         kind: 'folder',
@@ -565,7 +566,7 @@ function parseItems(
         ...(examples.length > 0 ? { examples } : {})
       })
     } else {
-      state.warnings.add('無法辨識的項目，已略過', where)
+      state.warnings.add(msg().transferMain.postman.unknownItem, where)
     }
   }
   return result
@@ -812,7 +813,7 @@ function exportExamples(examples: readonly PortableExample[], where: string, sta
     if (body) originalRequest.body = body
     const binary = response.body.encoding === 'base64'
     if (binary && response.body.data !== '') {
-      state.warnings.add(`結果「${example.name}」是二進位內容，Body 未匯出`, where)
+      state.warnings.add(msg().transferMain.binaryExample(example.name), where)
     }
     const type = response.contentType
     const preview = /json/i.test(type)
@@ -852,8 +853,8 @@ function exportRequest(
   )
   const header = exportKeyValues([...own, ...added])
   const s = request.settings
-  if (s.timeoutMs !== null) state.warnings.add('請求的逾時設定 Postman 不支援，未匯出', where)
-  if (!s.useProxy) state.warnings.add('「不使用 App 的 Proxy」設定 Postman 不支援，未匯出', where)
+  if (s.timeoutMs !== null) state.warnings.add(msg().transferMain.postman.timeout, where)
+  if (!s.useProxy) state.warnings.add(msg().transferMain.postman.noProxy, where)
   const behavior: Json = {}
   if (s.validateSSL === false) behavior.disableStrictSSL = true
   if (s.followRedirects === false) behavior.followRedirects = false
@@ -890,7 +891,7 @@ function exportItems(
 ): Json[] {
   const headers = mergeHeaders(inherited, container.headers)
   if (container.headers.some(isActive)) {
-    state.warnings.add('Postman 沒有共用 Headers：Collection / 資料夾的 Headers 已併入每個請求')
+    state.warnings.add(msg().transferMain.postman.sharedHeaders)
   }
   const items: Json[] = []
   for (const child of container.children) {
@@ -939,7 +940,7 @@ export function exportPostmanCollection(
       ...(v.description ? { description: v.description } : {})
     }))
     if (collection.variables.some((v) => v.secret)) {
-      state.warnings.add('機密變數的值不會匯出（已留空）')
+      state.warnings.add(msg().transferMain.postman.secrets)
     }
   }
   return { json, skipped: state.skipped, warnings: state.warnings.list() }

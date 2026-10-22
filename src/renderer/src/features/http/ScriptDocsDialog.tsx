@@ -8,7 +8,8 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { DocSectionView as Section } from './DocSection'
-import { SCRIPT_DOCS, type DocPhase } from './script-docs'
+import { scriptDocs, type DocPhase } from './script-docs'
+import { msg } from '@shared/i18n'
 
 /** 「可用的 API」: the script API with examples, one tab per phase. */
 export function ScriptDocsDialog({
@@ -25,11 +26,8 @@ export function ScriptDocsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl" data-testid="script-docs">
         <DialogHeader>
-          <DialogTitle>腳本可用的 API</DialogTitle>
-          <DialogDescription>
-            JavaScript，可以直接使用 await。Pre-request 在發送前執行，Post-response
-            在收到回應、擷取變數之後執行。
-          </DialogDescription>
+          <DialogTitle>{msg().docs.scriptTitle}</DialogTitle>
+          <DialogDescription>{msg().docs.scriptDescription}</DialogDescription>
         </DialogHeader>
         {/* Mounted per opening: starts on the phase being edited. */}
         {open && <DocsTabs phase={phase} />}
@@ -53,7 +51,7 @@ function DocsTabs({ phase }: { phase: DocPhase }) {
       {(['preRequest', 'postResponse'] as const).map((p) => (
         <TabsContent key={p} value={p} className="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
           <div className="flex flex-col gap-5">
-            {SCRIPT_DOCS[p].map((section) => (
+            {scriptDocs(p).map((section) => (
               <Section key={section.title} section={section} />
             ))}
           </div>

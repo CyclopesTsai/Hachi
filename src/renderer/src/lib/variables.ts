@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo } from 'react'
 import { findNode } from '@shared/tree'
 import {
-  DYNAMIC_VARIABLES,
+  dynamicVariableDescription,
   buildVariableMap,
   isDynamicVariable,
   isFileVariable,
@@ -12,6 +12,7 @@ import {
 } from '@shared/variables'
 import { useEnvStore } from '@renderer/stores/env-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
+import { msg } from '@shared/i18n'
 
 const EMPTY_MAP: VariableMap = new Map()
 
@@ -37,7 +38,7 @@ export function useVariableMap(collectionId: string | null): VariableMap {
     if (runtime.length > 0) {
       layers.push({
         source: 'runtime',
-        sourceName: '本次執行',
+        sourceName: msg().vars.thisRun,
         variables: runtime.map((v) => ({
           id: `runtime:${v.name}`,
           key: v.name,
@@ -76,31 +77,29 @@ export interface VariableInfo {
   detail: string
 }
 
-const SOURCE_LABEL = {
-  runtime: '暫存變數',
-  data: '資料檔',
-  environment: '環境',
-  collection: 'Collection'
-} as const
-
 export function describeVariable(name: string, map: VariableMap): VariableInfo {
   const variable = map.get(name)
   if (variable) {
-    const value = variable.secret ? `${maskSecret(variable.value)}（機密）` : variable.value
-    const source = `${SOURCE_LABEL[variable.source]}「${variable.sourceName}」`
-    return { name, status: 'defined', detail: `${value === '' ? '（空字串）' : value} — ${source}` }
+    const m = msg().vars
+    const value = variable.secret ? m.secret(maskSecret(variable.value)) : variable.value
+    const source = m.named(m.sources[variable.source], variable.sourceName)
+    return {
+      name,
+      status: 'defined',
+      detail: `${value === '' ? m.emptyString : value} — ${source}`
+    }
   }
   if (isDynamicVariable(name)) {
-    return { name, status: 'dynamic', detail: `動態變數：${DYNAMIC_VARIABLES[name]}` }
+    return { name, status: 'dynamic', detail: msg().vars.dynamic(dynamicVariableDescription(name)) }
   }
   const file = parseFileVariable(name)
   if (file?.supported) {
-    return { name, status: 'dynamic', detail: `送出時讀取檔案並轉成 base64：${file.path}` }
+    return { name, status: 'dynamic', detail: msg().vars.file(file.path) }
   }
   if (isFileVariable(name)) {
-    return { name, status: 'missing', detail: '格式應為 {{$file:base64:檔案路徑}}' }
+    return { name, status: 'missing', detail: msg().vars.fileFormat }
   }
-  return { name, status: 'missing', detail: '找不到這個變數，會照原樣送出' }
+  return { name, status: 'missing', detail: msg().vars.missing }
 }
 
 export const VARIABLE_CLASS: Record<VariableStatus, string> = {

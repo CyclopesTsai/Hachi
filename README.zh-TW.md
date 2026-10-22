@@ -15,7 +15,7 @@
 
 ![Hachi](docs/screenshot.png)
 
-Hachi 的定位類似 Postman / Bruno：不需要帳號、不上雲、不用資料庫。**Workspace** 就是一個 JSON 檔案的資料夾（每個請求一個檔案），可以用 git 檢視差異、分享與版本控制。App 介面是繁體中文（原生選單為英文）。
+Hachi 的定位類似 Postman / Bruno：不需要帳號、不上雲、不用資料庫。**Workspace** 就是一個 JSON 檔案的資料夾（每個請求一個檔案），可以用 git 檢視差異、分享與版本控制。App 介面有繁體中文與英文，預設跟隨系統語言，也可以在 App 設定切換（原生選單為英文）。
 
 ## 功能
 

@@ -43,6 +43,7 @@ import { Input } from '@renderer/components/ui/input'
 import { useAppStore } from '@renderer/stores/app-store'
 import { useGitStore } from '@renderer/stores/git-store'
 import { gitInstallHint } from './git-names'
+import { msg } from '@shared/i18n'
 
 /** origin's URL (decision 113): needed before the first push of a new repository. */
 function RemoteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -77,24 +78,24 @@ function RemoteForm({ onClose }: { onClose: () => void }) {
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>設定遠端</DialogTitle>
+        <DialogTitle>{msg().git.remoteTitle}</DialogTitle>
         <DialogDescription>
-          {remote ? `目前的 ${remote.name}：${remote.url}` : '還沒有遠端；設定後會加入 origin。'}
+          {remote ? msg().git.remoteNow(remote.name, remote.url) : msg().git.remoteNone}
         </DialogDescription>
       </DialogHeader>
       <Input
         autoFocus
-        aria-label="遠端網址"
-        placeholder="https://github.com/me/api.git 或 git@github.com:me/api.git"
+        aria-label={msg().git.remoteUrl}
+        placeholder={msg().git.remotePlaceholder}
         value={url}
         onChange={(e) => setUrl(e.target.value)}
       />
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
-          取消
+          {msg().common.cancel}
         </Button>
         <Button type="submit" disabled={busy || url.trim() === ''}>
-          儲存
+          {msg().common.save}
         </Button>
       </DialogFooter>
     </form>
@@ -118,24 +119,22 @@ function CreateBranchDialog({ open, onClose }: { open: boolean; onClose: () => v
       <DialogContent data-testid="git-create-branch-dialog">
         <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
           <DialogHeader>
-            <DialogTitle>建立分支</DialogTitle>
-            <DialogDescription>
-              從目前的位置建立新分支並切換過去；未 commit 的變更會一起帶過去。
-            </DialogDescription>
+            <DialogTitle>{msg().git.branchTitle}</DialogTitle>
+            <DialogDescription>{msg().git.branchDescription}</DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
-            aria-label="分支名稱"
-            placeholder="例如 feature/login"
+            aria-label={msg().git.branchName}
+            placeholder={msg().git.branchPlaceholder}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              取消
+              {msg().common.cancel}
             </Button>
             <Button type="submit" disabled={busy || name.trim() === ''}>
-              建立
+              {msg().git.create}
             </Button>
           </DialogFooter>
         </form>
@@ -163,19 +162,16 @@ function NoRepoMenu({ missing }: { missing: boolean }) {
       <DropdownMenuContent align="start" className="w-72">
         {missing ? (
           <div className="flex flex-col gap-1.5 px-2 py-1.5 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">找不到 git</p>
-            <p>Hachi 使用這台電腦安裝的 git：{gitInstallHint(platform)}</p>
-            <p>安裝後重新開啟這個選單即可。</p>
+            <p className="font-medium text-foreground">{msg().git.missingTitle}</p>
+            <p>{msg().git.missingMenu(gitInstallHint(platform))}</p>
+            <p>{msg().git.reopenMenu}</p>
           </div>
         ) : (
           <>
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
-              這個 Workspace 不在 Git repo 中。建立後機密變數與歷史紀錄已在 .gitignore
-              中，不會被提交。
-            </div>
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">{msg().git.notRepoMenu}</div>
             <DropdownMenuItem onSelect={() => void useGitStore.getState().init()}>
               <GitBranch />
-              建立 Git repo（git init）
+              {msg().git.init}
             </DropdownMenuItem>
           </>
         )}
@@ -221,7 +217,7 @@ export function BranchMenu() {
             size="sm"
             className="min-w-0 gap-1.5 px-2"
             data-testid="branch-menu"
-            title={status.upstream ? `追蹤 ${status.upstream}` : '目前分支'}
+            title={status.upstream ? msg().git.tracking(status.upstream) : msg().git.currentBranch}
           >
             {running ? (
               <Loader2 className="animate-spin text-muted-foreground" />
@@ -245,7 +241,9 @@ export function BranchMenu() {
             <GitCommitHorizontal />
             Commit…
             {changes > 0 && (
-              <span className="ml-auto text-xs text-muted-foreground">{changes} 個變更</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {msg().git.changeCount(changes)}
+              </span>
             )}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => useGitStore.getState().openView('history')}>
@@ -267,7 +265,9 @@ export function BranchMenu() {
             <ArrowDownToLine />
             Pull
             {status.behind > 0 && (
-              <span className="ml-auto text-xs text-muted-foreground">{status.behind} 個</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {msg().git.commitCount(status.behind)}
+              </span>
             )}
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -277,22 +277,26 @@ export function BranchMenu() {
             <ArrowUpFromLine />
             Push
             {status.ahead > 0 && (
-              <span className="ml-auto text-xs text-muted-foreground">{status.ahead} 個</span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                {msg().git.commitCount(status.ahead)}
+              </span>
             )}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setEditingRemote(true)}>
             <Link />
-            設定遠端…
+            {msg().git.setRemote}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setCreating(true)}>
             <Plus />
-            建立分支…
+            {msg().git.createBranch}
           </DropdownMenuItem>
           {local.length > 0 && (
             <>
               <DropdownMenuSeparator />
-              <div className="px-2 py-1 text-xs text-muted-foreground">本機分支</div>
+              <div className="px-2 py-1 text-xs text-muted-foreground">
+                {msg().git.localBranches}
+              </div>
               {local.map((b) => (
                 <DropdownMenuItem key={b.name} onSelect={() => pick(b)} data-testid="branch-item">
                   {isCurrent(b) ? <Check /> : <span className="size-4" />}
@@ -304,7 +308,9 @@ export function BranchMenu() {
           {remote.length > 0 && (
             <>
               <DropdownMenuSeparator />
-              <div className="px-2 py-1 text-xs text-muted-foreground">遠端分支</div>
+              <div className="px-2 py-1 text-xs text-muted-foreground">
+                {msg().git.remoteBranches}
+              </div>
               {remote.map((b) => (
                 <DropdownMenuItem key={b.name} onSelect={() => pick(b)}>
                   <span className="size-4" />
@@ -320,20 +326,17 @@ export function BranchMenu() {
       <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
         <AlertDialogContent data-testid="git-switch-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>切換到「{confirm?.name}」？</AlertDialogTitle>
-            <AlertDialogDescription>
-              有 {changes} 個檔案還沒 commit，會一起帶到新的分支；如果和該分支的內容衝突，git
-              會拒絕切換。
-            </AlertDialogDescription>
+            <AlertDialogTitle>{msg().git.switchTitle(confirm?.name ?? '')}</AlertDialogTitle>
+            <AlertDialogDescription>{msg().git.switchDescription(changes)}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (confirm) void useGitStore.getState().switchBranch(confirm.name, confirm.remote)
               }}
             >
-              切換
+              {msg().git.switch}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

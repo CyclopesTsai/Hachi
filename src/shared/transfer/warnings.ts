@@ -1,3 +1,5 @@
+import { msg } from '../i18n'
+
 /**
  * Collects importer / exporter warnings. The same message for many items is reported
  * once with a few examples, so a 500-request import with OAuth everywhere stays readable.
@@ -17,9 +19,7 @@ export class TransferWarnings {
   list(): string[] {
     return Array.from(this.byMessage, ([message, where]) => {
       if (where.length === 0) return message
-      const shown = where.slice(0, EXAMPLES).join('、')
-      const more = where.length > EXAMPLES ? ` 等 ${where.length} 項` : ''
-      return `${message}（${shown}${more}）`
+      return msg().transferMain.withWhere(message, where.slice(0, EXAMPLES), where.length)
     })
   }
 }

@@ -1,11 +1,13 @@
 import { errorMessage, unwrap } from './ipc'
 import { useAppStore } from '@renderer/stores/app-store'
+import { msg } from '@shared/i18n'
 
 /** "Show in Finder" in each platform's words. */
 export function revealLabel(platform: string | undefined): string {
-  if (platform === 'darwin') return '在 Finder 中顯示'
-  if (platform === 'win32') return '在檔案總管中顯示'
-  return '在檔案管理員中顯示'
+  const m = msg().workspace.reveal
+  if (platform === 'darwin') return m.darwin
+  if (platform === 'win32') return m.win32
+  return m.other
 }
 
 /** Opens the Workspace folder (null) or shows an item's folder / file. */

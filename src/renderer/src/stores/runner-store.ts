@@ -14,6 +14,7 @@ import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useEnvStore } from './env-store'
 import { askScriptTrust, scriptsTrusted } from './tabs-store'
 import { useTreeStore } from './tree-store'
+import { msg } from '@shared/i18n'
 
 export const RUNNER_PAGE_SIZE = 100
 
@@ -132,7 +133,7 @@ export const useRunnerStore = create<RunnerState>()((set, get) => {
         .filter((n) => n.kind === 'request' && !excluded.has(n.id))
         .map((n) => n.id)
       if (itemIds.length === 0) {
-        patch(uid, () => ({ error: '請至少勾選一個請求' }))
+        patch(uid, () => ({ error: msg().runner.pickOne }))
         return
       }
       patch(uid, () => ({ starting: true, error: null }))

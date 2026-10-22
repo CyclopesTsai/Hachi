@@ -19,26 +19,7 @@ import {
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
 import { Badge, TlsDiagnosisView } from './TlsDiagnosisView'
-
-const TRUST_BADGE: Record<TlsTrustResult['status'], [string, 'ok' | 'bad' | 'muted']> = {
-  pass: ['信任', 'ok'],
-  fail: ['不信任', 'bad'],
-  unsupported: ['不適用', 'muted'],
-  error: ['無法檢查', 'muted']
-}
-
-const CHECK_BADGE: Record<TlsCheckItem['status'], [string, 'ok' | 'bad' | 'warn' | 'muted']> = {
-  pass: ['通過', 'ok'],
-  warn: ['注意', 'warn'],
-  fail: ['不符', 'bad'],
-  info: ['說明', 'muted']
-}
-
-const PROGRAM_BADGE: Record<TlsProgramResult['status'], [string, 'ok' | 'bad']> = {
-  included: ['收錄', 'ok'],
-  'not-included': ['未收錄', 'bad'],
-  restricted: ['受限制', 'bad']
-}
+import { msg } from '@shared/i18n'
 
 /** Root program inclusion from CCADB (issue #7), under the platforms. */
 function CcadbSection({ ccadb, onRefresh }: { ccadb: TlsCcadbResult; onRefresh(): void }) {
@@ -46,8 +27,8 @@ function CcadbSection({ ccadb, onRefresh }: { ccadb: TlsCcadbResult; onRefresh()
   return (
     <section className="flex flex-col gap-1.5" data-testid="ccadb">
       <div className="flex items-center gap-2 text-xs">
-        <h3 className="font-medium text-muted-foreground">各家根憑證計畫（CCADB）</h3>
-        {day && <span className="text-muted-foreground">資料日期 {day}</span>}
+        <h3 className="font-medium text-muted-foreground">{msg().tls.ccadbTitle}</h3>
+        {day && <span className="text-muted-foreground">{msg().tls.ccadbDate(day)}</span>}
         <div className="flex-1" />
         <Button
           variant="link"
@@ -56,7 +37,7 @@ function CcadbSection({ ccadb, onRefresh }: { ccadb: TlsCcadbResult; onRefresh()
           onClick={onRefresh}
           data-testid="ccadb-refresh"
         >
-          {ccadb.programs.length === 0 ? '重試' : '更新'}
+          {ccadb.programs.length === 0 ? msg().tls.retry : msg().tls.update}
         </Button>
       </div>
       {ccadb.programs.length === 0 ? (
@@ -64,19 +45,19 @@ function CcadbSection({ ccadb, onRefresh }: { ccadb: TlsCcadbResult; onRefresh()
           className="rounded-md border p-3 text-xs text-muted-foreground select-text"
           data-testid="ccadb-unavailable"
         >
-          需要網路才能取得 CCADB 資料{ccadb.error ? `（${ccadb.error}）` : ''}
+          {msg().tls.ccadbNeedsNetwork(ccadb.error)}
         </p>
       ) : (
         <>
           {ccadb.error && (
             <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
               <AlertTriangle className="size-3.5 shrink-0" />
-              無法更新（{ccadb.error}），使用 {day} 的資料
+              {msg().tls.ccadbStale(ccadb.error, day ?? '')}
             </p>
           )}
           <div className="divide-y rounded-md border">
             {ccadb.programs.map((p) => {
-              const [text, tone] = PROGRAM_BADGE[p.status]
+              const [text, tone] = [msg().tls.programBadges[p.status], PROGRAM_TONE[p.status]]
               return (
                 <div
                   key={p.program}
@@ -110,11 +91,27 @@ function CcadbSection({ ccadb, onRefresh }: { ccadb: TlsCcadbResult; onRefresh()
           </div>
         </>
       )}
-      <p className="text-[11px] text-muted-foreground">
-        只下載 CCADB 公開的根憑證清單，不會送出要檢查的網址。
-      </p>
+      <p className="text-[11px] text-muted-foreground">{msg().tls.ccadbPrivacy}</p>
     </section>
   )
+}
+
+const TRUST_TONE: Record<TlsTrustResult['status'], 'ok' | 'bad' | 'muted'> = {
+  pass: 'ok',
+  fail: 'bad',
+  unsupported: 'muted',
+  error: 'muted'
+}
+const CHECK_TONE: Record<TlsCheckItem['status'], 'ok' | 'bad' | 'warn' | 'muted'> = {
+  pass: 'ok',
+  warn: 'warn',
+  fail: 'bad',
+  info: 'muted'
+}
+const PROGRAM_TONE: Record<TlsProgramResult['status'], 'ok' | 'bad'> = {
+  included: 'ok',
+  'not-included': 'bad',
+  restricted: 'bad'
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -130,7 +127,7 @@ function TrustTable({ rows }: { rows: TlsTrustResult[] }) {
   return (
     <div className="divide-y rounded-md border" data-testid="tls-trust">
       {rows.map((row) => {
-        const [text, tone] = TRUST_BADGE[row.status]
+        const [text, tone] = [msg().tls.trustBadges[row.status], TRUST_TONE[row.status]]
         return (
           <div
             key={row.source}
@@ -170,7 +167,7 @@ function CheckList({ items }: { items: TlsCheckItem[] }) {
   return (
     <div className="divide-y rounded-md border" data-testid="tls-checks">
       {items.map((item) => {
-        const [text, tone] = CHECK_BADGE[item.status]
+        const [text, tone] = [msg().tls.checkBadges[item.status], CHECK_TONE[item.status]]
         return (
           <div
             key={item.id}
@@ -203,15 +200,12 @@ function Insecure({ scheme }: { scheme: 'http' | 'ws' }) {
     >
       <h3 className="flex items-center gap-1.5 text-sm font-medium text-amber-700 dark:text-amber-400">
         <ShieldOff className="size-4 shrink-0" />
-        未加密的連線（{scheme}://），沒有憑證可以檢查
+        {msg().tls.insecureTitle(scheme)}
       </h3>
       <ul className="flex list-disc flex-col gap-1 pl-5 select-text">
-        <li>資料以明文傳送，傳輸途中可能被他人看到或竄改（包括密碼、Token、Cookie）。</li>
-        <li>
-          iOS / macOS App 預設會擋下 {scheme}:// 連線（App Transport Security），要在 Info.plist
-          加上例外才能連；Android 9 起也預設禁止明文連線。
-        </li>
-        <li>正式環境建議改用 {secure}，改好後可以再檢查一次憑證。</li>
+        <li>{msg().tls.insecurePlain}</li>
+        <li>{msg().tls.insecureApps(scheme)}</li>
+        <li>{msg().tls.insecureUse(secure)}</li>
       </ul>
     </section>
   )
@@ -225,17 +219,17 @@ function Result({ result, onRefreshCcadb }: { result: TlsCheckResult; onRefreshC
       {result.unresolvedVariables.length > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
           <AlertTriangle className="size-3.5 shrink-0" />
-          找不到的變數：{result.unresolvedVariables.map((n) => `{{${n}}}`).join('、')}
+          {msg().common.unresolvedVars(result.unresolvedVariables)}
         </p>
       )}
       {result.trust.length > 0 && (
-        <Section title="各平台是否信任">
+        <Section title={msg().tls.platforms}>
           <TrustTable rows={result.trust} />
         </Section>
       )}
       {result.ccadb && <CcadbSection ccadb={result.ccadb} onRefresh={onRefreshCcadb} />}
       {result.advice.length > 0 && (
-        <Section title="建議">
+        <Section title={msg().tls.advice}>
           <ul
             className="flex flex-col gap-1.5 rounded-md border bg-muted p-3 text-xs"
             data-testid="tls-advice"
@@ -250,7 +244,7 @@ function Result({ result, onRefreshCcadb }: { result: TlsCheckResult; onRefreshC
         </Section>
       )}
       {result.checks.length > 0 && (
-        <Section title="其他檢查">
+        <Section title={msg().tls.otherChecks}>
           <CheckList items={result.checks} />
         </Section>
       )}
@@ -260,8 +254,8 @@ function Result({ result, onRefreshCcadb }: { result: TlsCheckResult; onRefreshC
           d.verdict === 'unavailable'
             ? d.summary
             : d.verdict === 'ok'
-              ? '憑證鏈'
-              : `憑證鏈（Hachi：${d.summary}）`
+              ? msg().tls.chain
+              : msg().tls.chainHachi(d.summary)
         }
       />
     </div>
@@ -294,11 +288,11 @@ function CheckView({ input }: { input: HttpCheckTlsInput }) {
   return (
     <>
       <DialogHeader>
-        <DialogTitle>憑證檢查</DialogTitle>
+        <DialogTitle>{msg().tls.title}</DialogTitle>
         <DialogDescription className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate">
             {result ? `${result.host}:${result.port} · ` : ''}
-            {result?.insecure ? '沒有加密' : '只讀取伺服器送出的憑證，不會修改任何信任設定'}
+            {result?.insecure ? msg().tls.notEncrypted : msg().tls.readOnly}
           </span>
           <Button
             variant="outline"
@@ -308,7 +302,7 @@ function CheckView({ input }: { input: HttpCheckTlsInput }) {
             data-testid="tls-check-again"
           >
             <RotateCw />
-            重新檢查
+            {msg().tls.again}
           </Button>
         </DialogDescription>
       </DialogHeader>
@@ -316,7 +310,7 @@ function CheckView({ input }: { input: HttpCheckTlsInput }) {
         {loading && (
           <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            檢查中…（會連線幾次並請作業系統驗證，可能需要十幾秒）
+            {msg().tls.checking}
           </p>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -332,7 +326,7 @@ function CheckView({ input }: { input: HttpCheckTlsInput }) {
  */
 export function TlsCheckButton({
   input,
-  label = '憑證',
+  label,
   variant = 'outline',
   'data-testid': testId = 'tls-check-button'
 }: {
@@ -350,11 +344,11 @@ export function TlsCheckButton({
         size="sm"
         className={cn(variant === 'link' && 'h-auto px-0 text-xs')}
         data-testid={testId}
-        title="檢查伺服器憑證：Hachi、Mozilla、作業系統與 iOS 是否信任"
+        title={msg().tls.buttonTitle}
         onClick={() => setOpened(input())}
       >
         {variant === 'outline' && <ShieldCheck />}
-        {label}
+        {label ?? msg().tls.button}
       </Button>
       <Dialog open={opened !== null} onOpenChange={(open) => !open && setOpened(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl" data-testid="tls-check">

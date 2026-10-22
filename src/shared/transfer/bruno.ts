@@ -56,6 +56,7 @@ import type {
 } from './portable'
 import { TransferError } from './postman'
 import { TransferWarnings } from './warnings'
+import { msg } from '../i18n'
 
 export { safeName } from './bruno-bru'
 
@@ -239,7 +240,8 @@ function guard<T>(path: string, read: () => T): T {
     return read()
   } catch (error) {
     if (error instanceof YamlError) throw new TransferError(error.message)
-    if (error instanceof BruParseError) throw new TransferError(`${path}：${error.message}`)
+    if (error instanceof BruParseError)
+      throw new TransferError(msg().transferMain.pathError(path, error.message))
     throw error
   }
 }
@@ -277,7 +279,7 @@ export function brunoFolderToData(
       name = asString(parsed.name)
       flow = flowOf(parsed.scripts)
     } catch {
-      throw new TransferError('bruno.json 不是有效的 JSON')
+      throw new TransferError(msg().transferMain.bruno.badBrunoJson)
     }
     const collectionBru = files['collection.bru']
     if (collectionBru !== undefined) {
@@ -301,7 +303,7 @@ export function brunoFolderToData(
   environments.push(...tree.environments)
   if (format === null) {
     if (!tree.top && tree.items.length === 0) {
-      throw new TransferError('找不到 Bruno 的檔案（bruno.json、opencollection.yml、.bru 或 .yml）')
+      throw new TransferError(msg().transferMain.bruno.noFiles)
     }
     name = tree.top?.name || folderName
     root = tree.top?.part ?? null
@@ -368,7 +370,7 @@ function mapAuth(auth: BrunoRequestPart['auth'], fallback: Auth, where: string, 
     case 'awsv4': {
       const a = auth.awsv4
       if (a?.profileName) {
-        ctx.warnings.add('AWS Signature 的 Profile Name Hachi 不支援，請改填 Access Key', where)
+        ctx.warnings.add(msg().transferMain.bruno.awsProfile, where)
       }
       return {
         type: 'awsSigV4',
@@ -383,7 +385,7 @@ function mapAuth(auth: BrunoRequestPart['auth'], fallback: Auth, where: string, 
       const o = auth.oauth2
       const grant = o?.grantType ?? ''
       if (!(OAUTH2_GRANTS as readonly string[]).includes(grant)) {
-        ctx.warnings.add(`不支援的 OAuth 2.0 Grant Type「${grant}」，已改為 None`, where)
+        ctx.warnings.add(msg().transferMain.grantUnsupported(grant), where)
         return { type: 'none' }
       }
       return {
@@ -403,7 +405,7 @@ function mapAuth(auth: BrunoRequestPart['auth'], fallback: Auth, where: string, 
       }
     }
     default:
-      ctx.warnings.add(`不支援的 Auth 類型「${auth.mode}」，已改為 None`, where)
+      ctx.warnings.add(msg().transferMain.authUnsupported(auth.mode), where)
       return { type: 'none' }
   }
 }
@@ -460,7 +462,7 @@ function mapAssertion(p: BrunoPair, ctx: Ctx, where: string): Assertion | null {
   const op = m?.[1] ?? ''
   const arg = unquote(m?.[2] ?? '')
   const fail = () => {
-    ctx.warnings.add(`無法對應的 Bruno 斷言已略過：${p.name}: ${p.value}`, where)
+    ctx.warnings.add(msg().transferMain.bruno.assertSkipped(p.name, p.value), where)
     return null
   }
   if (!target || !m) return fail()
@@ -495,12 +497,12 @@ function mapRequest(item: BrunoRequestItem, path: string[], ctx: Ctx): HttpReque
     item.type !== 'graphql' &&
     item.type !== 'graphql-request'
   ) {
-    ctx.warnings.add(`不支援的 Bruno 請求類型「${item.type}」，已略過`, where)
+    ctx.warnings.add(msg().transferMain.bruno.requestType(item.type), where)
     return null
   }
   let method = r.method.toUpperCase()
   if (!(HTTP_METHODS as readonly string[]).includes(method)) {
-    ctx.warnings.add(`不支援的 HTTP 方法「${method}」，已改為 GET`, where)
+    ctx.warnings.add(msg().transferMain.methodUnsupported(method), where)
     method = 'GET'
   }
 
@@ -535,10 +537,7 @@ function mapRequest(item: BrunoRequestItem, path: string[], ctx: Ctx): HttpReque
       filePath: p.type === 'file' ? (p.value.split('|')[0] ?? '') : ''
     }))
     if (fields.some((f) => f.type === 'file')) {
-      ctx.warnings.add(
-        'Form-data 檔案路徑來自原本的電腦（Bruno 用相對路徑），可能需要重新選擇檔案',
-        where
-      )
+      ctx.warnings.add(msg().transferMain.bruno.formFile, where)
     }
     Object.assign(body, { mode: 'formData', formData: fields })
   } else if (mode === 'graphql' || item.type.startsWith('graphql')) {
@@ -548,7 +547,7 @@ function mapRequest(item: BrunoRequestItem, path: string[], ctx: Ctx): HttpReque
       try {
         variables = JSON.parse(varsText) as unknown
       } catch {
-        ctx.warnings.add('GraphQL variables 不是有效的 JSON，未匯入', where)
+        ctx.warnings.add(msg().transferMain.graphqlVarsInvalid, where)
       }
     }
     Object.assign(body, {
@@ -561,10 +560,10 @@ function mapRequest(item: BrunoRequestItem, path: string[], ctx: Ctx): HttpReque
         2
       )
     })
-    ctx.warnings.add('GraphQL 請求已轉成 JSON Body', where)
+    ctx.warnings.add(msg().transferMain.bruno.graphql, where)
     if (method === 'GET') method = 'POST'
   } else if (mode !== 'none' && mode !== '') {
-    ctx.warnings.add(`不支援的 Body 類型「${mode}」，已改為 none`, where)
+    ctx.warnings.add(msg().transferMain.bodyUnsupported(mode), where)
   }
 
   // vars:pre-request → set before the script runs; vars:post-response → extraction rows
@@ -600,7 +599,7 @@ function mapRequest(item: BrunoRequestItem, path: string[], ctx: Ctx): HttpReque
   }
   const unsupported = unsupportedBrunoApis(`${scripts.preRequest}\n${scripts.postResponse}`)
   if (unsupported.length > 0) {
-    ctx.warnings.add(`腳本使用了 Hachi 不支援的寫法：${unsupported.join('、')}`, where)
+    ctx.warnings.add(msg().transferMain.scriptUnsupported(unsupported), where)
   }
 
   return httpRequestSchema.parse({
@@ -665,7 +664,7 @@ function mapItems(items: BrunoItem[], path: string[], ctx: Ctx): PortableItem[] 
         const name = itemName(folder.name, 'Folder')
         const where = [...path, name].join(' / ')
         if ((folder.root?.vars?.req.length ?? 0) > 0) {
-          ctx.warnings.add('資料夾變數 Hachi 不支援，未匯入', where)
+          ctx.warnings.add(msg().transferMain.bruno.folderVars, where)
         }
         return [
           {
@@ -725,7 +724,7 @@ function exampleIn(
     ? Math.floor((content.length * 3) / 4)
     : new TextEncoder().encode(content).length
   if (bytes > EXAMPLE_BODY_MAX_BYTES) {
-    ctx.warnings.add('範例的回應超過 1 MB，未匯入', where)
+    ctx.warnings.add(msg().transferMain.bruno.exampleTooLarge, where)
     return []
   }
   const contentType =
@@ -758,9 +757,7 @@ function mapCollection(data: BrunoCollectionData, newId: () => string): BrunoImp
     .filter((v) => v.name.trim() !== '')
     .map((v) => ({ ...kv(ctx, v), secret: false }))
   if (data.partial) {
-    warnings.add(
-      '選的是 Collection 裡面的資料夾：只匯入這個資料夾，上層的 Headers / Auth / 變數 / 環境沒有匯入'
-    )
+    warnings.add(msg().transferMain.bruno.subfolder)
   }
   const name = itemName(data.name, 'Bruno Collection')
   const collection: PortableCollection = {
@@ -783,7 +780,7 @@ function mapCollection(data: BrunoCollectionData, newId: () => string): BrunoImp
       .map((v) => ({ ...kv(ctx, v), secret: v.secret }))
   }))
   if (environments.some((e) => e.variables.some((v) => v.secret))) {
-    warnings.add('Bruno 不把機密變數的值存在檔案中，請在環境中重新輸入')
+    warnings.add(msg().transferMain.bruno.reenterSecrets)
   }
   return { collection, environments, warnings: warnings.list() }
 }
@@ -791,7 +788,7 @@ function mapCollection(data: BrunoCollectionData, newId: () => string): BrunoImp
 const defaultId = () => globalThis.crypto.randomUUID()
 
 export function importBrunoJson(json: unknown, newId: () => string = defaultId): BrunoImport {
-  if (!isBrunoJson(json)) throw new TransferError('不是 Bruno 匯出的 collection JSON')
+  if (!isBrunoJson(json)) throw new TransferError(msg().transferMain.bruno.notBrunoJson)
   return mapCollection(normalizeJson(json as Json), newId)
 }
 
@@ -982,17 +979,17 @@ function requestPart(
       enabled: e.enabled
     }))
   if (request.extractions.some((e) => e.source === 'body' && e.path.trim() !== '')) {
-    warnings.add('用 Regex 擷取 Body 的列 Bruno 不支援，已改為整個 Body', where)
+    warnings.add(msg().transferMain.bruno.regexCapture, where)
   }
   if (request.extractions.some((e) => e.scope === 'environment')) {
-    warnings.add('存到環境的擷取在 Bruno 會變成暫存變數', where)
+    warnings.add(msg().transferMain.bruno.envCapture, where)
   }
   const asserts = request.assertions.map(assertionOut)
-  if (asserts.some((a) => a === null)) warnings.add('部分斷言 Bruno 沒有對應寫法，已略過', where)
+  if (asserts.some((a) => a === null)) warnings.add(msg().transferMain.bruno.assertsSkipped, where)
   part.assertions = asserts.filter((a): a is BrunoPair => a !== null)
   part.script = { req: request.scripts.preRequest, res: request.scripts.postResponse }
   if (/\bhachi\./.test(request.scripts.preRequest + request.scripts.postResponse)) {
-    warnings.add('腳本使用了 hachi.* 寫法，Bruno 無法執行，請改成 bru / req / res', where)
+    warnings.add(msg().transferMain.bruno.hachiScript, where)
   }
   part.docs = request.docs
   const { timeoutMs, validateSSL, followRedirects } = request.settings
@@ -1003,9 +1000,9 @@ function requestPart(
         ...(followRedirects !== null ? { followRedirects } : {})
       }
     }
-    if (validateSSL !== null) warnings.add('請求的 SSL 設定 Bruno 沒有對應，未匯出', where)
+    if (validateSSL !== null) warnings.add(msg().transferMain.bruno.ssl, where)
   } else if (timeoutMs !== null || validateSSL !== null || followRedirects !== null) {
-    warnings.add('請求的逾時 / SSL / 轉址設定 Bruno 的 .bru 檔沒有對應，未匯出', where)
+    warnings.add(msg().transferMain.bruno.settings, where)
   }
   return part
 }
@@ -1026,7 +1023,7 @@ function exampleOut(
   const { response } = ex
   const binary = response.body.encoding === 'base64'
   if (binary && response.body.data !== '') {
-    warnings.add(`結果「${ex.name}」是二進位內容，Body 未匯出`, where)
+    warnings.add(msg().transferMain.binaryExample(ex.name), where)
   }
   const type = response.contentType
   return {
@@ -1067,7 +1064,7 @@ export function exportBrunoCollection(
 
   const root = containerPart(collection)
   const vars = collection.variables.filter((v) => v.key.trim() !== '')
-  if (vars.some((v) => v.secret)) warnings.add('機密的 Collection 變數不會匯出值（已留空）')
+  if (vars.some((v) => v.secret)) warnings.add(msg().transferMain.bruno.secretCollectionVars)
   root.vars.req = vars.map((v) => ({
     name: v.key,
     value: v.secret ? '' : v.value,
@@ -1118,7 +1115,7 @@ export function exportBrunoCollection(
       }))
   }))
   if (envs.some((e) => e.variables.some((v) => v.secret))) {
-    warnings.add('環境的機密變數只匯出名稱（Bruno 也不把值存在檔案中）')
+    warnings.add(msg().transferMain.bruno.envSecretNames)
   }
   const data: BrunoCollectionData = {
     name: collection.name,

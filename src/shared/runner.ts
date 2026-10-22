@@ -4,6 +4,7 @@
  */
 import type { HttpErrorCode } from './http'
 import type { ScriptReport } from './scripts'
+import { msg } from './i18n'
 
 export const RUNNER_MAX_ITERATIONS = 10_000
 /** Longest run in duration mode (decision 130). */
@@ -235,7 +236,7 @@ export class RunnerStatsCollector {
     }
     return {
       items: [...this.perItem].map(([id, e]) => statsRow(id, e.name, e.rows)),
-      total: statsRow('', '總計', this.all),
+      total: statsRow('', msg().runnerMain.total, this.all),
       statusCodes,
       errorCodes,
       timeline
@@ -295,14 +296,15 @@ export function parseCsv(text: string): Record<string, string>[] {
       field = ''
     } else field += c
   }
-  if (quoted) throw new DataFileError('CSV 的引號沒有結束')
+  if (quoted) throw new DataFileError(msg().runnerMain.data.csvQuote)
   if (field !== '' || record.length > 0) {
     record.push(field)
     records.push(record)
   }
   const nonEmpty = records.filter((r) => !(r.length === 1 && r[0] === ''))
   const header = nonEmpty.shift()
-  if (!header || header.every((h) => h.trim() === '')) throw new DataFileError('CSV 沒有欄位名稱')
+  if (!header || header.every((h) => h.trim() === ''))
+    throw new DataFileError(msg().runnerMain.data.csvNoHeader)
   return nonEmpty.map((r) => {
     const row: Record<string, string> = {}
     header.forEach((name, i) => {
@@ -318,12 +320,12 @@ export function parseJsonData(text: string): Record<string, string>[] {
   try {
     value = JSON.parse(text.replace(/^\uFEFF/, ''))
   } catch {
-    throw new DataFileError('不是有效的 JSON')
+    throw new DataFileError(msg().runnerMain.data.badJson)
   }
-  if (!Array.isArray(value)) throw new DataFileError('JSON 資料檔必須是物件陣列')
+  if (!Array.isArray(value)) throw new DataFileError(msg().runnerMain.data.notArray)
   return value.map((item, i) => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-      throw new DataFileError(`第 ${i + 1} 筆不是物件`)
+      throw new DataFileError(msg().runnerMain.data.notObject(i + 1))
     }
     const row: Record<string, string> = {}
     for (const [k, v] of Object.entries(item as Record<string, unknown>)) {
@@ -335,9 +337,9 @@ export function parseJsonData(text: string): Record<string, string>[] {
 
 export function parseDataFile(fileName: string, text: string): Record<string, string>[] {
   const rows = /\.json$/i.test(fileName) ? parseJsonData(text) : parseCsv(text)
-  if (rows.length === 0) throw new DataFileError('資料檔沒有任何資料列')
+  if (rows.length === 0) throw new DataFileError(msg().runnerMain.data.empty)
   if (rows.length > RUNNER_MAX_DATA_ROWS) {
-    throw new DataFileError(`資料列超過 ${RUNNER_MAX_DATA_ROWS} 列`)
+    throw new DataFileError(msg().runnerMain.data.tooMany(RUNNER_MAX_DATA_ROWS))
   }
   return rows
 }

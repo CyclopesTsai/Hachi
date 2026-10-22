@@ -20,6 +20,7 @@ import type {
   TlsVerdict
 } from '@shared/http'
 import type { SystemTrustVerdict } from '../../platform/types'
+import { msg } from '@shared/i18n'
 import { CCADB_PROGRAMS, type CcadbRoot, type CcadbSnapshot } from './ccadb'
 import {
   aiaIssuerUrl,
@@ -29,6 +30,7 @@ import {
   nameOf,
   parseCertificates,
   targetOf,
+  TimeoutError,
   trusted,
   unavailable,
   type Handshake,
@@ -130,7 +132,7 @@ async function probeVersion(
     )
     return 'yes'
   } catch (error) {
-    if (errorText(error) === '逾時' || INCONCLUSIVE.has(errorCode(error))) return 'unknown'
+    if (error instanceof TimeoutError || INCONCLUSIVE.has(errorCode(error))) return 'unknown'
     if (/Proxy/.test(errorText(error))) return 'unknown'
     return 'no'
   }
@@ -248,12 +250,16 @@ function keyOf(cert: X509Certificate): { text: string; weak: boolean } {
     const curve = details.namedCurve ?? ''
     return { text: `ECDSA ${CURVES[curve] ?? curve}`, weak: false }
   }
-  return { text: key.asymmetricKeyType ?? '未知', weak: false }
+  return { text: key.asymmetricKeyType ?? msg().tlsCheck.unknown, weak: false }
 }
 
 /** Only a self-signed one is a root: the last one sent may be a cross-signed intermediate. */
 const ROLE = (i: number, cert: X509Certificate) =>
-  i === 0 ? '網站憑證' : isSelfSigned(cert) ? '根憑證' : '中繼憑證'
+  i === 0
+    ? msg().tlsCheck.roles.leaf
+    : isSelfSigned(cert)
+      ? msg().tlsCheck.roles.root
+      : msg().tlsCheck.roles.intermediate
 
 interface CheckInput {
   certs: X509Certificate[]
@@ -276,32 +282,33 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
     VERSIONS.filter((_, i) => versions[i] === want).map(([, name]) => name)
   const yes = named('yes')
   const old = yes.filter((n) => n === 'TLS 1.0' || n === 'TLS 1.1')
+  const c = msg().tlsCheck.checks
+  const list = msg().common.list
   const parts = [
-    yes.length > 0 ? `支援 ${yes.join('、')}` : '',
-    named('no').length > 0 ? `不支援 ${named('no').join('、')}` : '',
-    named('unknown').length > 0 ? `無法測試 ${named('unknown').join('、')}` : ''
+    yes.length > 0 ? c.supported(list(yes)) : '',
+    named('no').length > 0 ? c.unsupported(list(named('no'))) : '',
+    named('unknown').length > 0 ? c.untested(list(named('unknown'))) : ''
   ].filter(Boolean)
+  const sep = msg().tlsCheck.sep
   items.push({
     id: 'versions',
-    label: 'TLS 版本',
+    label: c.versions,
     status:
       !yes.includes('TLS 1.2') && !yes.includes('TLS 1.3')
         ? 'fail'
         : old.length > 0
           ? 'warn'
           : 'pass',
-    detail: `${parts.join('；')}${
-      old.length > 0 ? `。${old.join('、')} 已淘汰，建議在伺服器關閉` : ''
-    }${!yes.includes('TLS 1.2') && !yes.includes('TLS 1.3') ? '。現在的用戶端至少需要 TLS 1.2' : ''}`
+    detail: `${parts.join(sep)}${old.length > 0 ? c.obsolete(list(old)) : ''}${
+      !yes.includes('TLS 1.2') && !yes.includes('TLS 1.3') ? c.needs12 : ''
+    }`
   })
 
   items.push({
     id: 'ocsp-stapling',
-    label: 'OCSP Stapling',
+    label: c.ocsp,
     status: main.ocsp ? 'pass' : 'info',
-    detail: main.ocsp
-      ? `伺服器在交握時附上了撤銷狀態（OCSP 回應 ${main.ocsp.length} bytes）`
-      : '伺服器沒有附上 OCSP 回應。不影響連線，用戶端需要時會自己查詢撤銷狀態'
+    detail: main.ocsp ? c.ocspYes(main.ocsp.length) : c.ocspNo
   })
 
   // Certificate Transparency: Apple wants 2 SCTs for ≤ 180 days, 3 beyond.
@@ -313,31 +320,25 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
   const enough = (scts ?? 0) >= required || input.ctVerified === true
   items.push({
     id: 'sct',
-    label: 'Certificate Transparency（SCT）',
+    label: c.sct,
     status: enough ? 'pass' : appleAnchored === false ? 'info' : 'warn',
     detail: [
-      scts === null ? '網站憑證裡沒有 SCT' : `網站憑證內嵌 ${scts} 個 SCT`,
-      `Apple 平台要求至少 ${required} 個（有效期 ${lifetimeDays} 天）`,
-      input.ctVerified !== null ? `macOS 的 CT 檢查${input.ctVerified ? '通過' : '未通過'}` : '',
-      enough
-        ? ''
-        : appleAnchored === false
-          ? '公司內部或測試用的 CA 不需要 SCT'
-          : 'SCT 也可能在交握或 OCSP 回應中送出（這裡看不到）；都沒有時 Apple 平台會拒絕公開 CA 簽發的憑證'
+      scts === null ? c.sctNone : c.sctCount(scts),
+      c.sctRequired(required, lifetimeDays),
+      input.ctVerified !== null ? c.sctMac(input.ctVerified) : '',
+      enough ? '' : appleAnchored === false ? c.sctPrivate : c.sctMaybe
     ]
       .filter(Boolean)
-      .join('；')
+      .join(sep)
   })
 
   const last = certs[certs.length - 1] as X509Certificate
   const rootSent = certs.length > 1 && isSelfSigned(last)
   items.push({
     id: 'root-sent',
-    label: '多送根憑證',
+    label: c.rootSent,
     status: rootSent ? 'warn' : 'pass',
-    detail: rootSent
-      ? `伺服器連根憑證「${nameOf(last.subject)}」也送出了。用戶端只用自己信任清單裡的根憑證，多送沒有用，只會讓每次交握變大`
-      : '沒有多送根憑證'
+    detail: rootSent ? c.rootSentYes(nameOf(last.subject)) : c.rootSentNo
   })
 
   // Expiry of everything sent.
@@ -349,28 +350,30 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
   const daysLeft = (c: X509Certificate) => Math.floor((Date.parse(c.validTo) - now) / DAY_MS)
   items.push({
     id: 'expiry',
-    label: '到期日',
+    label: c.expiry,
     status: expired.length > 0 ? 'fail' : soon.length > 0 ? 'warn' : 'pass',
     detail:
       expired.length > 0
-        ? expired
-            .map((c) => `「${nameOf(c.subject)}」已在 ${date(Date.parse(c.validTo))} 過期`)
-            .join('；')
+        ? expired.map((x) => c.expiredOn(nameOf(x.subject), date(Date.parse(x.validTo)))).join(sep)
         : soon.length > 0
           ? soon
-              .map(
-                (c) =>
-                  `${ROLE(certs.indexOf(c), c)}「${nameOf(c.subject)}」剩 ${daysLeft(c)} 天到期（${date(Date.parse(c.validTo))}）`
+              .map((x) =>
+                c.expiresSoon(
+                  ROLE(certs.indexOf(x), x),
+                  nameOf(x.subject),
+                  daysLeft(x),
+                  date(Date.parse(x.validTo))
+                )
               )
-              .join('；')
-          : `網站憑證到 ${date(to)}（剩 ${daysLeft(leaf)} 天）`
+              .join(sep)
+          : c.validUntil(date(to), daysLeft(leaf))
   })
 
   // Apple's rules for TLS server certificates.
   const tooLong = lifetimeDays > APPLE_MAX_DAYS && from >= APPLE_VALIDITY_FROM
   items.push({
     id: 'apple-validity',
-    label: 'Apple 要求：有效期',
+    label: c.appleValidity,
     status: !tooLong
       ? 'pass'
       : appleAnchored === true
@@ -380,28 +383,21 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
           : 'warn',
     detail: !tooLong
       ? from < APPLE_VALIDITY_FROM
-        ? `有效期 ${lifetimeDays} 天（2020-09-01 前簽發，不受 398 天的限制）`
-        : `有效期 ${lifetimeDays} 天（上限 ${APPLE_MAX_DAYS} 天）`
-      : `有效期 ${lifetimeDays} 天，超過 ${APPLE_MAX_DAYS} 天：公開 CA 簽發的這種憑證 Apple 平台會拒絕${
-          appleAnchored === false ? '（公司內部或自行加入的 CA 不受此限）' : ''
-        }`
+        ? c.validityOld(lifetimeDays)
+        : c.validityOk(lifetimeDays, APPLE_MAX_DAYS)
+      : c.validityLong(lifetimeDays, APPLE_MAX_DAYS, appleAnchored === false)
   })
 
   const keys = certs.map((c, i) => ({ c, i, key: keyOf(c) }))
   const weakKeys = keys.filter((k) => k.key.weak)
   items.push({
     id: 'apple-key',
-    label: 'Apple 要求：金鑰長度',
+    label: c.appleKey,
     status: weakKeys.length > 0 ? 'fail' : 'pass',
     detail:
       weakKeys.length > 0
-        ? weakKeys
-            .map(
-              (k) =>
-                `${ROLE(k.i, k.c)}「${nameOf(k.c.subject)}」是 ${k.key.text}，RSA 至少要 2048 位元`
-            )
-            .join('；')
-        : keys.map((k) => `${ROLE(k.i, k.c)} ${k.key.text}`).join('、')
+        ? weakKeys.map((k) => c.weakKey(ROLE(k.i, k.c), nameOf(k.c.subject), k.key.text)).join(sep)
+        : list(keys.map((k) => `${ROLE(k.i, k.c)} ${k.key.text}`))
   })
 
   const signatures = certs
@@ -410,14 +406,14 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
   const weakSignatures = signatures.filter((s) => s.alg?.weak)
   items.push({
     id: 'apple-signature',
-    label: 'Apple 要求：簽章演算法',
+    label: c.appleSignature,
     status: weakSignatures.length > 0 ? 'fail' : 'pass',
     detail:
       weakSignatures.length > 0
         ? weakSignatures
-            .map((s) => `「${nameOf(s.c.subject)}」用 ${s.alg?.name} 簽署，已不被接受`)
-            .join('；')
-        : signatures.map((s) => s.alg?.name ?? '未知').join('、') || '—'
+            .map((s) => c.weakSignature(nameOf(s.c.subject), s.alg?.name ?? ''))
+            .join(sep)
+        : list(signatures.map((s) => s.alg?.name ?? msg().tlsCheck.unknown)) || '—'
   })
 
   const ekus = leaf.keyUsage
@@ -425,15 +421,15 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
   const ekuApplies = from >= APPLE_EKU_FROM
   items.push({
     id: 'apple-eku',
-    label: 'Apple 要求：Extended Key Usage',
+    label: c.appleEku,
     status: ekuOk || !ekuApplies ? 'pass' : 'fail',
     detail: ekuOk
-      ? '包含 serverAuth'
+      ? c.ekuOk
       : !ekuApplies
-        ? '2019-07-01 前簽發，不受此限'
+        ? c.beforeRule
         : ekus
-          ? `沒有 serverAuth（只有 ${ekus.join('、')}），不能用於網站`
-          : '網站憑證沒有 Extended Key Usage，iOS 13 / macOS 10.15 起不接受'
+          ? c.ekuMissingServerAuth(list(ekus))
+          : c.ekuNone
   })
 
   const names = (leaf.subjectAltName ?? '')
@@ -442,14 +438,9 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
     .filter((s) => s.startsWith('DNS:') || s.startsWith('IP Address:'))
   items.push({
     id: 'apple-san',
-    label: 'Apple 要求：Subject Alternative Name',
+    label: c.appleSan,
     status: names.length > 0 || !ekuApplies ? 'pass' : 'fail',
-    detail:
-      names.length > 0
-        ? `名稱寫在 Subject Alternative Name（${names.length} 個）`
-        : !ekuApplies
-          ? '2019-07-01 前簽發，不受此限'
-          : '網域只寫在 CN、沒有 Subject Alternative Name，iOS 13 / macOS 10.15 起不接受'
+    detail: names.length > 0 ? c.sanOk(names.length) : !ekuApplies ? c.beforeRule : c.sanNone
   })
   return items
 }
@@ -498,17 +489,14 @@ function programLimits(
   const reasons: string[] = []
   const notes: string[] = []
   const issued = Date.parse(leaf.validFrom)
-  const name = `「${root.name}」`
+  const name = root.name
+  const t = msg().tlsCheck.programs
   if (program === 'mozilla' && root.distrustAfter) {
     const after = root.distrustAfter
     if (issued >= Date.parse(after) + DAY_MS) {
-      reasons.push(
-        `Mozilla 不信任${name}在 ${after} 之後簽發的網站憑證（這張在 ${date(issued)} 簽發）`
-      )
+      reasons.push(t.mozillaDistrust(name, after, date(issued)))
     } else {
-      notes.push(
-        `Mozilla 不信任${name}在 ${after} 之後簽發的網站憑證；這張在 ${date(issued)} 簽發，不受影響`
-      )
+      notes.push(t.mozillaDistrustNote(name, after, date(issued)))
     }
   }
   if (program === 'chrome' && root.sctNotAfter) {
@@ -517,41 +505,35 @@ function programLimits(
     const earliest = times.length > 0 ? Math.min(...times) : issued
     const when = date(limit)
     if (earliest > limit) {
-      reasons.push(
-        `Chrome 不信任${name}在 ${when} 之後才記錄（SCT）的憑證（這張在 ${date(earliest)}）`
-      )
+      reasons.push(t.chromeSct(name, when, date(earliest)))
     } else {
-      notes.push(
-        `Chrome 不信任${name}在 ${when} 之後才記錄（SCT）的憑證；這張在 ${date(earliest)}，不受影響`
-      )
+      notes.push(t.chromeSctNote(name, when, date(earliest)))
     }
   }
   if (program === 'microsoft') {
     const nb = root.notBefore
     if (nb && nb.ekus.some((e) => SERVER_AUTH_EKU.test(e))) {
       if (issued >= Date.parse(nb.date)) {
-        reasons.push(
-          `Microsoft 不信任${name}在 ${nb.date} 之後簽發的網站憑證（這張在 ${date(issued)} 簽發）`
-        )
+        reasons.push(t.msNotBefore(name, nb.date, date(issued)))
       } else {
-        notes.push(`Microsoft 不信任${name}在 ${nb.date} 之後簽發的網站憑證；這張不受影響`)
+        notes.push(t.msNotBeforeNote(name, nb.date))
       }
     }
     if (root.disabledAfter) {
       if (now >= Date.parse(root.disabledAfter)) {
-        reasons.push(`Microsoft 已在 ${root.disabledAfter} 停用${name}`)
+        reasons.push(t.msDisabled(name, root.disabledAfter))
       } else {
-        notes.push(`Microsoft 將在 ${root.disabledAfter} 停用${name}`)
+        notes.push(t.msDisabledNote(name, root.disabledAfter))
       }
     }
     if (root.disallowedEkus?.some((e) => SERVER_AUTH_EKU.test(e))) {
-      reasons.push(`Microsoft 不允許${name}用於網站`)
+      reasons.push(t.msDisallowed(name))
     }
   }
   if (root.constraints) {
     const text =
       root.constraints.length > 200 ? `${root.constraints.slice(0, 200)}…` : root.constraints
-    notes.push(`限制條件：${text}`)
+    notes.push(t.constraints(text))
   }
   return { reasons, notes }
 }
@@ -580,13 +562,15 @@ async function programResult(
     downloaded.push(nameOf(issuer.subject))
     anchor = anchorIn(chain, store.certs)
   }
-  const base = { program: program.id, label: program.label }
+  const base = { program: program.id, label: msg().tlsCheck.programs.labels[program.id] }
   if (!anchor) {
     return {
       ...base,
       status: 'not-included',
       root: null,
-      reasons: [`「${expectedRoot}」不在 ${program.label.replace(/（.*）$/, '')} 的根憑證清單中`],
+      reasons: [
+        msg().tlsCheck.programs.notIncluded(expectedRoot, msg().tlsCheck.programs.names[program.id])
+      ],
       notes: []
     }
   }
@@ -601,9 +585,7 @@ async function programResult(
     reasons: limits.reasons,
     notes: [
       ...limits.notes,
-      ...(downloaded.length > 0
-        ? [`伺服器少送的「${downloaded.join('」「')}」依 AIA 下載後才接到根憑證`]
-        : [])
+      ...(downloaded.length > 0 ? [msg().tlsCheck.programs.aia(downloaded)] : [])
     ]
   }
 }
@@ -639,11 +621,9 @@ const ROOT_VERDICTS: TlsVerdict[] = ['untrusted-root', 'incomplete-chain', 'self
 const rootName = (a: Analysis) => a.missing?.name ?? a.chain[a.chain.length - 1]?.name ?? ''
 
 function trustRow(source: 'hachi' | 'mozilla', analysis: Analysis): TlsTrustResult {
-  const label = source === 'hachi' ? 'Hachi' : 'Node 內建根憑證（Mozilla）'
-  const clients =
-    source === 'hachi'
-      ? 'Hachi 本身（內建根憑證＋這台電腦加入的憑證）'
-      : 'Firefox、Linux、多數 Node / Python 工具'
+  const r = msg().tlsCheck.rows
+  const label = source === 'hachi' ? 'Hachi' : r.mozilla
+  const clients = source === 'hachi' ? r.hachiClients : r.mozillaClients
   const ok = analysis.verdict === 'ok'
   return {
     source,
@@ -652,14 +632,6 @@ function trustRow(source: 'hachi' | 'mozilla', analysis: Analysis): TlsTrustResu
     status: ok ? 'pass' : 'fail',
     reasons: ok ? [] : [analysis.summary]
   }
-}
-
-const ADVICE: Partial<Record<TlsCheckItem['id'], string>> = {
-  'apple-validity': '請 CA 重新簽發有效期不超過 398 天的憑證。',
-  'apple-key': '請改用 RSA 2048 位元以上或 ECDSA 的金鑰重新簽發。',
-  'apple-signature': '請 CA 改用 SHA-256 以上的簽章重新簽發。',
-  'apple-eku': '請 CA 重新簽發包含 Extended Key Usage「serverAuth」的憑證。',
-  'apple-san': '請把網域放進 Subject Alternative Name（不能只寫在 CN）重新簽發。'
 }
 
 /** Connects (never verifying) and runs every check. Never throws. */
@@ -679,7 +651,9 @@ export async function checkCertificates(
     checks: [],
     advice: []
   })
-  if (!target) return empty(unavailable(host, port, '網址無效', '無法連線讀取憑證鏈'))
+  if (!target) {
+    return empty(unavailable(host, port, msg().tlsCheck.invalidUrl, msg().tlsCheck.cannotConnect))
+  }
   const now = deps.now ?? Date.now()
 
   let main: Handshake
@@ -691,7 +665,7 @@ export async function checkCertificates(
       ca: []
     })
   } catch (error) {
-    return empty(unavailable(host, port, errorText(error), '無法連線讀取憑證鏈'))
+    return empty(unavailable(host, port, errorText(error), msg().tlsCheck.cannotConnect))
   }
   const certs = main.certs
   // The OpenSSL error means nothing without a CA list.
@@ -699,7 +673,7 @@ export async function checkCertificates(
   // The diagnosis' "looks fine here" text is meant for a failed request.
   const diagnosis: TlsDiagnosis =
     hachi.verdict === 'ok'
-      ? { host, port, ...hachi, summary: 'Hachi 信任這個憑證鏈', advice: '' }
+      ? { host, port, ...hachi, summary: msg().tlsCheck.verdicts.trusted, advice: '' }
       : { host, port, ...hachi }
   if (certs.length === 0) return empty(diagnosis)
   const mozilla = analyzeChain(host, certs, null, now, bundledRoots())
@@ -736,10 +710,10 @@ export async function checkCertificates(
   if (typeof system === 'string') {
     trust.push({
       source: 'system',
-      label: '作業系統',
+      label: msg().tlsCheck.rows.system,
       clients: '—',
       status: 'error',
-      reasons: [`無法執行系統驗證：${system}`]
+      reasons: [msg().tlsCheck.rows.systemError(system)]
     })
   } else if (system) {
     trust.push({
@@ -752,10 +726,10 @@ export async function checkCertificates(
   } else {
     trust.push({
       source: 'system',
-      label: '作業系統',
+      label: msg().tlsCheck.rows.system,
       clients: '—',
       status: 'unsupported',
-      reasons: ['這個平台沒有統一的系統驗證（各程式使用自己的根憑證清單）']
+      reasons: [msg().tlsCheck.rows.systemNone]
     })
   }
   if (apple) {
@@ -764,20 +738,22 @@ export async function checkCertificates(
       a.verdict === 'ok'
         ? []
         : a.verdict === 'untrusted-root'
-          ? [`「${rootName(a)}」不在 Apple 內建的根憑證中`]
+          ? [msg().tlsCheck.rows.notInApple(rootName(a))]
           : a.verdict === 'incomplete-chain'
-            ? [`少了中繼憑證「${rootName(a)}」，也無法從憑證中的 AIA 網址下載`]
+            ? [msg().tlsCheck.rows.appleMissing(rootName(a))]
             : [a.summary]
     trust.push({
       source: 'apple',
-      label: 'iOS（依 Apple 內建根憑證推測）',
-      clients: 'iPhone / iPad App（URLSession）、iOS Safari',
+      label: msg().tlsCheck.rows.apple,
+      clients: msg().tlsCheck.rows.appleClients,
       status: reasons.length === 0 && appleFails.length === 0 ? 'pass' : 'fail',
       reasons: [
         ...reasons,
-        ...appleFails.map((c) => `${c.label.replace(/^Apple 要求：/, '')}：${c.detail}`),
+        ...appleFails.map((c) =>
+          msg().tlsCheck.rows.appleRule(msg().tlsCheck.checks.appleRules[c.id] ?? c.label, c.detail)
+        ),
         ...(reasons.length === 0 && appleFails.length === 0 && apple.downloaded.length > 0
-          ? [`伺服器少送的「${apple.downloaded.join('」「')}」由系統自動下載（AIA）`]
+          ? [msg().tlsCheck.rows.appleAia(apple.downloaded)]
           : [])
       ]
     })
@@ -785,6 +761,8 @@ export async function checkCertificates(
 
   // Advice for the platforms that fail.
   const advice: string[] = []
+  let windowsAdvised = false
+  let mozillaAdvised = false
   const row = (s: TlsTrustResult['source']) => trust.find((t) => t.source === s)
   const passes = (s: TlsTrustResult['source']) => row(s)?.status === 'pass'
   const somePass =
@@ -792,60 +770,51 @@ export async function checkCertificates(
   const macRootFails =
     system !== null &&
     typeof system === 'object' &&
-    system.label.includes('Mac') &&
+    system.platform === 'darwin' &&
     !system.ok &&
-    system.reasons.some((r) => r.startsWith('根憑證不受信任'))
+    system.rootUntrusted
   const appleRootFails =
     (!!apple && ROOT_VERDICTS.includes(apple.analysis.verdict)) ||
     program('apple')?.status === 'not-included'
   if (somePass && (appleRootFails || macRootFails)) {
     const name = apple && appleRootFails ? rootName(apple.analysis) : rootName(hachi)
-    advice.push(
-      `macOS / iOS 不信任「${name}」→ 請 CA 提供 Apple 信任的根憑證（或交叉簽署的中繼憑證），或改用其他 CA。`
-    )
+    advice.push(msg().tlsCheck.advice.apple(name))
   }
-  const windows = typeof system === 'object' && system?.label.includes('Windows') ? system : null
-  if (
-    somePass &&
-    windows &&
-    !windows.ok &&
-    windows.reasons.some((r) => r.startsWith('根憑證不受信任'))
-  ) {
-    advice.push(
-      `Windows 不信任「${rootName(hachi)}」→ 請 CA 提供 Microsoft 信任的根憑證（或交叉簽署的中繼憑證），或改用其他 CA。`
-    )
+  const windows = typeof system === 'object' && system?.platform === 'win32' ? system : null
+  if (somePass && windows && !windows.ok && windows.rootUntrusted) {
+    advice.push(msg().tlsCheck.advice.windows(rootName(hachi)))
+    windowsAdvised = true
   }
   if (hachi.verdict === 'incomplete-chain' && (passes('system') || passes('apple'))) {
-    advice.push(
-      '伺服器少送了中繼憑證：作業系統會自動下載補上所以通過，但 Hachi、Node、Python、Java、Android 等用戶端不會。請伺服器改用完整的憑證鏈（fullchain）。'
-    )
+    advice.push(msg().tlsCheck.advice.fullchain)
   }
   if (hachi.verdict === 'ok' && ROOT_VERDICTS.includes(mozilla.verdict)) {
-    advice.push(
-      `「${rootName(mozilla)}」不在 Mozilla 的根憑證清單中，只在這台電腦的信任憑證裡（例如公司內部的 CA）：其他電腦、手機與伺服器上的程式不會信任它。`
-    )
+    advice.push(msg().tlsCheck.advice.localOnly(rootName(mozilla)))
+    mozillaAdvised = true
   }
   // Other root programs that leave the root out, or limit it (CCADB).
-  const covered = advice.join('\n')
   const missingFrom = (ccadb?.programs ?? []).filter(
     (p) =>
       p.status === 'not-included' &&
       p.program !== 'apple' &&
-      !(p.program === 'microsoft' && covered.includes('Windows 不信任')) &&
-      !(p.program === 'mozilla' && covered.includes('不在 Mozilla 的根憑證清單'))
+      !(p.program === 'microsoft' && windowsAdvised) &&
+      !(p.program === 'mozilla' && mozillaAdvised)
   )
   if (somePass && missingFrom.length > 0) {
     advice.push(
-      `${missingFrom.map((p) => p.label).join('、')} 沒有收錄「${rootName(hachi)}」→ 請 CA 提供這些平台信任的根憑證（或交叉簽署的中繼憑證），或改用其他 CA。`
+      msg().tlsCheck.advice.programs(
+        missingFrom.map((p) => p.label),
+        rootName(hachi)
+      )
     )
   }
   for (const p of ccadb?.programs ?? []) {
     if (p.status === 'restricted') {
-      advice.push(`${p.reasons.join('；')} → 請 CA 改用其他根憑證重新簽發，或改用其他 CA。`)
+      advice.push(msg().tlsCheck.advice.restricted(p.reasons))
     }
   }
   for (const item of appleFails) {
-    const text = ADVICE[item.id]
+    const text = msg().tlsCheck.advice.rules[item.id]
     if (text && !advice.includes(text)) advice.push(text)
   }
   // Fails everywhere (or for a reason not covered above): the diagnosis' own advice.

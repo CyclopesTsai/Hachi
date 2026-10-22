@@ -29,6 +29,7 @@ import { applyVariableChanges, type VariableLayer } from '@shared/variables'
 import type { CookieJar } from './http/cookie-jar'
 import { buildRunnerReport, type RunnerResultData } from './runner-report'
 import { dataLayer, type ExecutionScope, type RequestExecutor } from './http/executor'
+import { msg } from '@shared/i18n'
 
 export interface RunnerDeps {
   executor: RequestExecutor
@@ -118,14 +119,14 @@ function memoryScope(
     environment: async () => state.environment,
     collection: async () => state.collection,
     applyEnvironment: async (changes: VariableChange[]) => {
-      if (!state.environment) throw new Error('目前沒有選擇環境')
+      if (!state.environment) throw new Error(msg().runnerMain.noEnvironment)
       state.environment = {
         ...state.environment,
         variables: applyVariableChanges(state.environment.variables, changes)
       }
     },
     applyCollection: async (changes: VariableChange[]) => {
-      if (!state.collection) throw new Error('這個請求不在 Collection 中')
+      if (!state.collection) throw new Error(msg().runnerMain.notInCollection)
       state.collection = {
         ...state.collection,
         variables: applyVariableChanges(state.collection.variables, changes)
@@ -136,7 +137,7 @@ function memoryScope(
         state.runtime.size > 0
           ? {
               source: 'runtime',
-              sourceName: '暫存變數',
+              sourceName: msg().runnerMain.runtime,
               variables: [...state.runtime].map(([key, value]) => ({
                 id: `runtime:${key}`,
                 key,
@@ -184,7 +185,7 @@ export class RunnerService {
     const tree = await this.deps.getTree()
     const target = findNode(tree, config.targetId)?.node
     if (!target || !isContainer(target)) {
-      throw new HachiError('NOT_FOUND', '找不到要執行的 Collection / 資料夾')
+      throw new HachiError('NOT_FOUND', msg().runnerMain.targetNotFound)
     }
 
     // Requests below the target, in tree order, restricted to the checked ones.
@@ -210,7 +211,7 @@ export class RunnerService {
       items.push({ id: node.id, name: node.name, method: request.method, path, parentId, request })
     }
     for (const child of target.children) await walk(child, target.id)
-    if (items.length === 0) throw new HachiError('INVALID_OPERATION', '沒有可以執行的 HTTP 請求')
+    if (items.length === 0) throw new HachiError('INVALID_OPERATION', msg().runnerMain.nothingToRun)
     if (!config.skipScripts && !this.deps.scriptsTrusted()) {
       const anyScripts =
         items.some((i) => hasScripts(i.request.scripts)) ||
@@ -221,7 +222,7 @@ export class RunnerService {
             )
           )
         ).some(Boolean)
-      if (anyScripts) throw new HachiError('INVALID_OPERATION', '這個 Workspace 的腳本尚未信任')
+      if (anyScripts) throw new HachiError('INVALID_OPERATION', msg().runnerMain.scriptsUntrusted)
     }
 
     const environment = await this.deps.getEnvironment(config.environmentId)
@@ -279,7 +280,7 @@ export class RunnerService {
   cancel(runId: string): boolean {
     const run = this.runs.get(runId)
     if (!run || run.status !== 'running') return false
-    this.halt(run, 'cancelled', '已取消')
+    this.halt(run, 'cancelled', msg().runnerMain.cancelled)
     return true
   }
 
@@ -355,20 +356,20 @@ export class RunnerService {
   discard(runId: string): void {
     const run = this.runs.get(runId)
     if (!run) return
-    if (run.status === 'running') this.halt(run, 'cancelled', '已取消')
+    if (run.status === 'running') this.halt(run, 'cancelled', msg().runnerMain.cancelled)
     this.runs.delete(runId)
   }
 
   /** Workspace switched / window closed: stop everything. */
   cancelAll(): void {
     for (const run of this.runs.values()) {
-      if (run.status === 'running') this.halt(run, 'cancelled', '已取消')
+      if (run.status === 'running') this.halt(run, 'cancelled', msg().runnerMain.cancelled)
     }
   }
 
   private require(runId: string): Run {
     const run = this.runs.get(runId)
-    if (!run) throw new HachiError('NOT_FOUND', '這次執行的結果已不在記憶體中')
+    if (!run) throw new HachiError('NOT_FOUND', msg().runnerMain.gone)
     return run
   }
 
@@ -429,11 +430,7 @@ export class RunnerService {
       let steps = 0
       for (let i = 0; i < run.items.length && run.status === 'running';) {
         if (++steps > maxSteps) {
-          this.halt(
-            run,
-            'stopped',
-            `第 ${round + 1} 輪已執行 ${maxSteps} 個請求（setNextRequest 可能形成無窮迴圈），已停止`
-          )
+          this.halt(run, 'stopped', msg().runnerMain.loop(round + 1, maxSteps))
           return
         }
         const item = run.items[i] as PlannedItem
@@ -469,7 +466,7 @@ export class RunnerService {
         }
         const row = this.record(run, item, round, worker, startedAt, result, data)
         if (row.failed && config.stopOnFailure) {
-          this.halt(run, 'stopped', `「${item.name}」失敗（第 ${round + 1} 輪），已停止`)
+          this.halt(run, 'stopped', msg().runnerMain.stoppedOnFailure(item.name, round + 1))
           return
         }
         const next = result.scriptReport?.nextRequest
@@ -531,15 +528,15 @@ export class RunnerService {
     if (keepDetail) {
       if (row.failed && run.details.size >= RUNNER_DETAIL_ROWS) run.failedDetails++
       let body: string | null = null
-      let bodyNote: string | null = run.config.keepBodies ? null : '沒有保留回應內容'
+      let bodyNote: string | null = run.config.keepBodies ? null : msg().runnerMain.bodyNotKept
       if (run.config.keepBodies && isResponse) {
         if (result.body.kind !== 'text') {
           bodyNote =
-            result.body.kind === 'empty' ? '（回應沒有內容）' : '回應不是文字或太大，沒有保留'
+            result.body.kind === 'empty' ? msg().runnerMain.bodyEmpty : msg().runnerMain.bodyNotText
         } else if (result.bodyBytes > RUNNER_BODY_LIMIT_BYTES) {
-          bodyNote = '回應超過 1 MB，沒有保留'
+          bodyNote = msg().runnerMain.bodyTooLarge
         } else if (run.bodyBytes + result.bodyBytes > RUNNER_BODY_TOTAL_BYTES) {
-          bodyNote = '保留的回應已達 200 MB 上限，之後的不再保留'
+          bodyNote = msg().runnerMain.bodiesFull
         } else {
           body = result.body.text
           run.bodyBytes += result.bodyBytes

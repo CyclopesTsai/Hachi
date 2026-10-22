@@ -1,9 +1,9 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import {
-  ASSERTION_OPERATOR_LABELS,
-  ASSERTION_TARGET_LABELS,
-  EXTRACTION_SOURCE_LABELS,
+  assertionOperatorLabel,
+  assertionTargetLabel,
+  extractionSourceLabel,
   UNARY_OPERATORS,
   VALUE_TYPES
 } from '@shared/assertions'
@@ -22,6 +22,7 @@ import { NativeSelect } from '@renderer/components/ui/native-select'
 import { VariableInput } from '@renderer/components/variable-input'
 import { cn } from '@renderer/lib/utils'
 import { ScriptDocsDialog } from './ScriptDocsDialog'
+import { msg } from '@shared/i18n'
 
 type Phase = 'preRequest' | 'postResponse'
 
@@ -55,7 +56,11 @@ export function ScriptsTab({
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-3" data-testid="scripts-tab">
       <div className="flex items-center gap-3">
-        <div className="flex rounded-md border p-0.5" role="radiogroup" aria-label="腳本">
+        <div
+          className="flex rounded-md border p-0.5"
+          role="radiogroup"
+          aria-label={msg().scripts.editor.scripts}
+        >
           {PHASES.map((p) => (
             <button
               key={p.id}
@@ -78,11 +83,11 @@ export function ScriptsTab({
         <span className="text-xs text-muted-foreground">
           {container
             ? phase === 'preRequest'
-              ? '裡面的每個請求發送前執行'
-              : '裡面的每個請求收到回應後執行'
+              ? msg().scripts.editor.containerPre
+              : msg().scripts.editor.containerPost
             : phase === 'preRequest'
-              ? '發送前執行'
-              : '收到回應、擷取變數之後執行（斷言在最後）'}
+              ? msg().scripts.editor.pre
+              : msg().scripts.editor.post}
         </span>
         <button
           type="button"
@@ -90,21 +95,22 @@ export function ScriptsTab({
           data-testid="script-docs-open"
           onClick={() => setDocsOpen(true)}
         >
-          可用的 API
+          {msg().scripts.editor.api}
         </button>
       </div>
       <ScriptDocsDialog open={docsOpen} onOpenChange={setDocsOpen} phase={phase} />
       {children}
       {inheritedFrom.length > 0 && (
         <p className="text-xs text-muted-foreground" data-testid="inherited-scripts">
-          也會執行：{inheritedFrom.map((name) => `「${name}」`).join('、')}的腳本（順序依 Collection
-          設定）
+          {msg().scripts.editor.alsoRuns(inheritedFrom)}
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-hidden rounded-md border" data-testid="script-editor">
         <CodeEditor
           key={phase}
-          aria-label={phase === 'preRequest' ? 'Pre-request 腳本' : 'Post-response 腳本'}
+          aria-label={
+            phase === 'preRequest' ? msg().scripts.editor.preLabel : msg().scripts.editor.postLabel
+          }
           className="h-full"
           language="javascript"
           value={scripts[phase]}
@@ -155,7 +161,7 @@ function AssertionRow({
       <td className="w-8 border-r text-center">
         <input
           type="checkbox"
-          aria-label="啟用"
+          aria-label={msg().scripts.editor.enabled}
           className="size-3.5 accent-primary"
           checked={row.enabled}
           onChange={(e) => set({ enabled: e.target.checked })}
@@ -163,26 +169,26 @@ function AssertionRow({
       </td>
       <td className="w-32 border-r">
         <NativeSelect
-          aria-label="檢查對象"
+          aria-label={msg().scripts.editor.target}
           className={SELECT}
           value={row.target}
           onChange={(e) => set({ target: e.target.value as Assertion['target'] })}
         >
           {ASSERTION_TARGETS.map((t) => (
             <option key={t} value={t}>
-              {ASSERTION_TARGET_LABELS[t]}
+              {assertionTargetLabel(t)}
             </option>
           ))}
         </NativeSelect>
       </td>
       <td className="border-r">
         <input
-          aria-label="路徑"
+          aria-label={msg().scripts.editor.path}
           className={KV_CELL_CLASS}
           disabled={!needsPath(row.target)}
           placeholder={
             row.target === 'header'
-              ? 'Header 名稱'
+              ? msg().scripts.editor.headerName
               : row.target === 'jsonBody'
                 ? 'data.items[0].id'
                 : ''
@@ -193,14 +199,14 @@ function AssertionRow({
       </td>
       <td className="w-32 border-r">
         <NativeSelect
-          aria-label="條件"
+          aria-label={msg().scripts.editor.condition}
           className={SELECT}
           value={row.operator}
           onChange={(e) => set({ operator: e.target.value as Assertion['operator'] })}
         >
           {ASSERTION_OPERATORS.map((o) => (
             <option key={o} value={o}>
-              {ASSERTION_OPERATOR_LABELS[o]}
+              {assertionOperatorLabel(o)}
             </option>
           ))}
         </NativeSelect>
@@ -208,7 +214,7 @@ function AssertionRow({
       <td className="border-r">
         {row.operator === 'isType' ? (
           <NativeSelect
-            aria-label="預期值"
+            aria-label={msg().scripts.editor.expected}
             className={SELECT}
             value={row.expected}
             onChange={(e) => set({ expected: e.target.value })}
@@ -221,11 +227,11 @@ function AssertionRow({
           </NativeSelect>
         ) : (
           <VariableInput
-            aria-label="預期值"
+            aria-label={msg().scripts.editor.expected}
             className="h-8"
             textClassName={cn(KV_CELL_CLASS, 'h-8')}
             disabled={unary}
-            placeholder={unary ? '' : '預期值（可用 {{變數}}）'}
+            placeholder={unary ? '' : msg().scripts.editor.expectedPlaceholder}
             value={unary ? '' : row.expected}
             onChange={(e) => set({ expected: e.target.value })}
           />
@@ -234,7 +240,7 @@ function AssertionRow({
       <td className="w-8 text-center">
         <button
           type="button"
-          aria-label="刪除"
+          aria-label={msg().scripts.editor.delete}
           className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
           onClick={onRemove}
         >
@@ -260,7 +266,7 @@ function ExtractionRow({
       <td className="w-8 border-r text-center">
         <input
           type="checkbox"
-          aria-label="啟用"
+          aria-label={msg().scripts.editor.enabled}
           className="size-3.5 accent-primary"
           checked={row.enabled}
           onChange={(e) => set({ enabled: e.target.checked })}
@@ -268,30 +274,30 @@ function ExtractionRow({
       </td>
       <td className="w-32 border-r">
         <NativeSelect
-          aria-label="來源"
+          aria-label={msg().scripts.editor.source}
           className={SELECT}
           value={row.source}
           onChange={(e) => set({ source: e.target.value as Extraction['source'] })}
         >
           {EXTRACTION_SOURCES.map((s) => (
             <option key={s} value={s}>
-              {EXTRACTION_SOURCE_LABELS[s]}
+              {extractionSourceLabel(s)}
             </option>
           ))}
         </NativeSelect>
       </td>
       <td className="border-r">
         <input
-          aria-label="路徑"
+          aria-label={msg().scripts.editor.path}
           className={KV_CELL_CLASS}
           disabled={row.source === 'status'}
           placeholder={
             row.source === 'jsonBody'
-              ? 'data.token（空白＝整個 JSON）'
+              ? msg().scripts.editor.jsonPathPlaceholder
               : row.source === 'header'
-                ? 'Header 名稱'
+                ? msg().scripts.editor.headerName
                 : row.source === 'body'
-                  ? 'Regex，例如 id=(\\d+)（空白＝整個 Body）'
+                  ? msg().scripts.editor.regexPlaceholder
                   : ''
           }
           value={row.source === 'status' ? '' : row.path}
@@ -300,28 +306,28 @@ function ExtractionRow({
       </td>
       <td className="w-40 border-r">
         <input
-          aria-label="變數名稱"
+          aria-label={msg().scripts.editor.variable}
           className={KV_CELL_CLASS}
-          placeholder="變數名稱"
+          placeholder={msg().scripts.editor.variable}
           value={row.variable}
           onChange={(e) => set({ variable: e.target.value })}
         />
       </td>
       <td className="w-28 border-r">
         <NativeSelect
-          aria-label="存到"
+          aria-label={msg().scripts.editor.saveTo}
           className={SELECT}
           value={row.scope}
           onChange={(e) => set({ scope: e.target.value as Extraction['scope'] })}
         >
-          <option value="runtime">暫存變數</option>
-          <option value="environment">目前環境</option>
+          <option value="runtime">{msg().scripts.editor.runtime}</option>
+          <option value="environment">{msg().scripts.editor.environment}</option>
         </NativeSelect>
       </td>
       <td className="w-8 text-center">
         <button
           type="button"
-          aria-label="刪除"
+          aria-label={msg().scripts.editor.delete}
           className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
           onClick={onRemove}
         >
@@ -345,10 +351,8 @@ export function TestsTab({
     <div className="flex flex-col gap-5 p-4" data-testid="tests-tab">
       <section className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium">從回應擷取變數</h3>
-          <span className="text-xs text-muted-foreground">
-            收到回應後、Post-response 腳本之前執行
-          </span>
+          <h3 className="text-sm font-medium">{msg().scripts.editor.capturesTitle}</h3>
+          <span className="text-xs text-muted-foreground">{msg().scripts.editor.capturesHint}</span>
           <div className="flex-1" />
           <Button
             size="sm"
@@ -356,7 +360,7 @@ export function TestsTab({
             onClick={() => onChange({ extractions: [...extractions, newExtraction()] })}
           >
             <Plus />
-            新增擷取
+            {msg().scripts.editor.addCapture}
           </Button>
         </div>
         {extractions.length > 0 && (
@@ -385,9 +389,9 @@ export function TestsTab({
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium">斷言</h3>
+          <h3 className="text-sm font-medium">{msg().scripts.editor.assertionsTitle}</h3>
           <span className="text-xs text-muted-foreground">
-            最後執行；JSON 路徑例如 <code>data.items[0].id</code>
+            {msg().scripts.editor.assertionsHint} <code>data.items[0].id</code>
           </span>
           <div className="flex-1" />
           <Button
@@ -396,7 +400,7 @@ export function TestsTab({
             onClick={() => onChange({ assertions: [...assertions, newAssertion()] })}
           >
             <Plus />
-            新增斷言
+            {msg().scripts.editor.addAssertion}
           </Button>
         </div>
         {assertions.length > 0 && (

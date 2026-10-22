@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { msg } from '@shared/i18n'
 import {
   APP_COPYRIGHT,
   APP_LICENSE,
@@ -32,6 +33,7 @@ import { CheckboxLabel } from '@renderer/components/ui/native-select'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from '@renderer/stores/app-store'
 import { useHistoryStore } from '@renderer/stores/history-store'
+import { LanguageSelect } from './LanguageSelect'
 
 function Row({
   label,
@@ -63,11 +65,11 @@ function Footer({ busy, error }: { busy: boolean; error: string | null }) {
       <DialogFooter>
         <DialogClose asChild>
           <Button type="button" variant="outline">
-            取消
+            {msg().common.cancel}
           </Button>
         </DialogClose>
         <Button type="submit" disabled={busy}>
-          儲存
+          {msg().common.save}
         </Button>
       </DialogFooter>
     </>
@@ -120,13 +122,12 @@ function WorkspaceSettingsForm({
     }
   }
 
+  const m = msg().settings.workspace
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>Workspace 設定</DialogTitle>
-        <DialogDescription>
-          請求的預設值（每個請求可在自己的 Settings 分頁覆寫）。存在 workspace.json。
-        </DialogDescription>
+        <DialogTitle>{m.title}</DialogTitle>
+        <DialogDescription>{m.description}</DialogDescription>
       </DialogHeader>
       <Row label="Timeout (ms)" htmlFor="ws-timeout">
         <Input
@@ -139,25 +140,25 @@ function WorkspaceSettingsForm({
             setValue({ ...value, timeoutMs: clampInt(e.target.value, 0, 3_600_000) })
           }
         />
-        <span className="text-xs text-muted-foreground">0 = 不限</span>
+        <span className="text-xs text-muted-foreground">{msg().common.unlimited}</span>
       </Row>
-      <Row label="SSL 憑證驗證">
+      <Row label={m.ssl}>
         <CheckboxLabel
           checked={value.validateSSL}
           onChange={(e) => setValue({ ...value, validateSSL: e.target.checked })}
         >
-          驗證伺服器憑證
+          {m.sslCheck}
         </CheckboxLabel>
       </Row>
-      <Row label="重新導向">
+      <Row label={m.redirects}>
         <CheckboxLabel
           checked={value.followRedirects}
           onChange={(e) => setValue({ ...value, followRedirects: e.target.checked })}
         >
-          自動跟隨
+          {m.redirectsFollow}
         </CheckboxLabel>
       </Row>
-      <Row label="最多跟隨次數" htmlFor="ws-max-redirects">
+      <Row label={m.maxRedirects} htmlFor="ws-max-redirects">
         <Input
           id="ws-max-redirects"
           type="number"
@@ -169,7 +170,9 @@ function WorkspaceSettingsForm({
             setValue({ ...value, maxRedirects: clampInt(e.target.value, 0, MAX_REDIRECTS_LIMIT) })
           }
         />
-        <span className="text-xs text-muted-foreground">0–{MAX_REDIRECTS_LIMIT} 次</span>
+        <span className="text-xs text-muted-foreground">
+          {m.maxRedirectsHint(MAX_REDIRECTS_LIMIT)}
+        </span>
       </Row>
       <Row label="Git">
         <div className="flex flex-col gap-1">
@@ -178,14 +181,12 @@ function WorkspaceSettingsForm({
             data-testid="git-auto-fetch"
             onChange={(e) => setValue({ ...value, gitAutoFetch: e.target.checked })}
           >
-            開啟 Workspace 時自動 Fetch
+            {m.gitAutoFetch}
           </CheckboxLabel>
-          <span className="text-xs text-muted-foreground">
-            關閉時只在按下 Fetch / Pull 時連線遠端。
-          </span>
+          <span className="text-xs text-muted-foreground">{m.gitAutoFetchHint}</span>
         </div>
       </Row>
-      <Row label="腳本總時間 (秒)" htmlFor="ws-script-timeout">
+      <Row label={m.scriptTimeout} htmlFor="ws-script-timeout">
         <Input
           id="ws-script-timeout"
           type="number"
@@ -202,34 +203,30 @@ function WorkspaceSettingsForm({
             })
           }
         />
-        <span className="text-xs text-muted-foreground">每段腳本，含 sendRequest / sleep 等待</span>
+        <span className="text-xs text-muted-foreground">{m.scriptTimeoutHint}</span>
       </Row>
-      <Row label="腳本">
+      <Row label={m.scripts}>
         <div className="flex flex-col gap-1">
           <CheckboxLabel
             checked={trusted}
             data-testid="trust-scripts"
             onChange={(e) => setTrusted(e.target.checked)}
           >
-            信任這個 Workspace 的腳本
+            {m.trustScripts}
           </CheckboxLabel>
-          <span className="text-xs text-muted-foreground">
-            只記在這台電腦；不信任時，發送含有腳本的請求前會先詢問。
-          </span>
+          <span className="text-xs text-muted-foreground">{m.trustScriptsHint}</span>
         </div>
       </Row>
-      <Row label="外部檔案">
+      <Row label={m.files}>
         <div className="flex flex-col gap-1">
           <CheckboxLabel
             checked={filesTrusted}
             data-testid="trust-files"
             onChange={(e) => setFilesTrusted(e.target.checked)}
           >
-            允許 {'{{$file:…}}'} 讀取 Workspace 以外的檔案
+            {m.trustFiles}
           </CheckboxLabel>
-          <span className="text-xs text-muted-foreground">
-            只記在這台電腦；Workspace 資料夾內的檔案一律可以讀取。
-          </span>
+          <span className="text-xs text-muted-foreground">{m.trustFilesHint}</span>
         </div>
       </Row>
       <Footer busy={busy} error={error} />
@@ -256,10 +253,15 @@ export function WorkspaceSettingsDialog({
   )
 }
 
-const THEME_LABELS: Record<Theme, string> = {
-  system: '跟隨系統',
-  light: '淺色',
-  dark: '深色'
+const THEMES: Theme[] = ['system', 'light', 'dark']
+
+/** Interface language (issue #6): applied right away, like the appearance. */
+function LanguageRow() {
+  return (
+    <Row label={msg().settings.app.language}>
+      <LanguageSelect />
+    </Row>
+  )
 }
 
 /** Appearance (decision 93): applied right away, not with the form's 儲存. */
@@ -267,10 +269,11 @@ function ThemeRow() {
   const theme = useAppStore((s) => s.config?.theme ?? 'system')
   const updateConfig = useAppStore((s) => s.updateConfig)
   const [error, setError] = useState<string | null>(null)
+  const m = msg().settings.app
   return (
-    <Row label="外觀">
-      <div className="flex gap-4 text-sm" role="radiogroup" aria-label="外觀">
-        {(Object.keys(THEME_LABELS) as Theme[]).map((t) => (
+    <Row label={m.theme}>
+      <div className="flex gap-4 text-sm" role="radiogroup" aria-label={m.theme}>
+        {THEMES.map((t) => (
           <label key={t} className="inline-flex items-center gap-1.5">
             <input
               type="radio"
@@ -284,19 +287,13 @@ function ThemeRow() {
                 )
               }
             />
-            {THEME_LABELS[t]}
+            {m.themes[t]}
           </label>
         ))}
       </div>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </Row>
   )
-}
-
-const MODE_LABELS: Record<ProxySettings['mode'], string> = {
-  none: '不使用 Proxy',
-  system: '使用系統 Proxy 設定',
-  custom: '自訂'
 }
 
 function AppSettingsForm({
@@ -325,12 +322,7 @@ function AppSettingsForm({
 
   async function submit(e: FormEvent): Promise<void> {
     e.preventDefault()
-    if (
-      willRemove > 0 &&
-      !window.confirm(
-        `歷史紀錄上限改為 ${limit} 筆後，會刪除所有 Workspace 中最舊的 ${willRemove} 筆紀錄。要繼續嗎？`
-      )
-    ) {
+    if (willRemove > 0 && !window.confirm(msg().settings.app.historyConfirm(limit, willRemove))) {
       return
     }
     setBusy(true)
@@ -352,17 +344,17 @@ function AppSettingsForm({
     }
   }
 
+  const m = msg().settings.app
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>App 設定</DialogTitle>
-        <DialogDescription>
-          存在這台電腦（不會寫進 Workspace），適用所有 Workspace。
-        </DialogDescription>
+        <DialogTitle>{m.title}</DialogTitle>
+        <DialogDescription>{m.description}</DialogDescription>
       </DialogHeader>
+      <LanguageRow />
       <ThemeRow />
       <span className="text-sm font-medium">Proxy</span>
-      <div className="flex flex-col gap-2" role="radiogroup" aria-label="Proxy 模式">
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label={m.proxyMode}>
         {PROXY_MODES.map((mode) => (
           <label key={mode} className="inline-flex items-center gap-2 text-sm">
             <input
@@ -372,7 +364,7 @@ function AppSettingsForm({
               checked={proxy.mode === mode}
               onChange={() => set({ mode })}
             />
-            {MODE_LABELS[mode]}
+            {m.proxyModes[mode]}
           </label>
         ))}
       </div>
@@ -387,7 +379,7 @@ function AppSettingsForm({
               onChange={(e) => set({ url: e.target.value })}
             />
           </Row>
-          <Row label="帳號（選填）" htmlFor="proxy-user">
+          <Row label={m.proxyUser} htmlFor="proxy-user">
             <Input
               id="proxy-user"
               className="h-8"
@@ -395,7 +387,7 @@ function AppSettingsForm({
               onChange={(e) => set({ username: e.target.value })}
             />
           </Row>
-          <Row label="密碼（選填）" htmlFor="proxy-pass">
+          <Row label={m.proxyPassword} htmlFor="proxy-pass">
             <Input
               id="proxy-pass"
               type="password"
@@ -404,15 +396,13 @@ function AppSettingsForm({
               onChange={(e) => set({ password: e.target.value })}
             />
           </Row>
-          <p className="text-xs text-muted-foreground">
-            密碼以明文存在這台電腦的設定檔（app-config.json），不會寫進 Workspace。
-          </p>
+          <p className="text-xs text-muted-foreground">{m.proxyPasswordHint}</p>
         </>
       )}
       {proxy.mode !== 'none' && (
         <div className="flex flex-col gap-2">
           <Label htmlFor="proxy-bypass" className="text-muted-foreground">
-            不經過 Proxy 的主機（每行一個，可用 *.example.com）
+            {m.proxyBypass}
           </Label>
           <textarea
             id="proxy-bypass"
@@ -423,7 +413,7 @@ function AppSettingsForm({
         </div>
       )}
       <div className="flex flex-col gap-2 border-t pt-3">
-        <Row label="歷史紀錄上限" htmlFor="history-limit">
+        <Row label={m.historyLimit} htmlFor="history-limit">
           <Input
             id="history-limit"
             type="number"
@@ -435,15 +425,11 @@ function AppSettingsForm({
             onBlur={() => setHistoryLimit(String(limit))}
           />
           <span className="text-xs text-muted-foreground">
-            筆（{HISTORY_LIMIT_MIN}–{HISTORY_LIMIT_MAX}，所有 Workspace 共用）
+            {m.historyLimitHint(HISTORY_LIMIT_MIN, HISTORY_LIMIT_MAX)}
           </span>
         </Row>
-        {usage && (
-          <p className="text-xs text-muted-foreground">
-            目前共 {usage.total} 筆。超過上限時，會刪除所有 Workspace 中最舊的紀錄。
-          </p>
-        )}
-        <Row label="WebSocket 訊息" htmlFor="ws-message-limit">
+        {usage && <p className="text-xs text-muted-foreground">{m.historyUsage(usage.total)}</p>}
+        <Row label={m.wsMessages} htmlFor="ws-message-limit">
           <Input
             id="ws-message-limit"
             type="number"
@@ -455,7 +441,7 @@ function AppSettingsForm({
             onBlur={() => setMessageLimitText(String(messageLimit))}
           />
           <span className="text-xs text-muted-foreground">
-            則／分頁（{WS_MESSAGE_LIMIT_MIN}–{WS_MESSAGE_LIMIT_MAX}，超過時刪除最舊的）
+            {m.wsMessagesHint(WS_MESSAGE_LIMIT_MIN, WS_MESSAGE_LIMIT_MAX)}
           </span>
         </Row>
       </div>
@@ -476,10 +462,7 @@ function LegalNotice() {
         {APP_NAME} {version}
       </p>
       <p>{APP_COPYRIGHT}</p>
-      <p>
-        {APP_NAME} 是自由軟體，以 {APP_LICENSE}（GNU Affero General Public License 第 3
-        版或更新版本）授權， 不提供任何擔保。
-      </p>
+      <p>{msg().settings.legal.notice(APP_NAME, APP_LICENSE)}</p>
       <p className="flex gap-3">
         <a
           className="text-primary underline-offset-2 hover:underline"
@@ -487,7 +470,7 @@ function LegalNotice() {
           target="_blank"
           rel="noreferrer"
         >
-          授權條款
+          {msg().settings.legal.license}
         </a>
         <a
           className="text-primary underline-offset-2 hover:underline"
@@ -495,7 +478,7 @@ function LegalNotice() {
           target="_blank"
           rel="noreferrer"
         >
-          原始碼
+          {msg().settings.legal.source}
         </a>
       </p>
     </div>

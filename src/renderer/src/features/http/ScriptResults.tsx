@@ -3,13 +3,14 @@ import type { ReactNode } from 'react'
 import type { ScriptLog, ScriptReport, ScriptTestResult } from '@shared/scripts'
 import { formatDuration } from '@shared/http'
 import { cn } from '@renderer/lib/utils'
+import { msg } from '@shared/i18n'
 
-const SCOPE_LABEL = { runtime: '暫存變數', environment: '環境', collection: 'Collection' } as const
-const BY_LABEL = {
-  preRequest: 'Pre-request',
-  postResponse: 'Post-response',
-  extraction: '擷取'
-} as const
+const byLabel = (by: 'preRequest' | 'postResponse' | 'extraction') =>
+  by === 'preRequest'
+    ? 'Pre-request'
+    : by === 'postResponse'
+      ? 'Post-response'
+      : msg().scripts.results.capture
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -53,9 +54,7 @@ function ScriptError({ phase, error }: { phase: string; error: string }) {
       data-testid="script-error"
     >
       <AlertTriangle className="mt-px size-3.5 shrink-0" />
-      <span className="break-all select-text">
-        {phase} 腳本錯誤：{error}
-      </span>
+      <span className="break-all select-text">{msg().scripts.results.error(phase, error)}</span>
     </p>
   )
 }
@@ -90,7 +89,7 @@ export function TestsPanel({ report }: { report: ScriptReport }) {
       {report.scriptsSkipped && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Info className="size-3.5" />
-          這次沒有執行腳本（只執行擷取與斷言）。
+          {msg().scripts.results.skipped}
         </p>
       )}
       {report.preRequest?.error && (
@@ -100,7 +99,7 @@ export function TestsPanel({ report }: { report: ScriptReport }) {
         <ScriptError phase="Post-response" error={report.postResponse.error} />
       )}
       {report.assertions.length > 0 && (
-        <Section title="斷言">
+        <Section title={msg().scripts.results.assertions}>
           <ul className="flex flex-col gap-1">
             {report.assertions.map((a) => (
               <ResultLine
@@ -108,14 +107,14 @@ export function TestsPanel({ report }: { report: ScriptReport }) {
                 testId="assertion-result"
                 passed={a.passed}
                 label={a.label}
-                detail={a.error ?? `實際值：${a.actual}`}
+                detail={a.error ?? msg().scripts.results.actual(a.actual)}
               />
             ))}
           </ul>
         </Section>
       )}
       {scriptTests.length > 0 && (
-        <Section title="腳本測試">
+        <Section title={msg().scripts.results.scriptTests}>
           <ul className="flex flex-col gap-1">
             {testLines(report.preRequest?.tests ?? [], 'pre')}
             {testLines(report.postResponse?.tests ?? [], 'post')}
@@ -123,14 +122,17 @@ export function TestsPanel({ report }: { report: ScriptReport }) {
         </Section>
       )}
       {report.extractions.length > 0 && (
-        <Section title="擷取">
+        <Section title={msg().scripts.results.captures}>
           <ul className="flex flex-col gap-1">
             {report.extractions.map((e) => (
               <ResultLine
                 key={e.id}
                 testId="extraction-result"
                 passed={e.error === undefined}
-                label={`${e.variable}（${SCOPE_LABEL[e.scope]}）`}
+                label={msg().scripts.results.captured(
+                  e.variable,
+                  msg().scripts.results.scopes[e.scope]
+                )}
                 detail={e.error ?? `= ${e.value ?? ''}`}
               />
             ))}
@@ -138,7 +140,7 @@ export function TestsPanel({ report }: { report: ScriptReport }) {
         </Section>
       )}
       {(report.changes.length > 0 || report.changeErrors.length > 0) && (
-        <Section title="變數變更">
+        <Section title={msg().scripts.results.changes}>
           <ul className="flex flex-col gap-1 text-xs" data-testid="variable-changes">
             {report.changes.map((c, i) => (
               <li
@@ -150,10 +152,12 @@ export function TestsPanel({ report }: { report: ScriptReport }) {
                 data-scope={c.scope}
               >
                 <span className="shrink-0 text-muted-foreground">
-                  [{BY_LABEL[c.by]} → {SCOPE_LABEL[c.scope]}]
+                  [{byLabel(c.by)} → {msg().scripts.results.scopes[c.scope]}]
                 </span>
                 <span className="font-mono">
-                  {c.value === null ? `刪除 ${c.name}` : `${c.name} = ${c.value}`}
+                  {c.value === null
+                    ? msg().scripts.results.deleted(c.name)
+                    : `${c.name} = ${c.value}`}
                 </span>
               </li>
             ))}
@@ -164,13 +168,11 @@ export function TestsPanel({ report }: { report: ScriptReport }) {
             ))}
           </ul>
           {report.changes.some((c) => c.scope !== 'runtime') && (
-            <p className="text-xs text-muted-foreground">
-              標成橘色的變更已寫入環境 / Collection 的檔案。
-            </p>
+            <p className="text-xs text-muted-foreground">{msg().scripts.results.savedToFiles}</p>
           )}
         </Section>
       )}
-      {nothing && <p className="text-sm text-muted-foreground">沒有斷言或測試結果。</p>}
+      {nothing && <p className="text-sm text-muted-foreground">{msg().scripts.results.nothing}</p>}
     </div>
   )
 }
@@ -196,7 +198,7 @@ export function ConsolePanel({
   ] as const
   const ran = phases.filter(([, p]) => p !== null)
   if (ran.length === 0) {
-    return <p className="p-3 text-sm text-muted-foreground">沒有執行腳本。</p>
+    return <p className="p-3 text-sm text-muted-foreground">{msg().scripts.results.noScripts}</p>
   }
   return (
     <div className="flex h-full flex-col gap-3 overflow-auto p-3" data-testid="console-panel">
@@ -206,7 +208,7 @@ export function ConsolePanel({
             {name} · {formatDuration(p?.durationMs ?? 0)}
           </h4>
           {p && p.logs.length === 0 && !p.error && (
-            <p className="text-xs text-muted-foreground">（沒有輸出）</p>
+            <p className="text-xs text-muted-foreground">{msg().scripts.results.noOutput}</p>
           )}
           <ul className="flex flex-col font-mono text-xs select-text">
             {p?.logs.map((l, i) => (
@@ -229,9 +231,9 @@ export function ConsolePanel({
         <p className="text-xs text-muted-foreground" data-testid="next-request-note">
           {inRunner
             ? report.nextRequest === null
-              ? 'setNextRequest(null)：這一輪在此結束'
-              : `setNextRequest：下一個執行「${report.nextRequest}」`
-            : 'setNextRequest 只在 Collection Runner 中有效，單獨送出時不會影響其他請求'}
+              ? msg().scripts.results.nextNull
+              : msg().scripts.results.next(report.nextRequest)
+            : msg().scripts.results.nextOutsideRunner}
         </p>
       )}
     </div>

@@ -16,6 +16,7 @@ import { errorMessage } from '@renderer/lib/ipc'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { containerOptions, type RequestTab } from './tab-model'
+import { msg } from '@shared/i18n'
 
 function SaveAsForm({ tab }: { tab: RequestTab }) {
   const tree = useTreeStore((s) => s.tree)
@@ -42,11 +43,11 @@ function SaveAsForm({ tab }: { tab: RequestTab }) {
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>儲存請求</DialogTitle>
-        <DialogDescription>選擇要放進哪個 Collection / 資料夾。</DialogDescription>
+        <DialogTitle>{msg().tabs.saveAsTitle}</DialogTitle>
+        <DialogDescription>{msg().tabs.saveAsDescription}</DialogDescription>
       </DialogHeader>
       <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3">
-        <Label htmlFor="save-as-name">名稱</Label>
+        <Label htmlFor="save-as-name">{msg().tabs.saveAsName}</Label>
         <Input
           id="save-as-name"
           autoFocus
@@ -55,7 +56,7 @@ function SaveAsForm({ tab }: { tab: RequestTab }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <Label htmlFor="save-as-parent">位置</Label>
+        <Label htmlFor="save-as-parent">{msg().tabs.saveAsLocation}</Label>
         {options.length > 0 ? (
           <NativeSelect
             id="save-as-parent"
@@ -71,7 +72,7 @@ function SaveAsForm({ tab }: { tab: RequestTab }) {
             ))}
           </NativeSelect>
         ) : (
-          <p className="text-sm text-muted-foreground">請先在左側建立一個 Collection。</p>
+          <p className="text-sm text-muted-foreground">{msg().tabs.saveAsNoCollection}</p>
         )}
       </div>
       {error && (
@@ -85,10 +86,10 @@ function SaveAsForm({ tab }: { tab: RequestTab }) {
           variant="outline"
           onClick={() => useTabsStore.getState().cancelSaveAs()}
         >
-          取消
+          {msg().common.cancel}
         </Button>
         <Button type="submit" disabled={busy || !parentId || name.trim() === ''}>
-          儲存
+          {msg().common.save}
         </Button>
       </DialogFooter>
     </form>

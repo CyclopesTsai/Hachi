@@ -13,6 +13,7 @@
  *     token, apiKey
  *   ]
  */
+import { msg } from '../i18n'
 
 export interface BruEntry {
   key: string
@@ -48,7 +49,7 @@ export function parseBru(source: string): BruBlock[] {
     i++
     if (line === '') continue
     const open = /^([A-Za-z][\w:-]*)\s*([{[])$/.exec(line)
-    if (!open) throw new BruParseError(`無法解析的內容（第 ${i} 行）：${line}`)
+    if (!open) throw new BruParseError(msg().transferMain.bruno.badLine(i, line))
     const name = open[1] as string
     const close = open[2] === '{' ? '}' : ']'
     const body: string[] = []
@@ -62,7 +63,7 @@ export function parseBru(source: string): BruBlock[] {
       }
       body.push(raw)
     }
-    if (!closed) throw new BruParseError(`區塊「${name}」沒有結束`)
+    if (!closed) throw new BruParseError(msg().transferMain.bruno.unclosedBlock(name))
     if (close === ']') {
       blocks.push({
         kind: 'list',
@@ -90,7 +91,7 @@ function parseEntries(body: string[], block: string): BruEntry[] {
     const line = (body[j] as string).trim()
     if (line === '') continue
     const colon = line.indexOf(':')
-    if (colon < 0) throw new BruParseError(`區塊「${block}」中無法解析：${line}`)
+    if (colon < 0) throw new BruParseError(msg().transferMain.bruno.badBlockLine(block, line))
     let key = line.slice(0, colon).trim()
     let value = line.slice(colon + 1).trim()
     let enabled = true

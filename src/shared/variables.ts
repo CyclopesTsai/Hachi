@@ -13,22 +13,27 @@
 import type { InheritedSettings } from './http'
 import type { Auth, KeyValue, Variable } from './schemas/collection'
 import type { HttpRequest } from './schemas/http-request'
+import { msg } from './i18n'
 
 export const VARIABLE_PATTERN = /\{\{([^{}]+)\}\}/g
 export const MAX_DEPTH = 10
 
 export const DYNAMIC_VARIABLES = {
-  $guid: 'UUID v4',
-  $timestamp: '目前的 Unix 時間（秒）',
-  $isoTimestamp: '目前的 ISO 8601 時間',
-  $randomInt: '0–1000 的隨機整數',
-  $randomUUID: 'UUID v4（同 $guid）',
-  $randomString: '16 個隨機英數字',
-  $randomAlphaNumeric: '1 個隨機英數字',
-  $randomEmail: '隨機的 Email 地址（example.com）',
-  $randomBoolean: 'true 或 false'
+  $guid: true,
+  $timestamp: true,
+  $isoTimestamp: true,
+  $randomInt: true,
+  $randomUUID: true,
+  $randomString: true,
+  $randomAlphaNumeric: true,
+  $randomEmail: true,
+  $randomBoolean: true
 } as const
 export type DynamicVariableName = keyof typeof DYNAMIC_VARIABLES
+
+/** What a dynamic variable gives, in the interface language. */
+export const dynamicVariableDescription = (name: DynamicVariableName): string =>
+  msg().vars.dynamicDescriptions[name]
 
 export function isDynamicVariable(name: string): name is DynamicVariableName {
   return Object.hasOwn(DYNAMIC_VARIABLES, name)

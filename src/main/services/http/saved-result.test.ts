@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { proxySettingsSchema } from '@shared/schemas/app-config'
-import { HIDDEN_VALUE } from '@shared/schemas/example'
 import { httpRequestSchema } from '@shared/schemas/http-request'
 import { workspaceSettingsSchema } from '@shared/schemas/workspace'
 import { buildVariableMap, type VariableLayer } from '@shared/variables'
@@ -113,8 +112,8 @@ describe('HttpService.savedResult', () => {
       saved.sent!.headers.map(([k, v]) => [k.toLowerCase(), v])
     )
     expect(sentHeaders['x-token']).toBe('{{token}}')
-    expect(sentHeaders.authorization).toBe(HIDDEN_VALUE)
-    expect(sentHeaders.cookie).toBe(HIDDEN_VALUE)
+    expect(sentHeaders.authorization).toBe('（已隱藏）')
+    expect(sentHeaders.cookie).toBe('（已隱藏）')
     // The echo puts the secret into the response body: it is masked there too.
     expect(saved.response).toMatchObject({ status: 200, body: { encoding: 'text' } })
     expect(saved.response.body.data).toContain('{{token}}')

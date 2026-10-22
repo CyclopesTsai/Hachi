@@ -3,6 +3,7 @@
  * Types only — safe to import anywhere. Keep docs/ipc.md in sync.
  */
 import type { SerializedError } from '../errors'
+import type { Language } from '../i18n'
 import type {
   ContainerSettingsData,
   HttpResult,
@@ -70,6 +71,8 @@ export interface AppInfo {
   /** `process.platform` of the main process, e.g. "darwin" | "win32" | "linux". */
   platform: string
   isPackaged: boolean
+  /** The interface language "follow the system" means here (issue #6). */
+  systemLanguage: Language
 }
 
 export interface RevealInput {

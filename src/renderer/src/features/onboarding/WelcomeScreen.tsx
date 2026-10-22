@@ -1,4 +1,5 @@
-import { FolderOpen, FolderPlus, History, Trash2, X } from 'lucide-react'
+import { FolderOpen, FolderPlus, History, Languages, Trash2, X } from 'lucide-react'
+import { msg } from '@shared/i18n'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { sanitizeFileName } from '@shared/file-names'
 import { WORKSPACE_NAME_MAX } from '@shared/schemas/workspace'
@@ -13,21 +14,14 @@ import {
 } from '@renderer/components/ui/card'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
+import { LanguageSelect } from '@renderer/features/settings/LanguageSelect'
 import { DeleteWorkspaceDialog } from '@renderer/features/workspace/WorkspaceDialogs'
 import { IpcError, errorMessage, unwrap } from '@renderer/lib/ipc'
 import { useAppStore } from '@renderer/stores/app-store'
 
-const FRIENDLY_ERRORS: Partial<Record<string, string>> = {
-  ALREADY_EXISTS: '這個位置已經有 Workspace 了，請改用「開啟既有 Workspace」。',
-  DIR_NOT_EMPTY: '目標資料夾已存在且不是空的，請換一個名稱或位置。',
-  NOT_A_WORKSPACE: '這個資料夾不是 Hachi Workspace（找不到 workspace.json）。',
-  INVALID_FILE: 'workspace.json 內容損毀或格式不正確。',
-  UNSUPPORTED_VERSION: '這個 Workspace 由較新版本的 Hachi 建立，請先更新 Hachi。'
-}
-
 function describeError(error: unknown): string {
   if (error instanceof IpcError) {
-    const friendly = FRIENDLY_ERRORS[error.code]
+    const friendly = msg().welcome.errors[error.code]
     return friendly ? `${friendly}\n${error.message}` : error.message
   }
   return errorMessage(error)
@@ -62,7 +56,7 @@ function CreateWorkspaceForm() {
     try {
       const dir = await unwrap(
         window.hachi.dialog.selectDirectory({
-          title: '選擇 Workspace 存放位置',
+          title: msg().welcome.chooseLocation,
           defaultPath: parentDir || undefined
         })
       )
@@ -86,6 +80,7 @@ function CreateWorkspaceForm() {
     }
   }
 
+  const m = msg().welcome
   return (
     <form
       onSubmit={(e) => void submit(e)}
@@ -93,19 +88,19 @@ function CreateWorkspaceForm() {
       data-testid="create-workspace-form"
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="workspace-name">名稱</Label>
+        <Label htmlFor="workspace-name">{m.name}</Label>
         <Input
           id="workspace-name"
           ref={nameRef}
           value={name}
           maxLength={WORKSPACE_NAME_MAX}
           onChange={(e) => setName(e.target.value)}
-          placeholder="例如：My API"
+          placeholder={m.namePlaceholder}
           autoFocus
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="workspace-location">存放位置</Label>
+        <Label htmlFor="workspace-location">{m.location}</Label>
         <div className="flex gap-2">
           <Input
             id="workspace-location"
@@ -114,7 +109,7 @@ function CreateWorkspaceForm() {
             spellCheck={false}
           />
           <Button type="button" variant="outline" onClick={() => void browse()}>
-            瀏覽…
+            {msg().common.browse}
           </Button>
         </div>
         {preview && (
@@ -122,7 +117,8 @@ function CreateWorkspaceForm() {
             className="text-xs break-all text-muted-foreground"
             data-testid="workspace-path-preview"
           >
-            將建立資料夾：<span className="font-mono">{preview}</span>
+            {m.willCreate}
+            <span className="font-mono">{preview}</span>
           </p>
         )}
       </div>
@@ -133,7 +129,7 @@ function CreateWorkspaceForm() {
       )}
       <Button type="submit" disabled={busy || !trimmed || !parentDir}>
         <FolderPlus />
-        {busy ? '建立中…' : '建立 Workspace'}
+        {busy ? m.creating : m.create}
       </Button>
     </form>
   )
@@ -144,8 +140,9 @@ function RecentList() {
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<{ name: string; path: string } | null>(null)
 
+  const m = msg().welcome
   if (recent.length === 0) {
-    return <p className="text-sm text-muted-foreground">尚無最近開啟的 Workspace。</p>
+    return <p className="text-sm text-muted-foreground">{m.noRecent}</p>
   }
 
   return (
@@ -172,10 +169,12 @@ function RecentList() {
                 <span className="truncate">{r.name}</span>
                 {currentWorkspace?.path === r.path && (
                   <span className="rounded bg-primary/15 px-1.5 text-[10px] text-primary">
-                    目前
+                    {m.current}
                   </span>
                 )}
-                {!r.exists && <span className="text-[10px] text-destructive">找不到資料夾</span>}
+                {!r.exists && (
+                  <span className="text-[10px] text-destructive">{m.folderMissing}</span>
+                )}
               </span>
               <span className="w-full truncate font-mono text-xs text-muted-foreground">
                 {r.path}
@@ -187,8 +186,8 @@ function RecentList() {
                 variant="ghost"
                 size="icon"
                 className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                title="刪除 Workspace（移到垃圾桶）"
-                aria-label={`刪除 ${r.name}`}
+                title={m.deleteTitle}
+                aria-label={m.deleteLabel(r.name)}
                 onClick={() => setDeleting(r)}
               >
                 <Trash2 />
@@ -199,8 +198,8 @@ function RecentList() {
               variant="ghost"
               size="icon"
               className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-              title="從清單移除（不刪除檔案）"
-              aria-label={`從清單移除 ${r.name}`}
+              title={m.removeTitle}
+              aria-label={m.removeLabel(r.name)}
               onClick={() => void removeRecent(r.path)}
             >
               <X />
@@ -217,29 +216,29 @@ export function WelcomeScreen() {
   const { currentWorkspace, recent, openWorkspaceWithDialog, hideWelcome } = useAppStore()
   const [error, setError] = useState<string | null>(null)
   const isFirstRun = !currentWorkspace && recent.length === 0
+  const m = msg().welcome
 
   return (
     <div
-      className="flex h-full items-center justify-center overflow-auto p-8"
+      className="relative flex h-full items-center justify-center overflow-auto p-8"
       data-testid="welcome-screen"
     >
+      {/* Language right away, before anything else (issue #6). */}
+      <div className="absolute top-3 right-3 flex items-center gap-2 text-xs text-muted-foreground">
+        <Languages className="size-3.5" aria-hidden />
+        <LanguageSelect />
+      </div>
       <div className="flex w-full max-w-4xl flex-col gap-8">
         <div className="flex flex-col items-center gap-3 text-center">
           <AppLogo size="lg" />
-          <p className="text-muted-foreground">
-            {isFirstRun
-              ? '歡迎使用 Hachi！先建立第一個 Workspace，所有 Collections、環境變數與歷史紀錄都會存放在其中。'
-              : '建立新的 Workspace，或開啟既有的 Workspace。'}
-          </p>
+          <p className="text-muted-foreground">{isFirstRun ? m.introFirstRun : m.intro}</p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>建立新的 Workspace</CardTitle>
-              <CardDescription>
-                每個 Workspace 對應磁碟上的一個資料夾，資料皆以 JSON 檔儲存。
-              </CardDescription>
+              <CardTitle>{m.createTitle}</CardTitle>
+              <CardDescription>{m.createDescription}</CardDescription>
             </CardHeader>
             <CardContent>
               <CreateWorkspaceForm />
@@ -250,9 +249,9 @@ export function WelcomeScreen() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <History className="size-4" />
-                最近開啟
+                {m.recentTitle}
               </CardTitle>
-              <CardDescription>或從磁碟選擇一個既有的 Workspace 資料夾。</CardDescription>
+              <CardDescription>{m.recentDescription}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <Button
@@ -264,7 +263,7 @@ export function WelcomeScreen() {
                 }}
               >
                 <FolderOpen />
-                開啟既有 Workspace…
+                {m.open}
               </Button>
               {error && (
                 <p className="text-sm whitespace-pre-line text-destructive" role="alert">
@@ -279,7 +278,7 @@ export function WelcomeScreen() {
         {currentWorkspace && (
           <div className="text-center">
             <Button variant="link" onClick={hideWelcome}>
-              返回「{currentWorkspace.name}」
+              {m.back(currentWorkspace.name)}
             </Button>
           </div>
         )}

@@ -15,6 +15,7 @@ import {
   type MockStatus
 } from '@shared/mock'
 import type { MockFile, MockWsEndpoint } from '@shared/schemas/mock'
+import { msg } from '@shared/i18n'
 
 const LOG_TEXT_MAX = 500
 const FLUSH_MS = 100
@@ -105,10 +106,12 @@ export class MockServers {
       const code = (error as NodeJS.ErrnoException).code
       const message =
         code === 'EADDRINUSE'
-          ? `連接埠 ${mock.port} 已被使用，請換一個`
+          ? msg().httpMain.mock.portInUse(mock.port)
           : code === 'EACCES'
-            ? `沒有權限使用連接埠 ${mock.port}（1024 以下的埠需要系統權限）`
-            : `無法啟動：${error instanceof Error ? error.message : String(error)}`
+            ? msg().httpMain.mock.portDenied(mock.port)
+            : msg().httpMain.mock.startFailed(
+                error instanceof Error ? error.message : String(error)
+              )
       this.errors.set(mock.id, message)
       this.emit({ status: this.status(mock.id) })
       throw new Error(message, { cause: error })
@@ -166,7 +169,11 @@ export class MockServers {
     }
     const route = findRoute(mock.routes, method, url.pathname)
     if (!route) {
-      const body = JSON.stringify({ error: '沒有符合的 Mock 路由', method, path: url.pathname })
+      const body = JSON.stringify({
+        error: msg().httpMain.mock.noRoute,
+        method,
+        path: url.pathname
+      })
       res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' })
       res.end(method === 'HEAD' ? undefined : body)
       this.log(mock.id, req, { kind: 'http', routeId: null, status: 404, path: url.pathname })
@@ -221,7 +228,7 @@ export class MockServers {
       timers.add(t)
     }
     ws.on('message', (data, isBinary) => {
-      const text = isBinary ? `（二進位 ${(data as Buffer).length} bytes）` : data.toString()
+      const text = isBinary ? msg().httpMain.mock.binary((data as Buffer).length) : data.toString()
       entry('ws-in', text)
       if (isBinary) return
       const rule = endpoint.rules.find((r) => r.enabled && wsRuleMatches(r.match, r.pattern, text))

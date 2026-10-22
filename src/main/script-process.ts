@@ -8,9 +8,11 @@
  */
 import type { HostCall, HostReply, ScriptRunInput } from '@shared/scripts'
 import { runScript } from './services/scripts/engine'
+import { setLanguage, type Language } from '@shared/i18n'
 
 type Incoming =
-  { id: number; input: ScriptRunInput } | { id: number; callId: number; reply: HostReply }
+  | { id: number; input: ScriptRunInput; language: Language }
+  | { id: number; callId: number; reply: HostReply }
 
 const waiting = new Map<string, (reply: HostReply) => void>()
 let nextCall = 1
@@ -24,6 +26,8 @@ process.parentPort.on('message', (event: { data: Incoming }) => {
     return
   }
   const { id, input } = message
+  // Script errors and sandbox texts follow the app's language (issue #6).
+  setLanguage(message.language)
   const host = (call: HostCall) =>
     new Promise<HostReply>((resolve) => {
       const callId = nextCall++

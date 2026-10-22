@@ -5,6 +5,7 @@
 import { utilityProcess, type UtilityProcess } from 'electron'
 import type { HostCall, HostReply, ScriptRunInput, ScriptRunOutput } from '@shared/scripts'
 import scriptProcessPath from '../../script-process?modulePath'
+import { getLanguage, msg } from '@shared/i18n'
 
 /** Extra time the process gets beyond the script's own limit before it is killed. */
 const WATCHDOG_GRACE_MS = 5000
@@ -38,11 +39,11 @@ export class ScriptHost {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         // QuickJS stops scripts itself; this only fires if the process is stuck.
-        this.settle(id, failure('腳本沒有回應，已中止'))
+        this.settle(id, failure(msg().scriptMain.host.noAnswer))
         this.restart()
       }, input.timeoutMs + WATCHDOG_GRACE_MS)
       this.pending.set(id, { resolve, timer, ...(host ? { host } : {}) })
-      child.postMessage({ id, input })
+      child.postMessage({ id, input, language: getLanguage() })
     })
   }
 
@@ -62,7 +63,7 @@ export class ScriptHost {
               ok: false as const,
               error: error instanceof Error ? error.message : String(error)
             }))
-          : Promise.resolve({ ok: false as const, error: '這裡不能從腳本送出請求' })
+          : Promise.resolve({ ok: false as const, error: msg().scriptMain.engine.noHost })
         void reply.then((r) => {
           if (this.child === child) child.postMessage({ id: message.id, callId, reply: r })
         })
@@ -70,13 +71,17 @@ export class ScriptHost {
       }
       this.settle(
         message.id,
-        message.output ?? failure(`無法執行腳本：${message.error ?? '未知錯誤'}`)
+        message.output ??
+          failure(
+            msg().scriptMain.host.cannotRun(message.error ?? msg().scriptMain.host.unknownError)
+          )
       )
     })
     child.on('exit', () => {
       if (this.child !== child) return
       this.child = null
-      for (const id of [...this.pending.keys()]) this.settle(id, failure('腳本程序意外結束'))
+      for (const id of [...this.pending.keys()])
+        this.settle(id, failure(msg().scriptMain.host.exited))
     })
     this.child = child
     return child
@@ -94,6 +99,7 @@ export class ScriptHost {
     const child = this.child
     this.child = null
     child?.kill()
-    for (const id of [...this.pending.keys()]) this.settle(id, failure('腳本程序已重新啟動'))
+    for (const id of [...this.pending.keys()])
+      this.settle(id, failure(msg().scriptMain.host.restarted))
   }
 }

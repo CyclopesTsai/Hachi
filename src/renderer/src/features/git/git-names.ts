@@ -1,5 +1,6 @@
 /** Hachi names for the files git reports (decision 112): pure, unit tested. */
 import { isContainer, type TreeNode, type WorkspaceTree } from '@shared/tree'
+import { msg } from '@shared/i18n'
 
 export interface FileLabel {
   /** "Shop / Users / Get user", or the file name for other files. */
@@ -17,14 +18,17 @@ export function fileIndex(tree: WorkspaceTree): Map<string, FileLabel> {
       index.set(node.relPath, { title: names.join(' / '), itemId: node.id })
       for (const example of node.examples ?? []) {
         index.set(example.relPath, {
-          title: `${names.join(' / ')}（結果：${example.name}）`,
+          title: msg().git.names.example(names.join(' / '), example.name),
           itemId: null
         })
       }
       return
     }
     const meta = node.kind === 'collection' ? 'collection.json' : 'folder.json'
-    index.set(`${node.relPath}/${meta}`, { title: `${names.join(' / ')}（設定）`, itemId: node.id })
+    index.set(`${node.relPath}/${meta}`, {
+      title: msg().git.names.settings(names.join(' / ')),
+      itemId: node.id
+    })
     node.children.forEach((child) => visit(child, names))
   }
   tree.collections.forEach((c) => visit(c, []))
@@ -34,17 +38,16 @@ export function fileIndex(tree: WorkspaceTree): Map<string, FileLabel> {
 export function labelFor(index: ReadonlyMap<string, FileLabel>, path: string): FileLabel {
   const known = index.get(path)
   if (known) return known
-  if (path === 'workspace.json') return { title: 'Workspace 設定', itemId: null }
+  if (path === 'workspace.json') return { title: msg().git.names.workspace, itemId: null }
   const env = /^environments\/([^/]+)\.json$/.exec(path)
-  if (env) return { title: `環境檔 ${env[1]}`, itemId: null }
+  if (env) return { title: msg().git.names.environment(env[1] as string), itemId: null }
   return { title: path.slice(path.lastIndexOf('/') + 1), itemId: null }
 }
 
 /** How to install git on this platform (decision 111). */
 export function gitInstallHint(platform: string | undefined): string {
-  if (platform === 'win32') return '請安裝 Git for Windows（git-scm.com）。'
-  if (platform === 'darwin') {
-    return '在「終端機」執行 xcode-select --install，或用 Homebrew 執行 brew install git。'
-  }
-  return '請用系統的套件管理員安裝 git（例如 apt install git）。'
+  const m = msg().git.install
+  if (platform === 'win32') return m.win32
+  if (platform === 'darwin') return m.darwin
+  return m.other
 }

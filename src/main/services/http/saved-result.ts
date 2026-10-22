@@ -9,13 +9,13 @@ import {
   CREDENTIAL_REQUEST_HEADERS,
   CREDENTIAL_RESPONSE_HEADERS,
   EXAMPLE_BODY_MAX_BYTES,
-  HIDDEN_VALUE,
   type ExampleSentBody
 } from '@shared/schemas/example'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import type { PortableExample } from '@shared/transfer/portable'
 import type { VariableMap } from '@shared/variables'
 import { decodeText, isTextual } from './response-utils'
+import { msg } from '@shared/i18n'
 
 /** Shorter secret values are not searched for (they would match all over the place). */
 export const SECRET_MIN_LENGTH = 4
@@ -75,7 +75,8 @@ function maskHeaders(
 ): [string, string][] {
   return headers.map(([key, value]) => [
     key,
-    credentials.includes(key.toLowerCase()) ? HIDDEN_VALUE : maskSecrets(value, secrets)
+    // Stands in for credential header values, in the language at save time (issue #6).
+    credentials.includes(key.toLowerCase()) ? msg().httpMain.hidden : maskSecrets(value, secrets)
   ])
 }
 
@@ -104,7 +105,9 @@ export function exampleFromExchange(
   savedAt: string
 ): PortableExample {
   if (body.length > EXAMPLE_BODY_MAX_BYTES) {
-    throw new SavedResultError(`回應超過 ${EXAMPLE_BODY_MAX_BYTES / 1024 / 1024} MB，無法儲存結果`)
+    throw new SavedResultError(
+      msg().httpMain.saveResult.tooLarge(EXAMPLE_BODY_MAX_BYTES / 1024 / 1024)
+    )
   }
   const { secrets, response } = exchange
   const text = isTextual(response.contentType, body)

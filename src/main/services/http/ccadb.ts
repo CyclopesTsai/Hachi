@@ -10,18 +10,15 @@ import path from 'node:path'
 import { z } from 'zod'
 import type { CcadbProgram } from '@shared/http'
 import { writeJsonAtomic } from '../fs/atomic-write'
+import { msg } from '@shared/i18n'
 
 const REPORT_BASE = 'https://ccadb.my.salesforce-sites.com/ccadb/Report?Name='
 
-export const CCADB_PROGRAMS: { id: CcadbProgram; report: string; label: string }[] = [
-  { id: 'apple', report: 'AppleTLSServerAuthenticationCSV', label: 'Apple（iOS、macOS）' },
-  { id: 'chrome', report: 'ChromeTLSServerAuthenticationCSV', label: 'Chrome' },
-  {
-    id: 'microsoft',
-    report: 'MicrosoftTLSServerAuthenticationCSV',
-    label: 'Microsoft（Windows、Edge）'
-  },
-  { id: 'mozilla', report: 'MozillaTLSServerAuthenticationCSV', label: 'Mozilla（Firefox）' }
+export const CCADB_PROGRAMS: { id: CcadbProgram; report: string }[] = [
+  { id: 'apple', report: 'AppleTLSServerAuthenticationCSV' },
+  { id: 'chrome', report: 'ChromeTLSServerAuthenticationCSV' },
+  { id: 'microsoft', report: 'MicrosoftTLSServerAuthenticationCSV' },
+  { id: 'mozilla', report: 'MozillaTLSServerAuthenticationCSV' }
 ]
 
 export const reportUrl = (report: string) => `${REPORT_BASE}${report}`
@@ -118,7 +115,7 @@ export function parseReport(program: CcadbProgram, csv: string): CcadbRoot[] {
   const sha = col('SHA-256 Fingerprint')
   const name = col('Certificate Name')
   const pem = col('X.509 Certificate (PEM)')
-  if (sha < 0 || name < 0 || pem < 0) throw new Error('CCADB 報表的欄位不符預期')
+  if (sha < 0 || name < 0 || pem < 0) throw new Error(msg().tlsCheck.programs.badColumns)
   const cell = (row: string[], column: string) => {
     const i = col(column)
     return i >= 0 ? (row[i] ?? '').trim() : ''
@@ -156,7 +153,7 @@ export function parseReport(program: CcadbProgram, csv: string): CcadbRoot[] {
     }
     roots.push(root)
   }
-  if (roots.length < MIN_ROOTS) throw new Error('CCADB 報表的內容不符預期')
+  if (roots.length < MIN_ROOTS) throw new Error(msg().tlsCheck.programs.badContent)
   return roots
 }
 

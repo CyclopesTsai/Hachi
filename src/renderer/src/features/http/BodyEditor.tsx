@@ -18,6 +18,7 @@ import { unwrap } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
 import { useVariables } from '@renderer/lib/variables'
 import { VariableDocsDialog } from './VariableDocsDialog'
+import { msg } from '@shared/i18n'
 
 const MODE_LABELS: Record<BodyMode, string> = {
   none: 'none',
@@ -71,18 +72,20 @@ function FormDataValue({
         size="sm"
         className="h-6 px-2 text-xs"
         onClick={async () => {
-          const file = await unwrap(window.hachi.dialog.selectFile({ title: '選擇要上傳的檔案' }))
+          const file = await unwrap(
+            window.hachi.dialog.selectFile({ title: msg().http.body.chooseFileTitle })
+          )
           if (file) update({ filePath: file })
         }}
       >
         <FileUp />
-        選擇檔案
+        {msg().http.body.chooseFile}
       </Button>
       <span
         className="min-w-0 truncate font-mono text-xs text-muted-foreground"
         title={field.filePath}
       >
-        {field.filePath || '尚未選擇'}
+        {field.filePath || msg().http.body.noFile}
       </span>
     </div>
   )
@@ -110,7 +113,7 @@ export function BodyEditor({
         <div
           className="flex flex-wrap items-center gap-x-4 gap-y-2"
           role="radiogroup"
-          aria-label="Body 類型"
+          aria-label={msg().http.body.type}
         >
           {BODY_MODES.map((mode) => (
             <label key={mode} className="inline-flex items-center gap-1.5 text-sm">
@@ -129,7 +132,7 @@ export function BodyEditor({
           <div className="ml-auto flex min-w-0 items-center gap-3" data-testid="body-tools">
             {error && (
               <span className="max-w-64 truncate text-xs text-destructive" title={error}>
-                JSON 格式錯誤：{error}
+                {msg().http.body.jsonError(error)}
               </span>
             )}
             {body.mode === 'raw' && (
@@ -158,11 +161,11 @@ export function BodyEditor({
                 onClick={() => set({ json: JSON.stringify(JSON.parse(body.json), null, 2) })}
               >
                 <Wand2 />
-                格式化
+                {msg().http.body.format}
               </Button>
             )}
             <CheckboxLabel checked={wrap} onChange={(e) => setWrap(e.target.checked)}>
-              自動換行
+              {msg().http.body.wrap}
             </CheckboxLabel>
             <button
               type="button"
@@ -170,14 +173,16 @@ export function BodyEditor({
               data-testid="variable-docs-open"
               onClick={() => setDocsOpen(true)}
             >
-              可用的變數
+              {msg().http.body.variables}
             </button>
           </div>
         )}
         <VariableDocsDialog open={docsOpen} onOpenChange={setDocsOpen} />
       </div>
 
-      {body.mode === 'none' && <p className="text-sm text-muted-foreground">這個請求不帶 Body。</p>}
+      {body.mode === 'none' && (
+        <p className="text-sm text-muted-foreground">{msg().http.body.none}</p>
+      )}
 
       {body.mode === 'json' && (
         <CodeEditor
@@ -218,7 +223,7 @@ export function BodyEditor({
             }
             renderExtra={(field, update) => (
               <NativeSelect
-                aria-label="欄位類型"
+                aria-label={msg().http.body.fieldType}
                 className={cn('h-8 w-full rounded-none border-0 shadow-none')}
                 value={field.type}
                 onChange={(e) => update({ type: e.target.value as 'text' | 'file' })}
@@ -230,9 +235,7 @@ export function BodyEditor({
             renderValue={(field, update) => <FormDataValue field={field} update={update} />}
           />
           {hasFileField && (
-            <p className="text-xs text-muted-foreground">
-              檔案欄位會儲存檔案的完整路徑；在其他電腦上開啟這個 Workspace 時，該路徑不一定存在。
-            </p>
+            <p className="text-xs text-muted-foreground">{msg().http.body.fileHint}</p>
           )}
         </>
       )}

@@ -15,7 +15,7 @@
 
 ![Hachi](docs/screenshot.png)
 
-Hachi is in the spirit of Postman and Bruno: no account, no cloud, no database. A **Workspace** is a folder of JSON files (one file per request), so you can review, share and version your API collections with git. The app's interface is in Traditional Chinese (native menus are in English).
+Hachi is in the spirit of Postman and Bruno: no account, no cloud, no database. A **Workspace** is a folder of JSON files (one file per request), so you can review, share and version your API collections with git. The app's interface is in English or Traditional Chinese, following your system language or your choice in App Settings (native menus are in English).
 
 ## Features
 

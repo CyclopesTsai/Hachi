@@ -37,6 +37,7 @@ import { useAppStore } from '@renderer/stores/app-store'
 import { useMockStore } from '@renderer/stores/mock-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
+import { msg } from '@shared/i18n'
 
 type DialogState =
   | { kind: 'create' }
@@ -53,8 +54,8 @@ export function MockActions() {
       variant="ghost"
       size="icon"
       className="size-7 text-muted-foreground hover:text-foreground"
-      title="新增 Mock Server"
-      aria-label="新增 Mock Server"
+      title={msg().mock.add}
+      aria-label={msg().mock.add}
       data-testid="mock-add"
       onClick={() => openDialog({ kind: 'create' })}
     >
@@ -102,7 +103,7 @@ export function MockPanel() {
       <ul className="min-h-0 flex-1 overflow-auto px-1 pb-4">
         {list.length === 0 && (
           <li className="px-3 py-6 text-center text-xs text-muted-foreground">
-            還沒有 Mock Server。按「＋」新增，或從 Collection 建立。
+            {msg().mock.empty}
           </li>
         )}
         {list.map((mock) => {
@@ -134,7 +135,7 @@ export function MockPanel() {
                   {running && (
                     <span
                       className="size-1.5 shrink-0 rounded-full bg-emerald-500"
-                      aria-label="執行中"
+                      aria-label={msg().mock.running}
                       data-testid="mock-running"
                     />
                   )}
@@ -145,7 +146,7 @@ export function MockPanel() {
                   <>
                     <ContextMenuItem onSelect={() => setDialog({ kind: 'rename', mock })}>
                       <Pencil />
-                      重新命名…
+                      {msg().mock.renameMenu}
                     </ContextMenuItem>
                     <ContextMenuItem
                       onSelect={() =>
@@ -156,7 +157,7 @@ export function MockPanel() {
                       }
                     >
                       <Copy />
-                      複製
+                      {msg().mock.duplicate}
                     </ContextMenuItem>
                     <ContextMenuSeparator />
                   </>
@@ -166,7 +167,7 @@ export function MockPanel() {
                   onSelect={() => setDialog({ kind: 'delete', mock })}
                 >
                   <Trash2 />
-                  刪除…
+                  {msg().mock.deleteMenu}
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
@@ -187,14 +188,13 @@ export function MockPanel() {
       <AlertDialog open={dialog?.kind === 'delete'} onOpenChange={(o) => !o && setDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>刪除 Mock Server？</AlertDialogTitle>
+            <AlertDialogTitle>{msg().mock.deleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              「{dialog?.kind === 'delete' ? dialog.mock.name : ''}
-              」會停止，檔案移到系統垃圾桶。
+              {msg().mock.deleteDescription(dialog?.kind === 'delete' ? dialog.mock.name : '')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -206,7 +206,7 @@ export function MockPanel() {
                 })
               }}
             >
-              刪除
+              {msg().common.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -218,7 +218,7 @@ export function MockPanel() {
 function NameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <>
-      <Label htmlFor="mock-name">名稱</Label>
+      <Label htmlFor="mock-name">{msg().mock.name}</Label>
       <Input
         id="mock-name"
         autoFocus
@@ -250,12 +250,12 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>新增 Mock Server</DialogTitle>
-        <DialogDescription>存成 Workspace 的 mocks/ 資料夾中的檔案，可以進 git。</DialogDescription>
+        <DialogTitle>{msg().mock.createTitle}</DialogTitle>
+        <DialogDescription>{msg().mock.createDescription}</DialogDescription>
       </DialogHeader>
       <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
         <NameField value={name} onChange={setName} />
-        <Label htmlFor="mock-source">路由</Label>
+        <Label htmlFor="mock-source">{msg().mock.routes}</Label>
         <NativeSelect
           id="mock-source"
           value={source}
@@ -265,10 +265,10 @@ function CreateForm({ onDone }: { onDone: () => void }) {
             if (c && (name === 'Mock Server' || name.endsWith(' Mock'))) setName(`${c.name} Mock`)
           }}
         >
-          <option value="">空白</option>
+          <option value="">{msg().mock.blank}</option>
           {collections.map((c) => (
             <option key={c.id} value={c.id}>
-              從 Collection「{c.name}」建立
+              {msg().mock.fromCollection(c.name)}
             </option>
           ))}
         </NativeSelect>
@@ -276,7 +276,7 @@ function CreateForm({ onDone }: { onDone: () => void }) {
       {error && <p className="text-sm text-destructive">{error}</p>}
       <DialogFooter>
         <Button type="submit" disabled={name.trim() === ''}>
-          建立
+          {msg().mock.create}
         </Button>
       </DialogFooter>
     </form>
@@ -298,7 +298,7 @@ function RenameForm({ mock, onDone }: { mock: MockSummary; onDone: () => void })
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>重新命名 Mock Server</DialogTitle>
+        <DialogTitle>{msg().mock.renameTitle}</DialogTitle>
       </DialogHeader>
       <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
         <NameField value={name} onChange={setName} />
@@ -306,7 +306,7 @@ function RenameForm({ mock, onDone }: { mock: MockSummary; onDone: () => void })
       {error && <p className="text-sm text-destructive">{error}</p>}
       <DialogFooter>
         <Button type="submit" disabled={name.trim() === ''}>
-          儲存
+          {msg().common.save}
         </Button>
       </DialogFooter>
     </form>

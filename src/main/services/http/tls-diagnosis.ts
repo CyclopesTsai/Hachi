@@ -9,6 +9,7 @@ import { request as httpRequest } from 'node:http'
 import net from 'node:net'
 import tls, { type DetailedPeerCertificate, type TLSSocket } from 'node:tls'
 import type { TlsCertInfo, TlsDiagnosis, TlsVerdict } from '@shared/http'
+import { msg } from '@shared/i18n'
 
 const DIAGNOSIS_TIMEOUT_MS = 10_000
 const MAX_CHAIN = 10
@@ -57,8 +58,16 @@ function field(dn: string, key: string): string | null {
   return null
 }
 
+/** A connection that took too long (a class, so callers need not compare messages). */
+export class TimeoutError extends Error {
+  constructor() {
+    super(msg().tlsCheck.timeout)
+    this.name = 'TimeoutError'
+  }
+}
+
 export const nameOf = (dn: string) =>
-  field(dn, 'CN') ?? field(dn, 'O') ?? dn.split('\n')[0] ?? '（沒有名稱）'
+  field(dn, 'CN') ?? field(dn, 'O') ?? dn.split('\n')[0] ?? msg().tlsCheck.noName
 
 export function aiaIssuerUrl(cert: X509Certificate): string | null {
   const m = /CA Issuers - URI:(\S+)/.exec(cert.infoAccess ?? '')
@@ -122,8 +131,8 @@ export function analyzeChain(
   if (certs.length === 0) {
     return {
       verdict: 'unavailable',
-      summary: '伺服器沒有送出憑證',
-      advice: '確認網址與連接埠是否正確（是否真的是 HTTPS）。',
+      summary: msg().tlsCheck.verdicts.noCert,
+      advice: msg().tlsCheck.verdicts.noCertAdvice,
       chain: [],
       missing: null,
       opensslError
@@ -163,43 +172,31 @@ export function analyzeChain(
                 : 'ok'
 
   const leafInfo = chain[0] as TlsCertInfo
+  const v = msg().tlsCheck.verdicts
+  const expiredCert = chain.find((c) => c.expired)
   const text: Record<TlsVerdict, [string, string]> = {
     'hostname-mismatch': [
-      `憑證不是發給「${host}」的`,
-      `憑證適用的名稱：${leafInfo.altNames.join('、') || leafInfo.name}。請確認網址的主機名稱，或請伺服器換成包含這個名稱的憑證。`
+      v.hostname(host),
+      v.hostnameAdvice(msg().common.list(leafInfo.altNames) || leafInfo.name)
     ],
     expired: [
-      '憑證已過期',
-      `「${chain.find((c) => c.expired)?.name}」的有效期限到 ${chain.find((c) => c.expired)?.validTo.slice(0, 10)}。請伺服器更新憑證，並確認這台電腦的時間正確。`
+      v.expired,
+      v.expiredAdvice(expiredCert?.name ?? '', expiredCert?.validTo.slice(0, 10) ?? '')
     ],
-    'not-yet-valid': [
-      '憑證還沒生效',
-      '憑證的生效時間在現在之後：請確認這台電腦的日期與時間是否正確。'
-    ],
-    'bad-signature': [
-      '憑證鏈的簽章對不上',
-      '伺服器送出的憑證順序錯誤，或混入了別的憑證。請伺服器重新設定憑證鏈（leaf → 中繼 → 根）。'
-    ],
-    'self-signed': [
-      '自簽憑證（不在信任清單中）',
-      '這個憑證是伺服器自己簽的。開發環境可在請求的 Settings 關閉 SSL 驗證；正式環境請改用受信任 CA 簽發的憑證，或把它加入系統的信任憑證。'
-    ],
+    'not-yet-valid': [v.notYetValid, v.notYetValidAdvice],
+    'bad-signature': [v.badSignature, v.badSignatureAdvice],
+    'self-signed': [v.selfSigned, v.selfSignedAdvice],
     'incomplete-chain': [
-      '憑證鏈不完整（伺服器少送了中繼憑證）',
-      `伺服器只送出到「${chain[chain.length - 1]?.name}」，缺少簽發它的「${missing?.name}」。請伺服器管理員改用完整的憑證鏈（fullchain，例如 Let's Encrypt 的 fullchain.pem）。瀏覽器可能會自動下載中繼憑證而看起來正常，但 API 用戶端多半不會。`
+      v.incomplete,
+      v.incompleteAdvice(chain[chain.length - 1]?.name ?? '', missing?.name ?? '')
     ],
     'untrusted-root': [
       missing
-        ? `簽發者「${missing.name}」不在信任清單中`
-        : `根憑證「${chain[chain.length - 1]?.name}」不受信任`,
-      `${missing ? '可能是公司內部或測試用的 CA，也可能是伺服器少送了一張中繼憑證。' : '這通常是公司內部或測試用的 CA。'}可把它的根憑證加入系統的信任憑證（macOS 鑰匙圈 / Windows 憑證存放區）後重新啟動 Hachi，或在請求的 Settings 關閉 SSL 驗證。`
+        ? v.issuerUntrusted(missing.name)
+        : v.rootUntrusted(chain[chain.length - 1]?.name ?? ''),
+      v.untrustedAdvice(!!missing)
     ],
-    ok: [
-      '在這裡看起來憑證鏈正常',
-      opensslError
-        ? `驗證時的錯誤：${opensslError}。若經過 Proxy，可能是 Proxy 換掉了憑證。`
-        : '可能只是暫時的問題（例如憑證剛更新），請再試一次。'
-    ],
+    ok: [v.ok, opensslError ? v.okError(opensslError) : v.okRetry],
     unavailable: ['', '']
   }
   const [summary, advice] = text[verdict]
@@ -239,7 +236,7 @@ export function tunnel(
       socket.once('error', reject)
       signal.addEventListener('abort', () => {
         socket.destroy()
-        reject(new Error('逾時'))
+        reject(new TimeoutError())
       })
     })
   }
@@ -262,7 +259,7 @@ export function tunnel(
       if (res.statusCode === 200) resolve(socket)
       else {
         socket.destroy()
-        reject(new Error(`Proxy 回應 ${res.statusCode}`))
+        reject(new Error(msg().tlsCheck.proxyStatus(res.statusCode)))
       }
     })
     req.on('error', reject)
@@ -328,7 +325,7 @@ export async function handshake(
       s.once('error', reject)
       const abort = () => {
         s.destroy()
-        reject(new Error('逾時'))
+        reject(new TimeoutError())
       }
       if (controller.signal.aborted) abort()
       else controller.signal.addEventListener('abort', abort)
@@ -348,7 +345,7 @@ export async function handshake(
 /** Connects without verifying and diagnoses the chain. Never throws. */
 export async function diagnoseTls(url: string, route: Route = DIRECT): Promise<TlsDiagnosis> {
   const target = targetOf(url)
-  if (!target) return unavailable('', 0, '網址無效')
+  if (!target) return unavailable('', 0, msg().tlsCheck.invalidUrl)
   const { host, port } = target
   try {
     const { certs, opensslError } = await handshake(host, port, route)
@@ -362,7 +359,7 @@ export function unavailable(
   host: string,
   port: number,
   reason: string,
-  summary = '無法再次連線讀取憑證鏈'
+  summary = msg().tlsCheck.cannotReconnect
 ): TlsDiagnosis {
   return {
     host,

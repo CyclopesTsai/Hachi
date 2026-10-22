@@ -3,6 +3,7 @@
  */
 import { execFile } from 'node:child_process'
 import net from 'node:net'
+import { msg } from '@shared/i18n'
 
 /**
  * A host name or IP address that is safe to hand to a system command as an argument
@@ -55,7 +56,7 @@ export function runCommand(
           code: null,
           output,
           stdout,
-          failure: e.killed ? '逾時' : (e.message ?? String(error))
+          failure: e.killed ? msg().tlsCheck.timeout : (e.message ?? String(error))
         })
       }
     )

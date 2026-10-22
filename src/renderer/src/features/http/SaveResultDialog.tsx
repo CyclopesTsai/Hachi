@@ -18,6 +18,7 @@ import { errorMessage } from '@renderer/lib/ipc'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import type { RequestTab } from '@renderer/features/tabs/tab-model'
+import { msg } from '@shared/i18n'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -59,14 +60,11 @@ function SaveResultForm({
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
       <DialogHeader>
-        <DialogTitle>儲存結果</DialogTitle>
-        <DialogDescription>
-          把這次的請求與回應存在請求底下（唯讀，會跟著 Workspace 進 git）。機密變數的值會換回
-          {' {{名稱}}'}，Authorization、Cookie 等憑證 Header 會隱藏。
-        </DialogDescription>
+        <DialogTitle>{msg().http.saveResult.title}</DialogTitle>
+        <DialogDescription>{msg().http.saveResult.description}</DialogDescription>
       </DialogHeader>
       <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3">
-        <Label htmlFor="save-result-name">名稱</Label>
+        <Label htmlFor="save-result-name">{msg().http.saveResult.name}</Label>
         <Input
           id="save-result-name"
           autoFocus
@@ -83,10 +81,10 @@ function SaveResultForm({
       )}
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
-          取消
+          {msg().common.cancel}
         </Button>
         <Button type="submit" disabled={busy || name.trim() === ''}>
-          儲存
+          {msg().common.save}
         </Button>
       </DialogFooter>
     </form>
@@ -102,9 +100,9 @@ export function SaveResultButton({ tab, result }: { tab: RequestTab; result: Htt
   const tooLarge = result.bodyBytes > EXAMPLE_BODY_MAX_BYTES
   const reason =
     tab.itemId === null
-      ? '請先儲存請求，才能把結果存在它底下'
+      ? msg().http.saveResult.saveRequestFirst
       : tooLarge
-        ? `回應超過 ${EXAMPLE_BODY_MAX_BYTES / 1024 / 1024} MB，無法儲存結果`
+        ? msg().http.saveResult.tooLarge(EXAMPLE_BODY_MAX_BYTES / 1024 / 1024)
         : null
   return (
     <>
@@ -113,11 +111,11 @@ export function SaveResultButton({ tab, result }: { tab: RequestTab; result: Htt
         size="sm"
         data-testid="save-result"
         disabled={reason !== null}
-        title={reason ?? '把這次的請求與回應存在請求底下'}
+        title={reason ?? msg().http.saveResult.buttonTitle}
         onClick={() => setOpen(true)}
       >
         <BookmarkPlus />
-        儲存結果
+        {msg().http.saveResult.button}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="save-result-dialog">

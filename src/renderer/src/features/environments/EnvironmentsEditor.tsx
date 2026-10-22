@@ -20,6 +20,7 @@ import { cn } from '@renderer/lib/utils'
 import { VariablesContext, useVariableMap } from '@renderer/lib/variables'
 import { useEnvStore } from '@renderer/stores/env-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { msg } from '@shared/i18n'
 
 function DeleteEnvironmentDialog({
   target,
@@ -32,13 +33,11 @@ function DeleteEnvironmentDialog({
     <AlertDialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent data-testid="delete-environment-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>刪除環境「{target?.name}」？</AlertDialogTitle>
-          <AlertDialogDescription>
-            環境檔會移到系統垃圾桶，需要時可以從垃圾桶還原。
-          </AlertDialogDescription>
+          <AlertDialogTitle>{msg().env.deleteTitle(target?.name ?? '')}</AlertDialogTitle>
+          <AlertDialogDescription>{msg().env.toTrash}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -46,7 +45,7 @@ function DeleteEnvironmentDialog({
               onClose()
             }}
           >
-            刪除
+            {msg().common.delete}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -67,9 +66,9 @@ function RuntimeVariablesSection() {
   return (
     <section className="shrink-0 border-b px-4 py-3" data-testid="runtime-variables">
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-medium">暫存變數（{runtime.length}）</h3>
+        <h3 className="text-sm font-medium">{msg().env.runtimeTitle(runtime.length)}</h3>
         <span className="min-w-0 truncate text-xs text-muted-foreground">
-          腳本與擷取設定的值，只存在記憶體（App 結束後消失），優先於環境與 Collection 變數
+          {msg().env.runtimeHint}
         </span>
         <div className="flex-1" />
         {error && <span className="truncate text-xs text-destructive">{error}</span>}
@@ -80,7 +79,7 @@ function RuntimeVariablesSection() {
           onClick={() => void run(() => useEnvStore.getState().clearRuntime())}
         >
           <Trash2 />
-          全部清除
+          {msg().env.clearAll}
         </Button>
       </div>
       {runtime.length > 0 && (
@@ -99,7 +98,7 @@ function RuntimeVariablesSection() {
                   </td>
                   <td className="truncate px-2 py-1.5 font-mono select-text" title={v.value}>
                     {v.value === '' ? (
-                      <span className="text-muted-foreground">（空字串）</span>
+                      <span className="text-muted-foreground">{msg().env.emptyString}</span>
                     ) : (
                       v.value
                     )}
@@ -107,7 +106,7 @@ function RuntimeVariablesSection() {
                   <td className="w-8 text-center">
                     <button
                       type="button"
-                      aria-label={`刪除 ${v.name}`}
+                      aria-label={msg().env.deleteLabel(v.name)}
                       className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
                       onClick={() => void run(() => useEnvStore.getState().deleteRuntime(v.name))}
                     >
@@ -152,20 +151,20 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
           <div className="flex w-56 shrink-0 flex-col border-r">
             <div className="flex h-9 items-center justify-between pr-1 pl-3">
               <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                環境
+                {msg().env.environments}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
                 className="size-7"
-                aria-label="新增環境"
-                title="新增環境"
+                aria-label={msg().env.add}
+                title={msg().env.add}
                 onClick={() => void run(() => store.createEnvironment('New Environment'))}
               >
                 <Plus />
               </Button>
             </div>
-            <ul className="min-h-0 flex-1 overflow-auto px-1" aria-label="環境清單">
+            <ul className="min-h-0 flex-1 overflow-auto px-1" aria-label={msg().env.list}>
               {list.map((env) => (
                 <li key={env.id}>
                   <button
@@ -181,7 +180,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
                   >
                     <span className="flex size-3.5 shrink-0 items-center justify-center">
                       {env.id === activeId && (
-                        <Check className="size-3.5 text-primary" aria-label="目前使用中" />
+                        <Check className="size-3.5 text-primary" aria-label={msg().env.inUse} />
                       )}
                     </span>
                     <span
@@ -196,7 +195,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
                     {!env.error && (
                       <Copy
                         className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground"
-                        aria-label="複製"
+                        aria-label={msg().env.duplicate}
                         onClick={(e) => {
                           e.stopPropagation()
                           void run(() => store.duplicateEnvironment(env.id))
@@ -205,7 +204,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
                     )}
                     <Trash2
                       className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive"
-                      aria-label="刪除"
+                      aria-label={msg().env.delete}
                       onClick={(e) => {
                         e.stopPropagation()
                         setDeleting(env)
@@ -222,7 +221,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
               <>
                 <div className="flex items-center gap-2 border-b px-3 py-2">
                   <Input
-                    aria-label="環境名稱"
+                    aria-label={msg().env.name}
                     data-testid="environment-name"
                     className="h-8 max-w-64"
                     value={draft.name}
@@ -231,7 +230,10 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
                     }
                   />
                   {dirty && (
-                    <span className="size-2 rounded-full bg-primary" aria-label="有未儲存的修改" />
+                    <span
+                      className="size-2 rounded-full bg-primary"
+                      aria-label={msg().env.unsaved}
+                    />
                   )}
                   <div className="flex-1" />
                   {(tab.saveError ?? error) && (
@@ -246,7 +248,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
                     onClick={() => void useEnvStore.getState().setActive(draft.id)}
                   >
                     <Check />
-                    {draft.id === activeId ? '使用中' : '設為目前環境'}
+                    {draft.id === activeId ? msg().env.active : msg().env.setActive}
                   </Button>
                   <Button
                     variant="outline"
@@ -255,7 +257,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
                     onClick={() => void store.save(tab.key)}
                   >
                     <Save />
-                    儲存
+                    {msg().common.save}
                   </Button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto p-4">
@@ -270,7 +272,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
               </>
             ) : (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground">
-                <p>還沒有任何環境。建立環境（例如 dev、staging、prod）來切換不同的變數值。</p>
+                <p>{msg().env.empty}</p>
                 {error && <p className="text-destructive">{error}</p>}
                 <Button
                   variant="outline"
@@ -278,7 +280,7 @@ export function EnvironmentsEditor({ tab }: { tab: EnvironmentsTab }) {
                   onClick={() => void run(() => store.createEnvironment('New Environment'))}
                 >
                   <Plus />
-                  建立環境
+                  {msg().env.create}
                 </Button>
               </div>
             )}

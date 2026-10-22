@@ -11,7 +11,7 @@ import {
   X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { formatBytes, formatDuration, type HttpErrorCode } from '@shared/http'
+import { formatBytes, formatDuration } from '@shared/http'
 import {
   RUNNER_MAX_CONCURRENCY,
   RUNNER_MAX_DELAY_MS,
@@ -19,8 +19,7 @@ import {
   RUNNER_MAX_ITERATIONS,
   type LatencyStats,
   type RunnerRowDetail,
-  type RunnerStatsRow,
-  type RunnerStatus
+  type RunnerStatsRow
 } from '@shared/runner'
 import { findNode, type TreeNode } from '@shared/tree'
 import { CodeEditor } from '@renderer/components/code-editor'
@@ -50,28 +49,7 @@ import {
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { useTreeStore } from '@renderer/stores/tree-store'
 import { LineChart } from './LineChart'
-
-const STATUS_LABEL: Record<RunnerStatus, string> = {
-  running: '執行中',
-  done: '完成',
-  cancelled: '已取消',
-  stopped: '已停止',
-  error: '錯誤'
-}
-
-const ERROR_LABEL: Partial<Record<HttpErrorCode, string>> = {
-  TIMEOUT: '逾時',
-  NETWORK: '連線失敗',
-  TLS: 'SSL / TLS',
-  PROXY: 'Proxy',
-  SCRIPT: '腳本錯誤',
-  INVALID_URL: 'URL 錯誤',
-  TOO_LARGE: '回應太大',
-  FILE_NOT_FOUND: '檔案不存在',
-  TOO_MANY_REDIRECTS: '重新導向過多',
-  CANCELLED: '已取消',
-  UNKNOWN: '其他'
-}
+import { localeOf, msg } from '@shared/i18n'
 
 const clampInt = (text: string, min: number, max: number) => {
   const n = Math.round(Number(text))
@@ -139,7 +117,10 @@ function Settings({
       data-testid="runner-settings"
     >
       <Field
-        label={`請求（${requests.filter((r) => !excluded.has(r.id)).length} / ${requests.length}）`}
+        label={msg().runner.requests(
+          requests.filter((r) => !excluded.has(r.id)).length,
+          requests.length
+        )}
       >
         <div className="flex gap-2 text-xs">
           <button
@@ -147,14 +128,14 @@ function Settings({
             className="text-primary hover:underline"
             onClick={() => update({ excluded: [] })}
           >
-            全選
+            {msg().runner.selectAll}
           </button>
           <button
             type="button"
             className="text-primary hover:underline"
             onClick={() => update({ excluded: requests.map((r) => r.id) })}
           >
-            全不選
+            {msg().runner.selectNone}
           </button>
         </div>
         <ul className="max-h-56 overflow-auto rounded-md border p-1" data-testid="runner-items">
@@ -167,7 +148,7 @@ function Settings({
                     'flex h-7 items-center gap-2 rounded-sm px-1.5 text-sm hover:bg-accent/60',
                     ws && 'text-muted-foreground'
                   )}
-                  title={ws ? 'WebSocket 不會執行' : undefined}
+                  title={ws ? msg().runner.wsSkipped : undefined}
                 >
                   <input
                     type="checkbox"
@@ -192,17 +173,17 @@ function Settings({
         {unsaved && (
           <span className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
             <AlertTriangle className="mt-px size-3.5 shrink-0" />
-            有請求還沒儲存，Runner 使用的是已儲存的版本。
+            {msg().runner.unsavedNote}
           </span>
         )}
       </Field>
-      <Field label="環境">
+      <Field label={msg().runner.environment}>
         <NativeSelect
-          aria-label="環境"
+          aria-label={msg().runner.environment}
           value={f.environmentId ?? ''}
           onChange={(e) => update({ environmentId: e.target.value || null })}
         >
-          <option value="">無環境</option>
+          <option value="">{msg().runner.noEnvironment}</option>
           {envList
             .filter((e) => !e.error)
             .map((e) => (
@@ -213,20 +194,20 @@ function Settings({
         </NativeSelect>
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="結束條件">
+        <Field label={msg().runner.endMode}>
           <NativeSelect
-            aria-label="結束條件"
+            aria-label={msg().runner.endMode}
             value={f.endMode}
             onChange={(e) => update({ endMode: e.target.value as 'iterations' | 'duration' })}
           >
-            <option value="iterations">執行次數</option>
-            <option value="duration">持續時間</option>
+            <option value="iterations">{msg().runner.iterations}</option>
+            <option value="duration">{msg().runner.duration}</option>
           </NativeSelect>
         </Field>
         {f.endMode === 'iterations' ? (
-          <Field label="執行次數（每個 worker）">
+          <Field label={msg().runner.iterationsPerWorker}>
             <Input
-              aria-label="執行次數"
+              aria-label={msg().runner.iterations}
               type="number"
               min={1}
               max={RUNNER_MAX_ITERATIONS}
@@ -239,9 +220,9 @@ function Settings({
             />
           </Field>
         ) : (
-          <Field label="持續時間（秒）">
+          <Field label={msg().runner.durationSec}>
             <Input
-              aria-label="持續時間"
+              aria-label={msg().runner.duration}
               type="number"
               min={1}
               max={RUNNER_MAX_DURATION_SEC}
@@ -254,9 +235,9 @@ function Settings({
             />
           </Field>
         )}
-        <Field label="並行數">
+        <Field label={msg().runner.concurrency}>
           <Input
-            aria-label="並行數"
+            aria-label={msg().runner.concurrency}
             type="number"
             min={1}
             max={RUNNER_MAX_CONCURRENCY}
@@ -271,14 +252,17 @@ function Settings({
       </div>
       <p className="-mt-2 text-xs text-muted-foreground">
         {f.endMode === 'iterations'
-          ? `總輪數 = ${f.iterations} × ${f.concurrency} = ${(f.iterations * f.concurrency).toLocaleString()}`
-          : `${f.concurrency} 個 worker 各自一直執行到 ${f.durationSec.toLocaleString()} 秒；時間到後不再開始新的一輪，已開始的一輪會跑完`}
-        {f.concurrency > 1 &&
-          '。並行時每個 worker 的變數各自獨立，環境 / Collection 變更不會寫入檔案'}
+          ? msg().runner.totalRounds(
+              f.iterations,
+              f.concurrency,
+              (f.iterations * f.concurrency).toLocaleString(localeOf())
+            )
+          : msg().runner.durationNote(f.concurrency, f.durationSec.toLocaleString(localeOf()))}
+        {f.concurrency > 1 && msg().runner.concurrencyNote}
       </p>
-      <Field label="請求間隔（ms）">
+      <Field label={msg().runner.delay}>
         <Input
-          aria-label="請求間隔"
+          aria-label={msg().runner.delayLabel}
           type="number"
           min={0}
           max={RUNNER_MAX_DELAY_MS}
@@ -294,13 +278,13 @@ function Settings({
         checked={f.stopOnFailure}
         onChange={(e) => update({ stopOnFailure: e.target.checked })}
       >
-        失敗時停止（錯誤、腳本錯誤或任一測試 / 斷言失敗）
+        {msg().runner.stopOnFailure}
       </CheckboxLabel>
-      <Field label="回應內容" hint="保留時每筆上限 1 MB、總共 200 MB">
-        <div className="flex gap-4 text-xs" role="radiogroup" aria-label="回應內容">
+      <Field label={msg().runner.keepBodies} hint={msg().runner.keepBodiesHint}>
+        <div className="flex gap-4 text-xs" role="radiogroup" aria-label={msg().runner.keepBodies}>
           {[
-            [false, '不保留'],
-            [true, '全部保留']
+            [false, msg().runner.keepNone],
+            [true, msg().runner.keepAll]
           ].map(([value, label]) => (
             <label key={String(value)} className="flex items-center gap-1.5">
               <input
@@ -314,10 +298,7 @@ function Settings({
           ))}
         </div>
       </Field>
-      <Field
-        label="資料檔（CSV / JSON）"
-        hint="第 n 輪使用第 (n mod 列數) 列；欄位可用 {{欄名}} 或 pm.iterationData"
-      >
+      <Field label={msg().runner.dataFile} hint={msg().runner.dataFileHint}>
         {f.data ? (
           <div
             className="flex items-start gap-2 rounded-md border p-2 text-xs"
@@ -327,10 +308,14 @@ function Settings({
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{f.data.fileName}</div>
               <div className="text-muted-foreground">
-                {f.data.rows.length} 列 · 欄位：{f.data.columns.join('、')}
+                {msg().runner.dataRows(f.data.rows.length, f.data.columns)}
               </div>
             </div>
-            <button type="button" aria-label="移除資料檔" onClick={() => update({ data: null })}>
+            <button
+              type="button"
+              aria-label={msg().runner.removeData}
+              onClick={() => update({ data: null })}
+            >
               <X className="size-3.5 text-muted-foreground hover:text-foreground" />
             </button>
           </div>
@@ -342,7 +327,7 @@ function Settings({
             onClick={() => void useRunnerStore.getState().pickDataFile(uid)}
           >
             <FileSpreadsheet />
-            選擇檔案…
+            {msg().runner.chooseFile}
           </Button>
         )}
       </Field>
@@ -365,16 +350,19 @@ function DataFileExample() {
   const code = 'overflow-auto rounded bg-muted px-2 py-1.5 font-mono text-[11px] leading-snug'
   return (
     <details className="-mt-2 text-xs text-muted-foreground" data-testid="runner-data-example">
-      <summary className="cursor-default select-none hover:text-foreground">查看資料檔範例</summary>
+      <summary className="cursor-default select-none hover:text-foreground">
+        {msg().runner.dataExample}
+      </summary>
       <div className="mt-1.5 flex flex-col gap-1.5">
-        <span>CSV（第一列是欄名）：</span>
+        <span>{msg().runner.csvExample}</span>
         <pre className={code}>{CSV_EXAMPLE}</pre>
-        <span>JSON（物件陣列）：</span>
+        <span>{msg().runner.jsonExample}</span>
         <pre className={code}>{JSON_EXAMPLE}</pre>
         <span>
-          兩個範例都是 2 列：第 1、3、5… 輪用 alice，第 2、4、6… 輪用 bob。請求中寫{' '}
-          <code className="font-mono">{'{{username}}'}</code>，腳本中用{' '}
-          <code className="font-mono">pm.iterationData.get(&apos;username&apos;)</code>。
+          {msg().runner.exampleNote1} <code className="font-mono">{'{{username}}'}</code>
+          {msg().runner.exampleNote2}{' '}
+          <code className="font-mono">pm.iterationData.get(&apos;username&apos;)</code>
+          {msg().runner.exampleNote3}
         </span>
       </div>
     </details>
@@ -382,33 +370,27 @@ function DataFileExample() {
 }
 
 /** Result table columns; a hint explains the less obvious ones on hover. */
-const ROW_COLUMNS: [string, string | null][] = [
-  ['#', '完成的順序'],
-  [
-    '輪',
-    '第幾輪：全部 worker 共用的流水號，依開始的先後編號（不是固定分給某個 worker）。一輪 = 勾選的請求依序各跑一次；有資料檔時第 n 輪用第 n 列'
-  ],
-  [
-    'worker',
-    '由第幾個 worker 執行。並行數 = 同時執行的 worker 數，每個 worker 依序跑「執行次數」輪，變數各自獨立'
-  ],
-  ['請求', null],
-  ['狀態', null],
-  ['耗時', null],
-  ['大小', null],
-  ['測試', '通過數 / 測試與斷言總數；— 表示這個請求沒有測試或斷言']
-]
+const rowColumns = (): [string, string | null][] => {
+  const c = msg().runner.columns
+  return ['index', 'round', 'worker', 'request', 'status', 'time', 'size', 'tests'].map(
+    (k) => c[k] as [string, string | null]
+  )
+}
+
+const errorLabel = (code: string | null | undefined): string | undefined =>
+  msg().runner.errors[code ?? 'UNKNOWN']
 
 function StatsTable({ items, total }: { items: RunnerStatsRow[]; total: RunnerStatsRow }) {
+  const st = msg().runner.stats
   const cols: [string, (l: LatencyStats | null) => string][] = [
-    ['平均', (l) => ms(l?.avg)],
-    ['最小', (l) => ms(l?.min)],
-    ['最大', (l) => ms(l?.max)],
+    [st.avg, (l) => ms(l?.avg)],
+    [st.min, (l) => ms(l?.min)],
+    [st.max, (l) => ms(l?.max)],
     ['p50', (l) => ms(l?.p50)],
     ['p90', (l) => ms(l?.p90)],
     ['p95', (l) => ms(l?.p95)],
     ['p99', (l) => ms(l?.p99)],
-    ['標準差', (l) => ms(l?.stdDev)]
+    [st.stdDev, (l) => ms(l?.stdDev)]
   ]
   const rows = [...items, total]
   return (
@@ -416,13 +398,22 @@ function StatsTable({ items, total }: { items: RunnerStatsRow[]; total: RunnerSt
       <table className="w-full text-xs whitespace-nowrap" data-testid="runner-stats">
         <thead>
           <tr className="border-b text-left text-muted-foreground">
-            {['請求', '次數', '成功', '失敗', '錯誤率', '測試通過', ...cols.map(([h]) => h)].map(
-              (h) => (
-                <th key={h} className={cn('px-2 py-1.5 font-medium', h !== '請求' && 'text-right')}>
-                  {h}
-                </th>
-              )
-            )}
+            {[
+              st.request,
+              st.count,
+              st.ok,
+              st.failed,
+              st.errorRate,
+              st.testsPassed,
+              ...cols.map(([h]) => h)
+            ].map((h) => (
+              <th
+                key={h}
+                className={cn('px-2 py-1.5 font-medium', h !== st.request && 'text-right')}
+              >
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="tabular-nums">
@@ -515,12 +506,12 @@ function RowDetailDialog({
     <Dialog open={detail !== undefined} onOpenChange={(o) => !o && close()}>
       <DialogContent className="sm:max-w-3xl" data-testid="runner-row-detail">
         <DialogHeader>
-          <DialogTitle>{detail ? `#${detail.index + 1} ${detail.name}` : '詳細內容'}</DialogTitle>
+          <DialogTitle>
+            {detail ? `#${detail.index + 1} ${detail.name}` : msg().runner.detail}
+          </DialogTitle>
         </DialogHeader>
         {detail === null ? (
-          <p className="text-sm text-muted-foreground">
-            這筆的詳細內容沒有保留（只保留前 2000 筆，以及之後失敗的 2000 筆）。
-          </p>
+          <p className="text-sm text-muted-foreground">{msg().runner.detailMissing}</p>
         ) : (
           detail && (
             <div className="flex max-h-[65vh] min-h-0 flex-col gap-2">
@@ -530,9 +521,16 @@ function RowDetailDialog({
               <p className="text-xs">
                 {detail.status !== null
                   ? `${detail.status} ${detail.statusText}`
-                  : `${ERROR_LABEL[detail.errorCode ?? 'UNKNOWN'] ?? ''}：${detail.errorMessage ?? ''}`}{' '}
-                · {formatDuration(detail.timeMs)} · {formatBytes(detail.sizeBytes)} · 第{' '}
-                {detail.round + 1} 輪 · worker {detail.worker + 1}
+                  : msg().runner.errorWithMessage(
+                      errorLabel(detail.errorCode) ?? '',
+                      detail.errorMessage ?? ''
+                    )}{' '}
+                {msg().runner.detailLine(
+                  formatDuration(detail.timeMs),
+                  formatBytes(detail.sizeBytes),
+                  detail.round + 1,
+                  detail.worker + 1
+                )}
               </p>
               <Tabs
                 defaultValue={detail.scriptReport ? 'tests' : 'response'}
@@ -541,9 +539,9 @@ function RowDetailDialog({
                 <TabsList>
                   {detail.scriptReport && <TabsTrigger value="tests">Tests</TabsTrigger>}
                   {detail.scriptReport && <TabsTrigger value="console">Console</TabsTrigger>}
-                  <TabsTrigger value="response">回應</TabsTrigger>
-                  <TabsTrigger value="request">請求 Headers</TabsTrigger>
-                  {detail.data && <TabsTrigger value="data">資料列</TabsTrigger>}
+                  <TabsTrigger value="response">{msg().runner.response}</TabsTrigger>
+                  <TabsTrigger value="request">{msg().runner.requestHeaders}</TabsTrigger>
+                  {detail.data && <TabsTrigger value="data">{msg().runner.dataRow}</TabsTrigger>}
                 </TabsList>
                 {detail.scriptReport && (
                   <>
@@ -586,7 +584,8 @@ function RowDetailDialog({
 }
 
 function HeaderTable({ headers }: { headers: [string, string][] }) {
-  if (headers.length === 0) return <p className="text-xs text-muted-foreground">（沒有）</p>
+  if (headers.length === 0)
+    return <p className="text-xs text-muted-foreground">{msg().runner.none}</p>
   return (
     <table className="w-full table-fixed text-xs select-text">
       <tbody>
@@ -607,7 +606,7 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
         <Play className="size-5" />
-        設定好之後按「開始執行」
+        {msg().runner.idle}
       </div>
     )
   }
@@ -643,12 +642,23 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
             data-testid="runner-status"
             data-status={p.status}
           >
-            {STATUS_LABEL[p.status]}
+            {msg().runner.status[p.status]}
           </span>
           <span className="tabular-nums" data-testid="runner-counts">
             {p.durationMs !== null
-              ? `${p.completedRequests.toLocaleString()} 個請求 · ${p.completedRounds} 輪 · ${formatDuration(p.elapsedMs)} / ${formatDuration(p.durationMs)}`
-              : `${p.completedRequests.toLocaleString()} / ${p.totalRequests.toLocaleString()} 個請求 · ${p.completedRounds} / ${p.totalRounds} 輪 · ${formatDuration(p.elapsedMs)}`}
+              ? msg().runner.countsDuration(
+                  p.completedRequests.toLocaleString(localeOf()),
+                  p.completedRounds,
+                  formatDuration(p.elapsedMs),
+                  formatDuration(p.durationMs)
+                )
+              : msg().runner.counts(
+                  p.completedRequests.toLocaleString(localeOf()),
+                  p.totalRequests.toLocaleString(localeOf()),
+                  p.completedRounds,
+                  p.totalRounds,
+                  formatDuration(p.elapsedMs)
+                )}
           </span>
           {p.message && p.status !== 'cancelled' && (
             <span className="text-xs text-muted-foreground">{p.message}</span>
@@ -661,27 +671,25 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
           />
         </div>
         {run.skipped.length > 0 && (
-          <span className="text-xs text-muted-foreground">
-            略過（WebSocket 或無法讀取）：{run.skipped.join('、')}
-          </span>
+          <span className="text-xs text-muted-foreground">{msg().runner.skipped(run.skipped)}</span>
         )}
       </div>
 
       <StatsTable items={p.stats.items} total={p.stats.total} />
 
       <div className="grid grid-cols-2 gap-4">
-        <Distribution title="狀態碼" counts={p.stats.statusCodes} />
+        <Distribution title={msg().runner.statusCodes} counts={p.stats.statusCodes} />
         <Distribution
-          title="錯誤類別"
+          title={msg().runner.errorKinds}
           counts={p.stats.errorCodes}
-          label={(k) => ERROR_LABEL[k as HttpErrorCode] ?? k}
+          label={(k) => errorLabel(k) ?? k}
         />
       </div>
 
       {timeline.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-2">
           <LineChart
-            title="耗時（每秒）"
+            title={msg().runner.latencyChart}
             unit="ms"
             seconds={seconds}
             data-testid="runner-latency-chart"
@@ -691,23 +699,29 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
             ]}
           />
           <LineChart
-            title="每秒完成的請求數"
-            unit="個"
+            title={msg().runner.rpsChart}
+            unit={msg().runner.rpsUnit}
             seconds={seconds}
             data-testid="runner-rps-chart"
             series={[
-              { name: '請求數', color: 'var(--chart-1)', values: timeline.map((t) => t.requests) }
+              {
+                name: msg().runner.requestsSeries,
+                color: 'var(--chart-1)',
+                values: timeline.map((t) => t.requests)
+              }
             ]}
           />
         </div>
       )}
       {timeline.length > 0 && (
         <details className="text-xs">
-          <summary className="cursor-default text-muted-foreground">圖表資料表</summary>
+          <summary className="cursor-default text-muted-foreground">
+            {msg().runner.chartData}
+          </summary>
           <table className="mt-1 text-right tabular-nums">
             <thead>
               <tr className="text-muted-foreground">
-                {['秒', '請求數', 'p50（ms）', 'p95（ms）'].map((h) => (
+                {msg().runner.chartColumns.map((h) => (
                   <th key={h} className="px-2 font-medium">
                     {h}
                   </th>
@@ -730,11 +744,15 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium">結果</span>
-          <div className="flex gap-3 text-xs" role="radiogroup" aria-label="篩選結果">
+          <span className="text-sm font-medium">{msg().runner.results}</span>
+          <div
+            className="flex gap-3 text-xs"
+            role="radiogroup"
+            aria-label={msg().runner.filterResults}
+          >
             {[
-              [false, '全部'],
-              [true, '只看失敗']
+              [false, msg().runner.all],
+              [true, msg().runner.failedOnly]
             ].map(([value, label]) => (
               <label key={String(value)} className="flex items-center gap-1.5">
                 <input
@@ -751,13 +769,13 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
           </div>
           <div className="flex-1" />
           <span className="text-xs text-muted-foreground tabular-nums">
-            第 {current + 1} / {pages} 頁（{page.total.toLocaleString()} 筆）
+            {msg().runner.page(current + 1, pages, page.total.toLocaleString(localeOf()))}
           </span>
           <Button
             variant="ghost"
             size="icon"
             className="size-7"
-            aria-label="上一頁"
+            aria-label={msg().runner.previous}
             disabled={current === 0}
             onClick={() => void store.loadPage(uid, { offset: (current - 1) * RUNNER_PAGE_SIZE })}
           >
@@ -767,7 +785,7 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
             variant="ghost"
             size="icon"
             className="size-7"
-            aria-label="下一頁"
+            aria-label={msg().runner.next}
             disabled={current >= pages - 1}
             onClick={() => void store.loadPage(uid, { offset: (current + 1) * RUNNER_PAGE_SIZE })}
           >
@@ -778,7 +796,7 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
           <table className="w-full text-xs whitespace-nowrap" data-testid="runner-rows">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
-                {ROW_COLUMNS.map(([h, hint]) => (
+                {rowColumns().map(([h, hint]) => (
                   <th key={h} className="px-2 py-1.5 font-medium" title={hint ?? undefined}>
                     {hint ? (
                       <span className="inline-flex items-center gap-1">
@@ -811,7 +829,7 @@ function Results({ uid, session }: { uid: string; session: RunnerSession }) {
                     {r.name}
                   </td>
                   <td className={cn('px-2 py-1', r.failed && 'text-red-700 dark:text-red-400')}>
-                    {r.status ?? ERROR_LABEL[r.errorCode ?? 'UNKNOWN'] ?? r.errorCode}
+                    {r.status ?? errorLabel(r.errorCode) ?? r.errorCode}
                   </td>
                   <td className="px-2 py-1">{formatDuration(r.timeMs)}</td>
                   <td className="px-2 py-1">{formatBytes(r.sizeBytes)}</td>
@@ -843,7 +861,7 @@ export function RunnerView({ tab }: { tab: RunnerTab }) {
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="runner-view">
       <div className="flex items-center gap-2 border-b px-3 py-2">
-        <h2 className="min-w-0 truncate text-sm font-medium">Collection Runner：{target.name}</h2>
+        <h2 className="min-w-0 truncate text-sm font-medium">{msg().runner.title(target.name)}</h2>
         <div className="flex-1" />
         {(session.error ?? exportError) && (
           <span className="truncate text-xs text-destructive" data-testid="runner-error">
@@ -855,7 +873,7 @@ export function RunnerView({ tab }: { tab: RunnerTab }) {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" data-testid="runner-export">
                 <Download />
-                匯出結果
+                {msg().runner.export}
                 <ChevronDown />
               </Button>
             </DropdownMenuTrigger>
@@ -870,7 +888,7 @@ export function RunnerView({ tab }: { tab: RunnerTab }) {
                     )
                   }
                 >
-                  {format === 'html' ? 'HTML 報告…' : 'JSON（完整資料）…'}
+                  {format === 'html' ? msg().runner.exportHtml : msg().runner.exportJson}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -879,12 +897,12 @@ export function RunnerView({ tab }: { tab: RunnerTab }) {
         {running ? (
           <Button variant="outline" size="sm" onClick={() => void store.cancel(tab.uid)}>
             <Square />
-            停止
+            {msg().runner.stop}
           </Button>
         ) : (
           <Button size="sm" disabled={session.starting} onClick={() => void store.start(tab.uid)}>
             <Play />
-            開始執行
+            {msg().runner.start}
           </Button>
         )}
       </div>

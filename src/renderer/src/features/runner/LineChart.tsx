@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { msg } from '@shared/i18n'
 
 export interface ChartSeries {
   name: string
@@ -227,7 +228,9 @@ export function LineChart({
               background: 'var(--background)'
             }}
           >
-            <div className="text-muted-foreground">第 {seconds[hover]} 秒</div>
+            <div className="text-muted-foreground">
+              {msg().runner.second(seconds[hover] as number)}
+            </div>
             {series.map((s) => (
               <div key={s.name} className="flex items-center gap-1.5">
                 <span className="size-2 rounded-full" style={{ background: s.color }} />

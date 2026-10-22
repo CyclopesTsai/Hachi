@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { HttpHistoryEntry } from '@shared/schemas/history'
 import { httpRequestSchema } from '@shared/schemas/http-request'
 import { groupByDay } from './history-model'
+import { localeOf } from '@shared/i18n'
 
 const entry = (id: string, sentAt: Date): HttpHistoryEntry => ({
   id,
@@ -29,7 +30,7 @@ describe('groupByDay', () => {
       ['今天', ['a', 'b']],
       ['昨天', ['c']],
       [
-        new Date(2026, 8, 20).toLocaleDateString(undefined, {
+        new Date(2026, 8, 20).toLocaleDateString(localeOf(), {
           year: 'numeric',
           month: 'short',
           day: 'numeric'

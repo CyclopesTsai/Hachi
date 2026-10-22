@@ -30,6 +30,7 @@ import { errorMessage } from '@renderer/lib/ipc'
 import { cn } from '@renderer/lib/utils'
 import { useMockStore } from '@renderer/stores/mock-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
+import { localeOf, msg } from '@shared/i18n'
 
 const clampInt = (text: string, min: number, max: number) => {
   const n = Math.round(Number(text))
@@ -61,17 +62,29 @@ function RowButtons({
   const b = 'size-6 text-muted-foreground hover:text-foreground'
   return (
     <span className="flex shrink-0 items-center">
-      <Button variant="ghost" size="icon" className={b} aria-label="上移" onClick={onUp}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={b}
+        aria-label={msg().mock.moveUp}
+        onClick={onUp}
+      >
         <ArrowUp />
       </Button>
-      <Button variant="ghost" size="icon" className={b} aria-label="下移" onClick={onDown}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={b}
+        aria-label={msg().mock.moveDown}
+        onClick={onDown}
+      >
         <ArrowDown />
       </Button>
       <Button
         variant="ghost"
         size="icon"
         className={b}
-        aria-label={`刪除${label}`}
+        aria-label={msg().mock.deleteItem(label)}
         onClick={onDelete}
       >
         <Trash2 />
@@ -103,18 +116,18 @@ function RouteDetail({ route, set }: { route: MockRoute; set: (r: MockRoute) => 
     >
       <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
         <NativeSelect
-          aria-label="方法"
+          aria-label={msg().mock.method}
           value={route.method}
           onChange={(e) => set({ ...route, method: e.target.value as MockMethod })}
         >
           {MOCK_METHODS.map((m) => (
             <option key={m} value={m}>
-              {m === 'ANY' ? '任何方法' : m}
+              {m === 'ANY' ? msg().mock.anyMethod : m}
             </option>
           ))}
         </NativeSelect>
         <Input
-          aria-label="路徑"
+          aria-label={msg().mock.path}
           className="h-8 font-mono text-xs"
           placeholder="/users/:id"
           value={route.path}
@@ -122,9 +135,9 @@ function RouteDetail({ route, set }: { route: MockRoute; set: (r: MockRoute) => 
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="狀態碼">
+        <Field label={msg().mock.status}>
           <Input
-            aria-label="狀態碼"
+            aria-label={msg().mock.status}
             type="number"
             min={100}
             max={599}
@@ -136,9 +149,9 @@ function RouteDetail({ route, set }: { route: MockRoute; set: (r: MockRoute) => 
             }}
           />
         </Field>
-        <Field label="延遲（ms）">
+        <Field label={msg().mock.delay}>
           <Input
-            aria-label="延遲"
+            aria-label={msg().mock.delayLabel}
             type="number"
             min={0}
             max={MOCK_DELAY_MAX_MS}
@@ -151,9 +164,9 @@ function RouteDetail({ route, set }: { route: MockRoute; set: (r: MockRoute) => 
           />
         </Field>
       </div>
-      <Field label="說明">
+      <Field label={msg().mock.description}>
         <Input
-          aria-label="說明"
+          aria-label={msg().mock.description}
           className="h-8 text-xs"
           value={route.description}
           onChange={(e) => set({ ...route, description: e.target.value })}
@@ -164,11 +177,9 @@ function RouteDetail({ route, set }: { route: MockRoute; set: (r: MockRoute) => 
         <KeyValueTable rows={route.headers} onChange={(headers) => set({ ...route, headers })} />
       </div>
       <div className="flex min-h-40 flex-1 flex-col gap-1">
-        <Label className="text-xs text-muted-foreground">
-          Body（固定內容；沒有 Content-Type 時依內容自動判斷 JSON / 文字）
-        </Label>
+        <Label className="text-xs text-muted-foreground">{msg().mock.bodyLabel}</Label>
         <CodeEditor
-          aria-label="回應內容"
+          aria-label={msg().mock.responseBody}
           data-testid="mock-route-body"
           className="min-h-32 flex-1 rounded-md border"
           language={looksJson(route.body) ? 'json' : 'text'}
@@ -212,7 +223,7 @@ function RoutesTab({
               <input
                 type="checkbox"
                 className="size-3.5 accent-primary"
-                aria-label="啟用"
+                aria-label={msg().mock.enabled}
                 checked={r.enabled}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) =>
@@ -234,7 +245,7 @@ function RoutesTab({
               </span>
               <span className="shrink-0 tabular-nums text-muted-foreground">{r.status}</span>
               <RowButtons
-                label="路由"
+                label={msg().mock.route}
                 onUp={() => onChange(move(routes, i, -1))}
                 onDown={() => onChange(move(routes, i, 1))}
                 onDelete={() => {
@@ -248,11 +259,9 @@ function RoutesTab({
         <div className="border-t p-2">
           <Button size="sm" variant="outline" onClick={add} data-testid="mock-add-route">
             <Plus />
-            新增路由
+            {msg().mock.addRoute}
           </Button>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            依順序比對第一個符合的路由；路徑可用 :id（一段）與結尾的 *（其餘全部）。
-          </p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">{msg().mock.routesHint}</p>
         </div>
       </div>
       {route ? (
@@ -262,19 +271,13 @@ function RoutesTab({
           set={(next) => onChange(routes.map((x) => (x.id === next.id ? next : x)))}
         />
       ) : (
-        <p className="p-4 text-sm text-muted-foreground">選擇或新增一個路由。</p>
+        <p className="p-4 text-sm text-muted-foreground">{msg().mock.pickRoute}</p>
       )}
     </div>
   )
 }
 
 // ---- WebSocket endpoints ----------------------------------------------------------
-
-const MATCH_LABELS: Record<WsMatchMode, string> = {
-  contains: '包含',
-  equals: '完全相同',
-  regex: '正規表示式'
-}
 
 function MessageArea({
   label,
@@ -310,9 +313,9 @@ function EndpointDetail({
       className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3"
       data-testid="mock-ws-detail"
     >
-      <Field label="路徑">
+      <Field label={msg().mock.path}>
         <Input
-          aria-label="WebSocket 路徑"
+          aria-label={msg().mock.wsPath}
           className="h-8 font-mono text-xs"
           placeholder="/ws"
           value={endpoint.path}
@@ -322,7 +325,7 @@ function EndpointDetail({
 
       <section className={section}>
         <div className={head}>
-          連線時送出
+          {msg().mock.onConnect}
           <div className="flex-1" />
           <Button
             size="sm"
@@ -336,13 +339,13 @@ function EndpointDetail({
             }
           >
             <Plus />
-            新增訊息
+            {msg().mock.addMessage}
           </Button>
         </div>
         {endpoint.onConnect.map((m) => (
           <div key={m.id} className="flex items-start gap-2">
             <MessageArea
-              label="連線時送出的訊息"
+              label={msg().mock.onConnectMessage}
               value={m.message}
               onChange={(message) =>
                 set({
@@ -355,7 +358,7 @@ function EndpointDetail({
               variant="ghost"
               size="icon"
               className="size-7 shrink-0"
-              aria-label="刪除訊息"
+              aria-label={msg().mock.deleteMessage}
               onClick={() =>
                 set({ ...endpoint, onConnect: endpoint.onConnect.filter((x) => x.id !== m.id) })
               }
@@ -368,7 +371,7 @@ function EndpointDetail({
 
       <section className={section}>
         <div className={head}>
-          依內容回覆（第一個符合的規則回覆）
+          {msg().mock.rulesTitle}
           <div className="flex-1" />
           <Button
             size="sm"
@@ -382,7 +385,7 @@ function EndpointDetail({
             }
           >
             <Plus />
-            新增規則
+            {msg().mock.addRule}
           </Button>
         </div>
         {endpoint.rules.map((r, i) => {
@@ -400,31 +403,31 @@ function EndpointDetail({
                 <input
                   type="checkbox"
                   className="size-3.5 accent-primary"
-                  aria-label="啟用規則"
+                  aria-label={msg().mock.enableRule}
                   checked={r.enabled}
                   onChange={(e) => update({ enabled: e.target.checked })}
                 />
-                <span className="text-xs text-muted-foreground">收到的訊息</span>
+                <span className="text-xs text-muted-foreground">{msg().mock.received}</span>
                 <NativeSelect
-                  aria-label="比對方式"
+                  aria-label={msg().mock.matchMode}
                   className="h-7 w-32 text-xs"
                   value={r.match}
                   onChange={(e) => update({ match: e.target.value as WsMatchMode })}
                 >
                   {WS_MATCH_MODES.map((m) => (
                     <option key={m} value={m}>
-                      {MATCH_LABELS[m]}
+                      {msg().mock.match[m]}
                     </option>
                   ))}
                 </NativeSelect>
                 <Input
-                  aria-label="比對內容"
+                  aria-label={msg().mock.pattern}
                   className="h-7 flex-1 font-mono text-xs"
                   value={r.pattern}
                   onChange={(e) => update({ pattern: e.target.value })}
                 />
                 <RowButtons
-                  label="規則"
+                  label={msg().mock.rule}
                   onUp={() => set({ ...endpoint, rules: move(endpoint.rules, i, -1) })}
                   onDown={() => set({ ...endpoint, rules: move(endpoint.rules, i, 1) })}
                   onDelete={() =>
@@ -433,7 +436,7 @@ function EndpointDetail({
                 />
               </div>
               <MessageArea
-                label="回覆內容"
+                label={msg().mock.reply}
                 value={r.reply}
                 onChange={(reply) => update({ reply })}
               />
@@ -444,7 +447,7 @@ function EndpointDetail({
 
       <section className={section}>
         <div className={head}>
-          定時推送
+          {msg().mock.intervals}
           <div className="flex-1" />
           <Button
             size="sm"
@@ -458,7 +461,7 @@ function EndpointDetail({
             }
           >
             <Plus />
-            新增推送
+            {msg().mock.addInterval}
           </Button>
         </div>
         {endpoint.intervals.map((t) => {
@@ -476,13 +479,13 @@ function EndpointDetail({
                 <input
                   type="checkbox"
                   className="size-3.5 accent-primary"
-                  aria-label="啟用推送"
+                  aria-label={msg().mock.enableInterval}
                   checked={t.enabled}
                   onChange={(e) => update({ enabled: e.target.checked })}
                 />
-                每
+                {msg().mock.every}
                 <Input
-                  aria-label="推送間隔"
+                  aria-label={msg().mock.intervalLabel}
                   type="number"
                   min={MOCK_INTERVAL_MIN_MS}
                   max={MOCK_INTERVAL_MAX_MS}
@@ -494,13 +497,13 @@ function EndpointDetail({
                     })
                   }
                 />
-                毫秒送出
+                {msg().mock.millisecondsSend}
                 <div className="flex-1" />
                 <Button
                   variant="ghost"
                   size="icon"
                   className="size-6"
-                  aria-label="刪除推送"
+                  aria-label={msg().mock.deleteInterval}
                   onClick={() =>
                     set({ ...endpoint, intervals: endpoint.intervals.filter((x) => x.id !== t.id) })
                   }
@@ -509,7 +512,7 @@ function EndpointDetail({
                 </Button>
               </div>
               <MessageArea
-                label="推送內容"
+                label={msg().mock.pushContent}
                 value={t.message}
                 onChange={(message) => update({ message })}
               />
@@ -547,7 +550,7 @@ function WebSocketTab({
               <input
                 type="checkbox"
                 className="size-3.5 accent-primary"
-                aria-label="啟用"
+                aria-label={msg().mock.enabled}
                 checked={e.enabled}
                 onClick={(ev) => ev.stopPropagation()}
                 onChange={(ev) =>
@@ -558,7 +561,7 @@ function WebSocketTab({
               />
               <span className="min-w-0 flex-1 truncate font-mono">{e.path}</span>
               <RowButtons
-                label="端點"
+                label={msg().mock.endpoint}
                 onUp={() => onChange(move(endpoints, i, -1))}
                 onDown={() => onChange(move(endpoints, i, 1))}
                 onDelete={() => onChange(endpoints.filter((x) => x.id !== e.id))}
@@ -578,7 +581,7 @@ function WebSocketTab({
             }}
           >
             <Plus />
-            新增端點
+            {msg().mock.addEndpoint}
           </Button>
         </div>
       </div>
@@ -589,7 +592,7 @@ function WebSocketTab({
           set={(next) => onChange(endpoints.map((x) => (x.id === next.id ? next : x)))}
         />
       ) : (
-        <p className="p-4 text-sm text-muted-foreground">選擇或新增一個 WebSocket 端點。</p>
+        <p className="p-4 text-sm text-muted-foreground">{msg().mock.pickEndpoint}</p>
       )}
     </div>
   )
@@ -598,18 +601,11 @@ function WebSocketTab({
 // ---- Log ----------------------------------------------------------------------------
 
 const EMPTY_LOG: MockLogEntry[] = []
-const KIND_LABEL: Record<MockLogEntry['kind'], string> = {
-  http: '',
-  'ws-open': '連線',
-  'ws-in': '收到',
-  'ws-out': '送出',
-  'ws-close': '關閉'
-}
 
 function LogTab({ mockId, settings }: { mockId: string; settings: MockSettings }) {
   const log = useMockStore((s) => s.logs[mockId] ?? EMPTY_LOG)
   const routeName = (id: string | null) => {
-    if (id === null) return '（沒有符合）'
+    if (id === null) return msg().mock.noMatch
     const r = settings.routes.find((x) => x.id === id)
     if (r) return `${r.method === 'ANY' ? '*' : r.method} ${r.path}`
     const e = settings.websockets.find((x) => x.id === id)
@@ -618,7 +614,7 @@ function LogTab({ mockId, settings }: { mockId: string; settings: MockSettings }
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground">
-        最近 {log.length} 筆（最多 500 筆，只在這次執行中保留）
+        {msg().mock.logCount(log.length)}
         <div className="flex-1" />
         <Button
           size="sm"
@@ -627,7 +623,7 @@ function LogTab({ mockId, settings }: { mockId: string; settings: MockSettings }
           disabled={log.length === 0}
           onClick={() => useMockStore.getState().clearLog(mockId)}
         >
-          清除
+          {msg().mock.clear}
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -636,10 +632,12 @@ function LogTab({ mockId, settings }: { mockId: string; settings: MockSettings }
             {[...log].reverse().map((l, i) => (
               <tr key={`${l.time}-${i}`} className="border-b align-top" data-testid="mock-log-row">
                 <td className="px-3 py-1 whitespace-nowrap text-muted-foreground tabular-nums">
-                  {new Date(l.time).toLocaleTimeString()}
+                  {new Date(l.time).toLocaleTimeString(localeOf())}
                 </td>
                 <td className="px-2 py-1 font-mono font-semibold whitespace-nowrap">
-                  {l.kind === 'http' ? l.method : `WS ${KIND_LABEL[l.kind]}`}
+                  {l.kind === 'http'
+                    ? l.method
+                    : `WS ${msg().mock.logKinds[l.kind as Exclude<typeof l.kind, 'http'>]}`}
                 </td>
                 <td className="px-2 py-1 font-mono break-all">{l.path}</td>
                 <td
@@ -659,7 +657,7 @@ function LogTab({ mockId, settings }: { mockId: string; settings: MockSettings }
           </tbody>
         </table>
         {log.length === 0 && (
-          <p className="p-4 text-sm text-muted-foreground">啟動後，收到的請求會列在這裡。</p>
+          <p className="p-4 text-sm text-muted-foreground">{msg().mock.logEmpty}</p>
         )}
       </div>
     </div>
@@ -702,7 +700,9 @@ export function MockEditor({ tab, title }: { tab: MockTab; title: string }) {
     <div className="flex h-full min-h-0 flex-col" data-testid="mock-editor">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <h2 className="min-w-0 truncate text-sm font-medium">{title}</h2>
-        {dirty && <span className="size-2 rounded-full bg-primary" aria-label="有未儲存的修改" />}
+        {dirty && (
+          <span className="size-2 rounded-full bg-primary" aria-label={msg().mock.unsaved} />
+        )}
         <span
           className={cn(
             'rounded px-1.5 py-0.5 text-xs font-medium',
@@ -713,7 +713,7 @@ export function MockEditor({ tab, title }: { tab: MockTab; title: string }) {
           data-testid="mock-status"
           data-running={running}
         >
-          {running ? `執行中：${status?.url}` : '已停止'}
+          {running ? msg().mock.runningAt(status?.url ?? '') : msg().mock.stopped}
         </span>
         <div className="flex-1" />
         {(error ?? status?.error ?? tab.saveError) && (
@@ -728,24 +728,30 @@ export function MockEditor({ tab, title }: { tab: MockTab; title: string }) {
           onClick={() => void useTabsStore.getState().save(tab.key)}
         >
           <Save />
-          儲存
+          {msg().common.save}
         </Button>
         {running && (
           <Button size="sm" variant="outline" onClick={() => void stop()}>
             <Square />
-            停止
+            {msg().mock.stop}
           </Button>
         )}
         <Button size="sm" onClick={() => void start()} data-testid="mock-start">
           {running ? <RotateCw /> : <Play />}
-          {running ? (dirty ? '儲存並重新啟動' : '重新啟動') : dirty ? '儲存並啟動' : '啟動'}
+          {running
+            ? dirty
+              ? msg().mock.saveRestart
+              : msg().mock.restart
+            : dirty
+              ? msg().mock.saveStart
+              : msg().mock.start}
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b px-3 py-2 text-xs">
         <label className="flex items-center gap-2">
-          連接埠
+          {msg().mock.port}
           <Input
-            aria-label="連接埠"
+            aria-label={msg().mock.port}
             type="number"
             min={1}
             max={65535}
@@ -762,25 +768,23 @@ export function MockEditor({ tab, title }: { tab: MockTab; title: string }) {
           data-testid="mock-lan"
           onChange={(e) => update({ lan: e.target.checked })}
         >
-          區網可連
+          {msg().mock.lan}
         </CheckboxLabel>
         <CheckboxLabel checked={draft.cors} onChange={(e) => update({ cors: e.target.checked })}>
-          CORS（允許任何來源、回應預檢請求）
+          {msg().mock.cors}
         </CheckboxLabel>
         {draft.lan && (
-          <span className="text-amber-700 dark:text-amber-400">
-            同一個網路中的其他裝置都能連到這個 Mock Server（作業系統可能詢問是否允許連入）
-          </span>
+          <span className="text-amber-700 dark:text-amber-400">{msg().mock.lanWarning}</span>
         )}
         {running && dirty && (
-          <span className="text-muted-foreground">修改要重新啟動後才會生效</span>
+          <span className="text-muted-foreground">{msg().mock.restartNeeded}</span>
         )}
       </div>
       <Tabs defaultValue="routes" className="flex min-h-0 flex-1 flex-col">
         <TabsList>
-          <TabsTrigger value="routes">HTTP 路由（{draft.routes.length}）</TabsTrigger>
-          <TabsTrigger value="ws">WebSocket（{draft.websockets.length}）</TabsTrigger>
-          <TabsTrigger value="log">紀錄（{logCount}）</TabsTrigger>
+          <TabsTrigger value="routes">{msg().mock.routesTab(draft.routes.length)}</TabsTrigger>
+          <TabsTrigger value="ws">{msg().mock.wsTab(draft.websockets.length)}</TabsTrigger>
+          <TabsTrigger value="log">{msg().mock.logTab(logCount)}</TabsTrigger>
         </TabsList>
         <TabsContent value="routes" className="min-h-0 flex-1">
           <RoutesTab routes={draft.routes} onChange={(routes) => update({ routes })} />

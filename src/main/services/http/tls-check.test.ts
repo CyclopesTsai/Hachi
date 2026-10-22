@@ -51,6 +51,8 @@ afterAll(() => {
 afterEach(() => setTrustStoreForTests(null))
 
 const macVerdict = (ok: boolean, reasons: string[] = []): SystemTrustVerdict => ({
+  platform: 'darwin',
+  rootUntrusted: reasons.some((r) => r.startsWith('根憑證不受信任')),
   label: '這台 Mac（系統驗證）',
   clients: 'Safari',
   ok,

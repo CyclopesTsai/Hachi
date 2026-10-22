@@ -11,6 +11,7 @@ import { HighlightStyle } from '@codemirror/language'
 import { EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { tags as t } from '@lezer/highlight'
+import { msg } from '@shared/i18n'
 
 /**
  * Syntax colors as CSS variables (--code-*, styles.css), so light and dark mode each get
@@ -211,19 +212,8 @@ export const editorTheme = EditorView.theme({
   }
 })
 
-/** Texts of CodeMirror's own panels (search, go to line) in Chinese. */
-export const editorPhrases = EditorState.phrases.of({
-  Find: '搜尋',
-  Replace: '取代',
-  next: '下一個',
-  previous: '上一個',
-  replace: '取代',
-  'replace all': '全部取代',
-  close: '關閉',
-  'current match': '目前的符合項目',
-  'on line': '位於第',
-  'replaced match on line $': '已取代第 $ 行的符合項目',
-  'replaced $ matches': '已取代 $ 個符合項目',
-  'Go to line': '前往行號',
-  go: '前往'
-})
+/** Texts of CodeMirror's own panels (search, go to line) in the interface language. */
+export function editorPhrases(): Extension {
+  const phrases = msg().editor.phrases
+  return phrases ? EditorState.phrases.of(phrases) : []
+}

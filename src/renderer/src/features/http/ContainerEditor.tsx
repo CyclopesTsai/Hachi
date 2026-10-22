@@ -12,6 +12,7 @@ import { NativeSelect } from '@renderer/components/ui/native-select'
 import { AuthEditor } from './AuthEditor'
 import { ScriptsTab } from './ScriptsEditor'
 import { HeadersEditor } from './HeadersEditor'
+import { msg } from '@shared/i18n'
 
 /** Shared headers / auth (and collection variables) inherited by everything inside. */
 export function ContainerEditor({ tab, title }: { tab: ContainerTab; title: string }) {
@@ -31,9 +32,11 @@ export function ContainerEditor({ tab, title }: { tab: ContainerTab; title: stri
           <Layers className="size-4 text-primary" />
           <h2 className="min-w-0 truncate text-sm font-medium">{title}</h2>
           <span className="text-xs text-muted-foreground">
-            {isCollection ? 'Collection 設定' : '資料夾設定'}
+            {isCollection ? msg().http.container.collection : msg().http.container.folder}
           </span>
-          {dirty && <span className="size-2 rounded-full bg-primary" aria-label="有未儲存的修改" />}
+          {dirty && (
+            <span className="size-2 rounded-full bg-primary" aria-label={msg().http.unsaved} />
+          )}
           <div className="flex-1" />
           {tab.saveError && (
             <span className="truncate text-xs text-destructive">{tab.saveError}</span>
@@ -45,13 +48,11 @@ export function ContainerEditor({ tab, title }: { tab: ContainerTab; title: stri
             onClick={() => void store.save(tab.key)}
           >
             <Save />
-            儲存
+            {msg().common.save}
           </Button>
         </div>
         <p className="px-4 pt-3 text-xs text-muted-foreground">
-          {isCollection
-            ? '這裡的 Headers、Auth、變數與腳本會套用到這個 Collection 內的所有請求（請求自己的設定優先；同名變數以環境變數優先）。'
-            : '這裡的 Headers、Auth 與腳本會套用到這個資料夾內的所有請求（請求自己的設定優先）。'}
+          {isCollection ? msg().http.container.collectionHint : msg().http.container.folderHint}
         </p>
         <Tabs
           defaultValue={isCollection ? 'variables' : 'headers'}
@@ -103,25 +104,23 @@ export function ContainerEditor({ tab, title }: { tab: ContainerTab; title: stri
               inheritedFrom={tab.inherited.scripts}
             >
               <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="script-flow">
-                <span className="font-medium">腳本順序</span>
+                <span className="font-medium">{msg().http.container.scriptFlow}</span>
                 {isCollection ? (
                   <NativeSelect
-                    aria-label="腳本順序"
+                    aria-label={msg().http.container.scriptFlow}
                     value={draft.scriptFlow}
                     onChange={(e) => update({ scriptFlow: e.target.value as ScriptFlow })}
                   >
-                    <option value="sequential">依序（Postman）</option>
-                    <option value="sandwich">三明治（Bruno）</option>
+                    <option value="sequential">{msg().http.container.sequential}</option>
+                    <option value="sandwich">{msg().http.container.sandwich}</option>
                   </NativeSelect>
                 ) : (
-                  <span>
-                    {draft.scriptFlow === 'sandwich' ? '三明治' : '依序'}（Collection 設定）
-                  </span>
+                  <span>{msg().http.container.flowInherited(draft.scriptFlow === 'sandwich')}</span>
                 )}
                 <span className="text-muted-foreground">
                   {draft.scriptFlow === 'sandwich'
-                    ? 'Pre-request：Collection → 資料夾 → 請求；Post-response：請求 → 資料夾 → Collection'
-                    : 'Pre-request 與 Post-response 都是 Collection → 資料夾 → 請求'}
+                    ? msg().http.container.sandwichHint
+                    : msg().http.container.sequentialHint}
                 </span>
               </div>
             </ScriptsTab>

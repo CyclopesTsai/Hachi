@@ -21,6 +21,7 @@ import { createSenderValidator } from './ipc/handler'
 import { registerIpcHandlers } from './ipc/register'
 import { installMenu, type MenuActions } from './menu'
 import { platform } from './platform'
+import { effectiveLanguage, setLanguage, systemLanguage } from '@shared/i18n'
 import { applySecurityPolicies } from './security'
 import { CollectionService, type TrashFn } from './services/collection-service'
 import { APP_CONFIG_FILE, ConfigService } from './services/config-service'
@@ -78,6 +79,13 @@ async function bootstrap(): Promise<void> {
   const config = new ConfigService(path.join(app.getPath('userData'), APP_CONFIG_FILE))
   await config.load()
   nativeTheme.themeSource = config.get().theme
+  // Interface language (issue #6). HACHI_SYSTEM_LANGUAGE stands in for the system's in tests.
+  const systemLang = systemLanguage(
+    process.env.HACHI_SYSTEM_LANGUAGE
+      ? [process.env.HACHI_SYSTEM_LANGUAGE]
+      : app.getPreferredSystemLanguages()
+  )
+  setLanguage(effectiveLanguage(config.get().ui.language, systemLang))
 
   const trash: TrashFn = (absPath) => shell.trashItem(absPath)
   const workspaces = new WorkspaceService(config, undefined, trash)
@@ -449,12 +457,14 @@ async function bootstrap(): Promise<void> {
   }
   installMenu(config.get().recentWorkspaces, menuActions, menuOptions)
   config.onChange((next) => {
+    setLanguage(effectiveLanguage(next.ui.language, systemLang))
     installMenu(next.recentWorkspaces, menuActions, menuOptions)
     send(EVENTS.configChanged, next)
   })
   workspaces.onChange((current) => send(EVENTS.workspaceChanged, current))
 
   registerIpcHandlers({
+    systemLanguage: systemLang,
     config,
     workspaces,
     collections,

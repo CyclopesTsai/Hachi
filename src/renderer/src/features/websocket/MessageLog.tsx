@@ -27,6 +27,7 @@ import {
   type BinaryView,
   type LogFilter
 } from './log-model'
+import { msg } from '@shared/i18n'
 
 const EMPTY: WsLogItem[] = []
 
@@ -85,7 +86,7 @@ function MessageRow({
               ? 'text-emerald-600 dark:text-emerald-400'
               : 'text-sky-600 dark:text-sky-400'
           )}
-          aria-label={entry.direction === 'sent' ? '送出' : '收到'}
+          aria-label={entry.direction === 'sent' ? msg().ws.log.sent : msg().ws.log.received}
         />
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
           {formatTime(entry.time)}
@@ -97,11 +98,11 @@ function MessageRow({
         )}
         {entry.heartbeat && (
           <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">
-            心跳
+            {msg().ws.log.heartbeat}
           </span>
         )}
         <span className="min-w-0 flex-1 truncate font-mono" data-testid="ws-log-preview">
-          {big && !expanded ? `（${formatBytes(entry.size)}，已摺疊，點一下展開）` : text}
+          {big && !expanded ? msg().ws.log.folded(formatBytes(entry.size)) : text}
         </span>
         <span className="shrink-0 text-[10px] text-muted-foreground">
           {formatBytes(entry.size)}
@@ -170,40 +171,40 @@ export function MessageLog({ uid, title }: { uid: string; title: string }) {
     <div className="flex h-full min-h-0 flex-col" data-testid="ws-message-log">
       <div className="flex flex-wrap items-center gap-2 border-b px-2 py-1.5">
         <Input
-          aria-label="搜尋訊息"
+          aria-label={msg().ws.log.search}
           data-testid="ws-search"
           className="h-7 w-40 text-xs"
-          placeholder="搜尋…"
+          placeholder={msg().ws.log.searchPlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <NativeSelect
-          aria-label="篩選"
+          aria-label={msg().ws.log.filter}
           className="h-7 text-xs"
           value={filter}
           onChange={(e) => setFilter(e.target.value as LogFilter)}
         >
-          <option value="all">全部</option>
-          <option value="sent">送出</option>
-          <option value="received">收到</option>
-          <option value="events">系統事件</option>
+          <option value="all">{msg().ws.log.all}</option>
+          <option value="sent">{msg().ws.log.sent}</option>
+          <option value="received">{msg().ws.log.received}</option>
+          <option value="events">{msg().ws.log.events}</option>
         </NativeSelect>
         <NativeSelect
-          aria-label="Binary 顯示方式"
+          aria-label={msg().ws.log.binaryView}
           className="h-7 text-xs"
           value={binaryView}
           onChange={(e) => setBinaryView(e.target.value as BinaryView)}
         >
-          <option value="hex">Binary：Hex</option>
-          <option value="base64">Binary：Base64</option>
-          <option value="text">Binary：UTF-8 文字</option>
+          <option value="hex">{msg().ws.log.binaryHex}</option>
+          <option value="base64">{msg().ws.log.binaryBase64}</option>
+          <option value="text">{msg().ws.log.binaryText}</option>
         </NativeSelect>
         <CheckboxLabel checked={pretty} onChange={(e) => setPretty(e.target.checked)}>
-          JSON 美化
+          {msg().ws.log.pretty}
         </CheckboxLabel>
         <div className="flex-1" />
         <span className="text-[11px] text-muted-foreground" data-testid="ws-log-count">
-          {visible.length} / {entries.length} 則
+          {msg().ws.log.count(visible.length, entries.length)}
         </span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -214,12 +215,16 @@ export function MessageLog({ uid, title }: { uid: string; title: string }) {
               disabled={entries.length === 0}
             >
               <Download />
-              匯出
+              {msg().ws.log.export}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => void save('json')}>JSON（完整資料）</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void save('text')}>純文字</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void save('json')}>
+              {msg().ws.log.exportJson}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void save('text')}>
+              {msg().ws.log.exportText}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <Button
@@ -230,12 +235,12 @@ export function MessageLog({ uid, title }: { uid: string; title: string }) {
           onClick={() => useWsStore.getState().clear(uid)}
         >
           <Trash2 />
-          清除
+          {msg().ws.log.clear}
         </Button>
       </div>
       {dropped > 0 && (
         <p className="border-b bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
-          已捨棄較舊的 {dropped} 則（每個分頁最多保留 {limit} 則，可在 App 設定調整）
+          {msg().ws.log.dropped(dropped, limit)}
         </p>
       )}
       {exportError && (
@@ -250,9 +255,7 @@ export function MessageLog({ uid, title }: { uid: string; title: string }) {
         }}
       >
         {entries.length === 0 && (
-          <li className="px-3 py-4 text-sm text-muted-foreground">
-            連線後，送出與收到的訊息會顯示在這裡（只存在記憶體，需要時請匯出）。
-          </li>
+          <li className="px-3 py-4 text-sm text-muted-foreground">{msg().ws.log.empty}</li>
         )}
         {visible.map((entry) => (
           <MessageRow

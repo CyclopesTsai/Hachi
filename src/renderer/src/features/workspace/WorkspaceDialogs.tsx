@@ -23,6 +23,7 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { errorMessage } from '@renderer/lib/ipc'
 import { useAppStore } from '@renderer/stores/app-store'
+import { msg } from '@shared/i18n'
 
 export function RenameWorkspaceDialog({
   open,
@@ -66,11 +67,11 @@ function RenameForm({ initialName, onDone }: { initialName: string; onDone: () =
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
       <DialogHeader>
-        <DialogTitle>重新命名 Workspace</DialogTitle>
-        <DialogDescription>只會變更顯示名稱，資料夾位置不變。</DialogDescription>
+        <DialogTitle>{msg().workspace.renameTitle}</DialogTitle>
+        <DialogDescription>{msg().workspace.renameDescription}</DialogDescription>
       </DialogHeader>
       <Input
-        aria-label="Workspace 名稱"
+        aria-label={msg().workspace.nameLabel}
         value={name}
         maxLength={WORKSPACE_NAME_MAX}
         autoFocus
@@ -85,11 +86,11 @@ function RenameForm({ initialName, onDone }: { initialName: string; onDone: () =
       <DialogFooter>
         <DialogClose asChild>
           <Button type="button" variant="outline">
-            取消
+            {msg().common.cancel}
           </Button>
         </DialogClose>
         <Button type="submit" disabled={busy || !name.trim()}>
-          儲存
+          {msg().common.save}
         </Button>
       </DialogFooter>
     </form>
@@ -119,10 +120,8 @@ export function DeleteWorkspaceDialog({
     >
       <AlertDialogContent data-testid="delete-workspace-dialog">
         <AlertDialogHeader>
-          <AlertDialogTitle>刪除 Workspace「{target?.name}」？</AlertDialogTitle>
-          <AlertDialogDescription>
-            整個資料夾（包含所有 Collections、環境與歷史紀錄）會移到系統垃圾桶：
-          </AlertDialogDescription>
+          <AlertDialogTitle>{msg().workspace.deleteTitle(target?.name ?? '')}</AlertDialogTitle>
+          <AlertDialogDescription>{msg().workspace.deleteDescription}</AlertDialogDescription>
         </AlertDialogHeader>
         <p className="rounded bg-muted px-2 py-1 font-mono text-xs break-all">{target?.path}</p>
         {error && (
@@ -131,7 +130,7 @@ export function DeleteWorkspaceDialog({
           </p>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogCancel>{msg().common.cancel}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={(e) => {
@@ -142,7 +141,7 @@ export function DeleteWorkspaceDialog({
                 .catch((err: unknown) => setError(errorMessage(err)))
             }}
           >
-            移到垃圾桶
+            {msg().workspace.moveToTrash}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

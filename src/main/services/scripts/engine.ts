@@ -33,6 +33,7 @@ import {
   type VariableChange
 } from '@shared/scripts'
 import { PRELUDE } from './prelude'
+import { msg } from '@shared/i18n'
 
 let modulePromise: Promise<QuickJSWASMModule> | null = null
 const loadModule = () => (modulePromise ??= newQuickJSWASMModuleFromVariant(variant))
@@ -58,15 +59,15 @@ interface DumpedError {
 function describeError(raw: unknown, fileName: string, timeoutMs: number): string {
   const e = (typeof raw === 'object' && raw !== null ? raw : { message: raw }) as DumpedError
   const message = typeof e.message === 'string' ? e.message : String(e.message ?? raw)
-  if (message === 'interrupted') return `腳本執行超過 ${timeoutMs / 1000} 秒，已中止`
+  if (message === 'interrupted') return msg().scriptMain.engine.interrupted(timeoutMs / 1000)
   if (/out of memory/i.test(message)) {
-    return `腳本使用的記憶體超過上限（${SCRIPT_MEMORY_BYTES / 1024 / 1024} MB）`
+    return msg().scriptMain.engine.memory(SCRIPT_MEMORY_BYTES / 1024 / 1024)
   }
-  if (/stack overflow/i.test(message)) return '腳本遞迴太深（堆疊溢位）'
+  if (/stack overflow/i.test(message)) return msg().scriptMain.engine.stackOverflow
   const name = typeof e.name === 'string' && e.name !== 'Error' ? `${e.name}: ` : ''
   const stack = typeof e.stack === 'string' ? e.stack : ''
   const at = new RegExp(`${fileName.replace('.', '\\.')}:(\\d+)`).exec(stack)
-  return `${name}${message}${at ? `（第 ${at[1]} 行）` : ''}`
+  return `${name}${message}${at?.[1] ? msg().scriptMain.engine.atLine(at[1]) : ''}`
 }
 
 /** Evaluates code; returns the dumped error, or undefined on success. */
@@ -162,7 +163,7 @@ export async function runScript(
     if (!(error instanceof RangeError)) throw error
     modulePromise = null
     return {
-      error: '腳本遞迴太深（堆疊溢位）',
+      error: msg().scriptMain.engine.stackOverflow,
       logs: [],
       tests: [],
       changes: [],
@@ -199,7 +200,8 @@ async function runIsolated(input: ScriptRunInput, host?: ScriptHostFn): Promise<
         logText: SCRIPT_LOG_TEXT_LIMIT,
         changes: SCRIPT_CHANGE_LIMIT,
         value: SCRIPT_VALUE_LIMIT
-      }
+      },
+      text: msg().scriptMain.sandbox
     })
     const inputHandle = ctx.newString(snapshot)
     ctx.setProp(ctx.global, '__hachiInput', inputHandle)
@@ -233,9 +235,9 @@ async function runIsolated(input: ScriptRunInput, host?: ScriptHostFn): Promise<
           await wait(Math.min(Number(arg) || 0, wallDeadline - Date.now() + 50))
           return 'null'
         }
-        if (!host) throw new Error('這裡不能從腳本送出請求')
+        if (!host) throw new Error(msg().scriptMain.engine.noHost)
         if (++hostCalls > SCRIPT_MAX_HOST_REQUESTS) {
-          throw new Error(`每次執行最多送出 ${SCRIPT_MAX_HOST_REQUESTS} 個請求`)
+          throw new Error(msg().scriptMain.engine.maxRequests(SCRIPT_MAX_HOST_REQUESTS))
         }
         const reply = await host(JSON.parse(arg) as HostCall)
         if (!reply.ok) throw new Error(reply.error)
@@ -310,7 +312,7 @@ async function runIsolated(input: ScriptRunInput, host?: ScriptHostFn): Promise<
           break
         }
         if (pending.size === 0) {
-          scriptError = '腳本在等待一個永遠不會完成的 Promise'
+          scriptError = msg().scriptMain.engine.pendingForever
           break
         }
         const left = wallDeadline - Date.now()
@@ -348,7 +350,7 @@ async function runIsolated(input: ScriptRunInput, host?: ScriptHostFn): Promise<
     return {
       ...collected,
       error: timedOut
-        ? `腳本總時間超過 ${Math.round(input.timeoutMs / 1000)} 秒（含等待請求），已中止`
+        ? msg().scriptMain.engine.totalTimeout(Math.round(input.timeoutMs / 1000))
         : scriptError === undefined
           ? null
           : describeError(scriptError, fileName, computeLimit),

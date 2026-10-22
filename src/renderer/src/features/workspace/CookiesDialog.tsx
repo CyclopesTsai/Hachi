@@ -12,9 +12,12 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { errorMessage, unwrap } from '@renderer/lib/ipc'
+import { localeOf, msg } from '@shared/i18n'
 
 const expiresText = (cookie: StoredCookie) =>
-  cookie.expires === null ? '工作階段' : new Date(cookie.expires).toLocaleString()
+  cookie.expires === null
+    ? msg().workspace.cookies.session
+    : new Date(cookie.expires).toLocaleString(localeOf())
 
 /** The Workspace's cookie jar (decision 129): view, delete one, clear a domain or all. */
 function CookiesBody() {
@@ -62,13 +65,18 @@ function CookiesBody() {
     <>
       <div className="flex items-center gap-2">
         <Input
-          aria-label="篩選 Cookie"
-          placeholder="篩選網域或名稱"
+          aria-label={msg().workspace.cookies.filter}
+          placeholder={msg().workspace.cookies.filterPlaceholder}
           className="h-8 flex-1"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <Button size="sm" variant="outline" onClick={reload} title="重新整理">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={reload}
+          title={msg().workspace.cookies.refresh}
+        >
           <RefreshCw />
         </Button>
         <Button
@@ -78,7 +86,7 @@ function CookiesBody() {
           data-testid="cookies-clear-all"
           onClick={() => void run(window.hachi.cookies.clear({ domain: null }))}
         >
-          全部清除
+          {msg().workspace.cookies.clearAll}
         </Button>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -88,7 +96,7 @@ function CookiesBody() {
       >
         {cookies && groups.length === 0 && (
           <p className="p-4 text-sm text-muted-foreground">
-            {cookies.length === 0 ? '還沒有 Cookie。' : '沒有符合的 Cookie。'}
+            {cookies.length === 0 ? msg().workspace.cookies.none : msg().workspace.cookies.noMatch}
           </p>
         )}
         {groups.map(([domain, list]) => (
@@ -106,7 +114,7 @@ function CookiesBody() {
                 onClick={() => void run(window.hachi.cookies.clear({ domain }))}
               >
                 <Trash2 />
-                清除這個網域
+                {msg().workspace.cookies.clearDomain}
               </Button>
             </div>
             <table className="w-full table-fixed text-xs">
@@ -136,7 +144,7 @@ function CookiesBody() {
                         size="icon"
                         variant="ghost"
                         className="size-6"
-                        aria-label={`刪除 ${c.name}`}
+                        aria-label={msg().workspace.cookies.deleteLabel(c.name)}
                         onClick={() =>
                           void run(
                             window.hachi.cookies.delete({
@@ -173,10 +181,7 @@ export function CookiesDialog({
       <DialogContent className="sm:max-w-3xl" data-testid="cookies-dialog">
         <DialogHeader>
           <DialogTitle>Cookies</DialogTitle>
-          <DialogDescription>
-            回應的 Set-Cookie 會自動保存，之後的請求自動帶上（可在請求的 Settings
-            關閉）。只存在這台電腦。
-          </DialogDescription>
+          <DialogDescription>{msg().workspace.cookies.description}</DialogDescription>
         </DialogHeader>
         {open && <CookiesBody />}
       </DialogContent>
