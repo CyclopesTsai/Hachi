@@ -1060,6 +1060,26 @@ try {
     'preview tab moved left'
   )
   assert.equal(await tabByTitle(draggedPreview).getAttribute('data-preview'), null, 'drag pins')
+  // The last tab held at the right edge stays inside the strip: it must not widen the
+  // strip, which the edge auto-scroll would follow without end.
+  const tabStrip = page.getByRole('tablist', { name: '開啟的分頁' })
+  await tabStrip.evaluate((el) => el.scrollTo({ left: el.scrollWidth }))
+  const stripSize = () => tabStrip.evaluate((el) => [el.scrollLeft, el.scrollWidth])
+  const [endLeft, endWidth] = await stripSize()
+  const orderAtEnd = await stripTitles()
+  const lastBox = await stripTabs.last().boundingBox()
+  const stripBox = await tabStrip.boundingBox()
+  const lastY = lastBox.y + lastBox.height / 2
+  await page.mouse.move(lastBox.x + 20, lastY)
+  await page.mouse.down()
+  await page.mouse.move(lastBox.x + 32, lastY, { steps: 3 })
+  await page.mouse.move(stripBox.x + stripBox.width - 6, lastY, { steps: 10 })
+  await new Promise((r) => setTimeout(r, 800))
+  const [heldLeft, heldWidth] = await stripSize()
+  await page.mouse.up()
+  await new Promise((r) => setTimeout(r, 150))
+  assert.deepEqual([heldLeft, heldWidth], [endLeft, endWidth], 'tab strip does not grow or scroll')
+  assert.deepEqual(await stripTitles(), orderAtEnd, 'dropped at the end: order unchanged')
   step('tabs: drag to reorder (others make room); the dragged tab is activated and pinned')
   await tabByTitle('Cookies').click() // back to the request the next checks use
   await urlInput.waitFor()
@@ -2699,6 +2719,16 @@ try {
       .locator('[data-testid="tab"]:not([data-draft]):not([data-kind="runner"])')
       .evaluateAll((els) => els.map((e) => e.dataset.title))
   const openTabs = await savedTabTitles(page)
+  /** Method badges of the saved request tabs, by title. */
+  const savedTabMethods = (p) =>
+    p
+      .locator('[data-testid="tab"][data-kind="request"]:not([data-draft]):not([data-dirty])')
+      .evaluateAll((els) =>
+        Object.fromEntries(
+          els.map((e) => [e.dataset.title, e.querySelector('.font-mono')?.textContent])
+        )
+      )
+  const methodsBefore = await savedTabMethods(page)
   const closed = app.waitForEvent('close')
   void app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined)
   await closeDialog.waitFor()
@@ -2723,12 +2753,21 @@ try {
     `tabs restored: ${openTabs.join(', ')}`
   )
   assert.equal(await page.getByTestId('active-environment').innerText(), 'dev')
+  // Restored tabs read their file only when opened; their badges show the saved method.
+  const methodsAfter = await savedTabMethods(page)
+  for (const [title, method] of Object.entries(methodsAfter)) {
+    if (title in methodsBefore) assert.equal(method, methodsBefore[title], `method of tab ${title}`)
+  }
+  assert.ok(
+    Object.values(methodsAfter).some((m) => m !== 'GET'),
+    `a restored tab with another method than GET: ${JSON.stringify(methodsAfter)}`
+  )
   const bounds = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].getBounds()
   )
   assert.deepEqual(bounds, savedBounds, 'window position / size restored')
   step(
-    'relaunch restores the last Workspace, its tree, open tabs and active environment, window position and size'
+    'relaunch restores the last Workspace, its tree, open tabs (with their methods) and active environment, window position and size'
   )
 
   await page.getByTestId('workspace-menu').click()

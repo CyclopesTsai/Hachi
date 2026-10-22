@@ -76,8 +76,14 @@ function TabIcon({ tab }: { tab: Tab }) {
   if (tab.kind === 'mock') return <Server className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'example') return <Bookmark className="size-3.5 shrink-0 text-primary" />
   if (tab.kind === 'request') {
+    // Restored tabs read their file only when opened: until then, the method in the tree.
+    const saved = node?.kind === 'request' ? node.method : undefined
     return (
-      <RequestBadge node={{ requestType: 'http', method: tab.draft?.method }} className="w-auto" />
+      <RequestBadge
+        node={{ requestType: 'http', method: saved }}
+        method={tab.draft?.method}
+        className="w-auto"
+      />
     )
   }
   if (tab.kind === 'websocket') return <WsTabIcon uid={tab.uid} />
@@ -210,8 +216,24 @@ function pointerOver(el: HTMLElement, over: boolean) {
   el.style.overflowX = ''
 }
 
-/** Tabs slide along the strip only. */
-const alongStrip: Modifier = ({ transform }) => ({ ...transform, y: 0 })
+/**
+ * Tabs slide along the strip only, and not past its first or last tab: a tab dragged
+ * beyond the end would widen the scrollable strip, which the edge auto-scroll follows,
+ * which pushes the tab further — the strip would keep scrolling.
+ */
+const alongStrip: Modifier = ({ transform, activatorEvent }) => {
+  const target = activatorEvent?.target
+  const strip = target instanceof Element ? target.closest('[role="tablist"]') : null
+  const tabs = strip?.querySelectorAll<HTMLElement>('[role="tab"]') ?? []
+  const dragged = [...tabs].find((t) => t.dataset.dragging !== undefined)
+  const last = tabs[tabs.length - 1]
+  if (!dragged || !last) return { ...transform, y: 0 }
+  // Layout positions (transforms left out) inside the strip (relative, so their offsetParent).
+  const end = last.offsetLeft + last.offsetWidth
+  const min = -dragged.offsetLeft
+  const max = end - dragged.offsetLeft - dragged.offsetWidth
+  return { ...transform, x: Math.min(Math.max(transform.x, min), max), y: 0 }
+}
 
 /**
  * Open tabs above the editor; "+" opens a new unsaved HTTP request. Tabs can be dragged
@@ -242,7 +264,7 @@ export function TabBar() {
       <div
         role="tablist"
         aria-label={msg().tabs.open}
-        className="tab-strip flex min-w-0 overflow-x-auto"
+        className="tab-strip relative flex min-w-0 overflow-x-auto"
         onMouseEnter={(e) => pointerOver(e.currentTarget, true)}
         onMouseLeave={(e) => pointerOver(e.currentTarget, false)}
       >
