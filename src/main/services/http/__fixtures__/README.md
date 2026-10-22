@@ -13,3 +13,8 @@ leaf carry AIA "CA Issuers" URLs on `ca.hachi.test`. Only the leaf key is kept.
 `sct-leaf.pem` is github.com's public certificate (issued 2026-09-01, ECDSA P-256), kept
 only because it embeds two Certificate Transparency SCTs; the SCT parsing tests read it
 (decision 142). No key goes with it.
+
+`ccadb/*.csv` are 12-row excerpts of CCADB's public TLS reports (Apple, Chrome, Microsoft,
+Mozilla; downloaded 2026-10-22 from `https://ccadb.my.salesforce-sites.com/ccadb/Report?Name=<Program>TLSServerAuthenticationCSV`)
+for the CCADB parser and root program tests (issue #7): they include TWCA CYBER Root CA
+(not in Apple's list) and roots with each program's limits.
