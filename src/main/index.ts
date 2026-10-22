@@ -165,7 +165,8 @@ async function bootstrap(): Promise<void> {
     tlsCheck: {
       verifySystem: (host, pems) => platform.verifyServerChain(host, pems),
       appleRoots: () => platform.appleRootCertificates()
-    }
+    },
+    ccadbDir: path.join(app.getPath('userData'), 'ccadb')
   })
   const transfer = new TransferService(collections, environments, loadRedoc)
   // git asks for credentials through a dialog (decision 113). The helper runs this

@@ -27,7 +27,8 @@
 ├─ app-config.json                   App 設定
 ├─ history-index.json                所有 Workspace 歷史紀錄的索引（共用筆數上限用）
 ├─ sessions/<sha1(workspacePath)>.json  各 Workspace 的分頁與目前環境（使用者本機狀態，不進 git）
-└─ cookies/<workspace id>.json       各 Workspace 的 Cookie Jar（只存在這台電腦，不進 git）
+├─ cookies/<workspace id>.json       各 Workspace 的 Cookie Jar（只存在這台電腦，不進 git）
+└─ ccadb/tls-roots.json              憑證檢查用的各家根憑證清單（從 CCADB 下載的快取）
 
 <workspace>/                         # 預設 ~/Documents/Hachi/<名稱>/，可自選
 ├─ workspace.json                    Workspace 名稱與設定
@@ -636,6 +637,40 @@ Workspace 的 Cookie Jar，只存在這台電腦（不在 Workspace 資料夾，
 ```
 
 規則（RFC 6265，沒有 Public Suffix List）：Domain 屬性必須符合請求主機且含有點；`Secure` Cookie 只能由 https（或 localhost）設定與送出；`Max-Age` 優先於 `Expires`，`Max-Age=0` / 過期即刪除；總數上限 3000、每個網域 180（超過時刪最舊的），每個 Cookie 4 KB。
+
+## `<userData>/ccadb/tls-roots.json`
+
+憑證檢查的「各家根憑證計畫（CCADB）」用的快取（`src/main/services/http/ccadb.ts`）。內容來自 [CCADB](https://www.ccadb.org/resources) 公開的 Apple / Chrome / Microsoft / Mozilla TLS 報表：只在開啟憑證檢查、沒有快取或超過 7 天（或按「更新」）時下載，經過 App 的 Proxy 設定，不會送出要檢查的網址。只用來顯示，不用於實際連線驗證。檔案損壞或版本不符時重新下載；下載失敗時沿用舊的快取。
+
+```jsonc
+{
+  "version": 1,
+  "fetchedAt": "2026-10-22T04:30:00.000Z",
+  "programs": {
+    // 每家只列出收錄的根憑證；apple / chrome / microsoft / mozilla 四個陣列
+    "mozilla": [
+      {
+        "sha256": "3F63BB28…", // SHA-256 指紋（大寫十六進位、無冒號）
+        "name": "TWCA CYBER Root CA",
+        "pem": "-----BEGIN CERTIFICATE-----\n…",
+        // 以下依各家報表，沒有就省略
+        "distrustAfter": "2026-04-15", // Mozilla：之後簽發的網站憑證不信任
+        "constraints": "*.tr" // 顯示用的限制（Mozilla / Apple 的限制、Microsoft 的 TLD）
+      }
+    ],
+    "chrome": [{ "…": "…", "sctNotAfter": "2026-09-14T23:59:59.000Z" }], // SCT 晚於此時不信任
+    "microsoft": [
+      {
+        "…": "…",
+        "notBefore": { "date": "2019-04-01", "ekus": ["Code Signing"] }, // 之後簽發的不信任這些用途
+        "disabledAfter": "2027-01-01", // 停用日期
+        "disallowedEkus": ["OCSP Signing"]
+      }
+    ],
+    "apple": []
+  }
+}
+```
 
 ## `mocks/<mock>.json`（`src/shared/schemas/mock.ts`）
 

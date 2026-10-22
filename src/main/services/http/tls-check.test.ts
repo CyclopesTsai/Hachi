@@ -2,6 +2,7 @@ import { X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import https from 'node:https'
 import type { AddressInfo } from 'node:net'
+import os from 'node:os'
 import path from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { HachiError } from '@shared/errors'
@@ -13,6 +14,7 @@ import type { SystemTrustVerdict } from '../../platform/types'
 import { verifyWithX509Chain } from '../../platform/win32-trust'
 import { resolveInherited } from './build-request'
 import { HttpService } from './http-service'
+import { CcadbStore, type CcadbCache, type CcadbRoot } from './ccadb'
 import { checkCertificates, extraChecks, type TlsCheckDeps } from './tls-check'
 import { DIRECT, setTrustStoreForTests, type Handshake } from './tls-diagnosis'
 
@@ -201,6 +203,123 @@ describe('certificate check (decision 142)', () => {
   })
 })
 
+describe('root programs from CCADB (issue #7)', () => {
+  const testRoot = (extra: Partial<CcadbRoot> = {}): CcadbRoot => ({
+    sha256: x509(root).fingerprint256.replace(/:/g, ''),
+    name: 'Hachi Test Root CA',
+    pem: root,
+    ...extra
+  })
+  const other: CcadbRoot = {
+    sha256: x509(selfSignedPem).fingerprint256.replace(/:/g, ''),
+    name: 'Other Root',
+    pem: selfSignedPem
+  }
+  const snapshot = (programs: Partial<CcadbCache['programs']>) => async () => ({
+    cache: {
+      version: 1 as const,
+      fetchedAt: '2026-10-22T00:00:00.000Z',
+      programs: {
+        apple: [other],
+        chrome: [other],
+        microsoft: [other],
+        mozilla: [other],
+        ...programs
+      }
+    },
+    error: null
+  })
+  const statuses = (r: Checked) => r.ccadb?.programs.map((p) => [p.program, p.status])
+
+  it('tells, on any platform, that Apple leaves the root out', async () => {
+    setTrustStoreForTests([root])
+    const r = await checkCertificates(fullChain, DIRECT, {
+      ccadb: snapshot({
+        chrome: [other, testRoot()],
+        microsoft: [testRoot()],
+        mozilla: [testRoot()]
+      })
+    })
+    expect(r.trust.some((t) => t.source === 'apple')).toBe(false) // no macOS keychain here
+    expect(statuses(r)).toEqual([
+      ['apple', 'not-included'],
+      ['chrome', 'included'],
+      ['microsoft', 'included'],
+      ['mozilla', 'included']
+    ])
+    expect(r.ccadb?.fetchedAt).toBe('2026-10-22T00:00:00.000Z')
+    expect(r.ccadb?.programs[0]?.reasons).toEqual([
+      '「Hachi Test Root CA」不在 Apple 的根憑證清單中'
+    ])
+    expect(r.ccadb?.programs[1]?.root).toBe('Hachi Test Root CA')
+    expect(r.advice[0]).toContain('macOS / iOS 不信任「Hachi Test Root CA」')
+    // Not in Apple's list: Apple's 398-day rule does not apply.
+    expect(check(r, 'apple-validity')?.status).toBe('info')
+  })
+
+  it('applies the limits of each program to the certificate', async () => {
+    setTrustStoreForTests([root])
+    const r = await checkCertificates(fullChain, DIRECT, {
+      now: Date.UTC(2026, 9, 22),
+      ccadb: snapshot({
+        apple: [testRoot()],
+        // The test leaf was issued 2026-10-12 and has no SCTs (its notBefore counts).
+        chrome: [testRoot({ sctNotAfter: '2027-01-01T00:00:00.000Z' })],
+        microsoft: [
+          testRoot({
+            notBefore: { date: '2030-01-01', ekus: ['Server Authentication'] },
+            disabledAfter: '2026-06-01'
+          })
+        ],
+        mozilla: [testRoot({ distrustAfter: '2026-01-01', constraints: '*.test' })]
+      })
+    })
+    expect(statuses(r)).toEqual([
+      ['apple', 'included'],
+      ['chrome', 'included'],
+      ['microsoft', 'restricted'],
+      ['mozilla', 'restricted']
+    ])
+    const [, chrome, microsoft, mozilla] = r.ccadb?.programs ?? []
+    expect(chrome?.notes[0]).toContain(
+      '2027-01-01 之後才記錄（SCT）的憑證；這張在 2026-10-12，不受影響'
+    )
+    expect(microsoft?.reasons).toEqual(['Microsoft 已在 2026-06-01 停用「Hachi Test Root CA」'])
+    expect(microsoft?.notes[0]).toContain('2030-01-01 之後簽發的網站憑證；這張不受影響')
+    expect(mozilla?.reasons[0]).toBe(
+      'Mozilla 不信任「Hachi Test Root CA」在 2026-01-01 之後簽發的網站憑證（這張在 2026-10-12 簽發）'
+    )
+    expect(mozilla?.notes).toContain('限制條件：*.test')
+    expect(r.advice.join('\n')).toContain(
+      'Microsoft 已在 2026-06-01 停用「Hachi Test Root CA」 → 請 CA'
+    )
+    // In Apple's list: its 398-day rule applies to the 100-year test leaf.
+    expect(check(r, 'apple-validity')?.status).toBe('fail')
+  })
+
+  it('downloads a missing intermediate before looking up the root', async () => {
+    setTrustStoreForTests([root])
+    const r = await checkCertificates(leafOnly, DIRECT, {
+      ccadb: snapshot({ mozilla: [testRoot()] }),
+      fetchIssuer: async () => x509(intermediate)
+    })
+    const mozilla = r.ccadb?.programs.find((p) => p.program === 'mozilla')
+    expect(mozilla?.status).toBe('included')
+    expect(mozilla?.notes).toContain(
+      '伺服器少送的「Hachi Test Intermediate CA」依 AIA 下載後才接到根憑證'
+    )
+  })
+
+  it('shows why there is no data', async () => {
+    const r = await checkCertificates(fullChain, DIRECT, {
+      ccadb: async () => ({ cache: null, error: 'offline' })
+    })
+    expect(r.ccadb).toEqual({ fetchedAt: null, error: 'offline', programs: [] })
+    const none = await checkCertificates(fullChain, DIRECT)
+    expect(none.ccadb).toBeUndefined()
+  })
+})
+
 describe('HttpService.checkTls', () => {
   const service = (deps: Partial<TlsCheckDeps> = {}) =>
     new HttpService({
@@ -279,23 +398,37 @@ describe.runIf(process.platform === 'win32')('Windows system verification', () =
 
 // Real sites; run by hand: HACHI_NETWORK_TESTS=1 npx vitest run tls-check
 describe.runIf(process.env.HACHI_NETWORK_TESTS === '1')('real sites', () => {
-  const deps: TlsCheckDeps =
-    process.platform === 'darwin'
+  // The CCADB reports are downloaded for real too (into a temporary folder).
+  const ccadb = new CcadbStore({
+    dir: path.join(os.tmpdir(), `hachi-ccadb-test-${process.pid}`),
+    fetchText: async (url) => {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res.text()
+    }
+  })
+  const deps: TlsCheckDeps = {
+    ccadb: () => ccadb.get(),
+    ...(process.platform === 'darwin'
       ? { verifySystem: verifyWithSecurity, appleRoots: readAppleRoots }
       : process.platform === 'win32'
         ? { verifySystem: verifyWithX509Chain }
-        : {}
+        : {})
+  }
+  const programs = (r: Checked) => r.ccadb?.programs.map((p) => p.status)
   const statuses = (r: Checked) =>
     r.trust.filter((t) => t.status !== 'unsupported').map((t) => t.status)
 
   it('github.com passes everywhere', { timeout: 60_000 }, async () => {
     const r = await checkCertificates('https://github.com/', DIRECT, deps)
     expect(statuses(r).every((s) => s === 'pass')).toBe(true)
+    expect(programs(r)).toEqual(['included', 'included', 'included', 'included'])
     expect(r.advice).toEqual([])
   })
 
   it('untrusted-root.badssl.com fails everywhere', { timeout: 60_000 }, async () => {
     const r = await checkCertificates('https://untrusted-root.badssl.com/', DIRECT, deps)
     expect(statuses(r).every((s) => s === 'fail')).toBe(true)
+    expect(programs(r)).toEqual(['not-included', 'not-included', 'not-included', 'not-included'])
   })
 })

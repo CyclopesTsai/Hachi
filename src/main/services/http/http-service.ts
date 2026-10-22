@@ -21,6 +21,7 @@ import {
 import { signAwsSigV4 } from './auth/aws-sigv4'
 import { digestAuthorization, parseDigestChallenge } from './auth/digest'
 import { loadFileVariables, type FileAccess } from './file-variables'
+import { CCADB_MAX_REPORT_BYTES, CcadbStore } from './ccadb'
 import { checkCertificates, type TlsCheckDeps } from './tls-check'
 import { diagnoseTls, unavailable } from './tls-diagnosis'
 import { OAuth2Error, OAuth2Service, type TokenRequest } from './auth/oauth2'
@@ -109,6 +110,8 @@ export interface HttpServiceDeps {
   fileAccess?: () => FileAccess
   /** The system verifiers for the certificate check (decision 142). */
   tlsCheck?: TlsCheckDeps
+  /** Where the CCADB reports are kept (issue #7); absent: no root program section. */
+  ccadbDir?: string
 }
 
 export interface TlsCheckInput {
@@ -117,6 +120,8 @@ export interface TlsCheckInput {
   /** As typed (https:// or wss://), before variable substitution. */
   url: string
   useProxy: boolean
+  /** Download the CCADB reports again even if the copy is recent. */
+  refreshCcadb?: boolean
 }
 
 export interface SendInput {
@@ -153,8 +158,12 @@ export class HttpService {
   private readonly running = new Map<string, AbortController>()
   readonly store = new ResponseStore()
   readonly oauth2: OAuth2Service
+  private readonly ccadb: CcadbStore | null
 
   constructor(private readonly deps: HttpServiceDeps) {
+    this.ccadb = deps.ccadbDir
+      ? new CcadbStore({ dir: deps.ccadbDir, fetchText: (url) => this.fetchPublicText(url) })
+      : null
     this.oauth2 = new OAuth2Service({
       postForm: (request) => this.postForm(request),
       openBrowser: deps.openBrowser ?? (() => Promise.reject(new OAuth2Error('無法開啟瀏覽器')))
@@ -413,6 +422,37 @@ export class HttpService {
     return { status: result.status, body: body ? body.toString('utf8') : '' }
   }
 
+  /**
+   * GETs a public HTTPS document (the CCADB reports, issue #7) through the App's proxy,
+   * always verifying the certificate. Rejects on any failure or non-200 status.
+   */
+  private async fetchPublicText(url: string): Promise<string> {
+    const built: BuiltRequest = {
+      method: 'GET',
+      url,
+      headers: [['User-Agent', this.deps.userAgent]],
+      body: null,
+      options: {
+        timeoutMs: 60_000,
+        validateSSL: true,
+        followRedirects: true,
+        maxRedirects: 3,
+        useProxy: true
+      }
+    }
+    const proxyUrl = await this.proxyFor(built)
+    const { result, body } = await sendHttp(built, {
+      runId: 'ccadb',
+      proxyUrl,
+      proxyAuth: this.proxyAuth(proxyUrl),
+      signal: new AbortController().signal,
+      maxResponseBytes: CCADB_MAX_REPORT_BYTES
+    })
+    if (result.kind === 'error') throw new Error(`無法下載 CCADB 資料：${result.message}`)
+    if (result.status !== 200) throw new Error(`無法下載 CCADB 資料：HTTP ${result.status}`)
+    return body ? body.toString('utf8') : ''
+  }
+
   /** The OAuth 2.0 settings with variables substituted, as they are when sending. */
   async resolveOAuth2(input: {
     parentId: string | null
@@ -537,10 +577,14 @@ export class HttpService {
     } catch (error) {
       throw new HachiError('INVALID_OPERATION', `Cannot resolve proxy: ${String(error)}`)
     }
+    const ccadb = this.ccadb
     const result = await checkCertificates(
       target,
       { proxyUrl, proxyAuth: this.proxyAuth(proxyUrl) },
-      this.deps.tlsCheck
+      {
+        ...this.deps.tlsCheck,
+        ...(ccadb ? { ccadb: () => ccadb.get(input.refreshCcadb ?? false) } : {})
+      }
     )
     return { ...result, unresolvedVariables: [...resolver.unresolved].sort() }
   }

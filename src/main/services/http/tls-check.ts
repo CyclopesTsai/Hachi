@@ -10,14 +10,19 @@ import { X509Certificate } from 'node:crypto'
 import { request as httpRequest } from 'node:http'
 import type tls from 'node:tls'
 import type {
+  CcadbProgram,
+  TlsCcadbResult,
   TlsCheckItem,
   TlsCheckResult,
   TlsDiagnosis,
+  TlsProgramResult,
   TlsTrustResult,
   TlsVerdict
 } from '@shared/http'
 import type { SystemTrustVerdict } from '../../platform/types'
+import { CCADB_PROGRAMS, type CcadbRoot, type CcadbSnapshot } from './ccadb'
 import {
+  aiaIssuerUrl,
   analyzeChain,
   bundledRoots,
   handshake,
@@ -29,7 +34,7 @@ import {
   type Handshake,
   type Route
 } from './tls-diagnosis'
-import { embeddedSctCount, signatureAlgorithm } from './x509-der'
+import { embeddedSctCount, embeddedSctTimes, signatureAlgorithm } from './x509-der'
 
 export interface TlsCheckDeps {
   /** The operating system's verifier; null where there is none. */
@@ -38,6 +43,8 @@ export interface TlsCheckDeps {
   appleRoots?(): Promise<string[] | null>
   /** Downloads a missing issuer from its AIA URL (tests replace it). */
   fetchIssuer?(url: string, route: Route): Promise<X509Certificate | null>
+  /** The CCADB reports (issue #7); absent: no root program section. */
+  ccadb?(): Promise<CcadbSnapshot>
   now?: number
 }
 
@@ -447,6 +454,185 @@ export function extraChecks(input: CheckInput): TlsCheckItem[] {
   return items
 }
 
+const fingerprintHex = (c: X509Certificate) => c.fingerprint256.replace(/:/g, '')
+const SERVER_AUTH_EKU = /server auth/i
+
+const programStores = new WeakMap<
+  CcadbRoot[],
+  { certs: X509Certificate[]; byFingerprint: Map<string, CcadbRoot> }
+>()
+
+function programStore(roots: CcadbRoot[]) {
+  let store = programStores.get(roots)
+  if (!store) {
+    store = {
+      certs: parseCertificates(roots.map((r) => r.pem)),
+      byFingerprint: new Map(roots.map((r) => [r.sha256, r]))
+    }
+    programStores.set(roots, store)
+  }
+  return store
+}
+
+/**
+ * The root of `store` the chain ends at: a certificate sent that is in it (the shortest
+ * path first), or a root that issued one.
+ */
+function anchorIn(certs: X509Certificate[], store: X509Certificate[]): X509Certificate | null {
+  const fingerprints = new Set(store.map((c) => c.fingerprint256))
+  for (const cert of certs) {
+    if (fingerprints.has(cert.fingerprint256)) return cert
+    const issuer = store.find((t) => cert.checkIssued(t) && cert.verify(t.publicKey))
+    if (issuer) return issuer
+  }
+  return null
+}
+
+/** One program's limits that apply (`reasons`) or do not (yet) apply (`notes`). */
+function programLimits(
+  program: CcadbProgram,
+  root: CcadbRoot,
+  leaf: X509Certificate,
+  now: number
+): { reasons: string[]; notes: string[] } {
+  const reasons: string[] = []
+  const notes: string[] = []
+  const issued = Date.parse(leaf.validFrom)
+  const name = `「${root.name}」`
+  if (program === 'mozilla' && root.distrustAfter) {
+    const after = root.distrustAfter
+    if (issued >= Date.parse(after) + DAY_MS) {
+      reasons.push(
+        `Mozilla 不信任${name}在 ${after} 之後簽發的網站憑證（這張在 ${date(issued)} 簽發）`
+      )
+    } else {
+      notes.push(
+        `Mozilla 不信任${name}在 ${after} 之後簽發的網站憑證；這張在 ${date(issued)} 簽發，不受影響`
+      )
+    }
+  }
+  if (program === 'chrome' && root.sctNotAfter) {
+    const limit = Date.parse(root.sctNotAfter)
+    const times = embeddedSctTimes(leaf.raw)
+    const earliest = times.length > 0 ? Math.min(...times) : issued
+    const when = date(limit)
+    if (earliest > limit) {
+      reasons.push(
+        `Chrome 不信任${name}在 ${when} 之後才記錄（SCT）的憑證（這張在 ${date(earliest)}）`
+      )
+    } else {
+      notes.push(
+        `Chrome 不信任${name}在 ${when} 之後才記錄（SCT）的憑證；這張在 ${date(earliest)}，不受影響`
+      )
+    }
+  }
+  if (program === 'microsoft') {
+    const nb = root.notBefore
+    if (nb && nb.ekus.some((e) => SERVER_AUTH_EKU.test(e))) {
+      if (issued >= Date.parse(nb.date)) {
+        reasons.push(
+          `Microsoft 不信任${name}在 ${nb.date} 之後簽發的網站憑證（這張在 ${date(issued)} 簽發）`
+        )
+      } else {
+        notes.push(`Microsoft 不信任${name}在 ${nb.date} 之後簽發的網站憑證；這張不受影響`)
+      }
+    }
+    if (root.disabledAfter) {
+      if (now >= Date.parse(root.disabledAfter)) {
+        reasons.push(`Microsoft 已在 ${root.disabledAfter} 停用${name}`)
+      } else {
+        notes.push(`Microsoft 將在 ${root.disabledAfter} 停用${name}`)
+      }
+    }
+    if (root.disallowedEkus?.some((e) => SERVER_AUTH_EKU.test(e))) {
+      reasons.push(`Microsoft 不允許${name}用於網站`)
+    }
+  }
+  if (root.constraints) {
+    const text =
+      root.constraints.length > 200 ? `${root.constraints.slice(0, 200)}…` : root.constraints
+    notes.push(`限制條件：${text}`)
+  }
+  return { reasons, notes }
+}
+
+/** Whether one root program includes the chain's root (missing intermediates via AIA). */
+async function programResult(
+  program: (typeof CCADB_PROGRAMS)[number],
+  roots: CcadbRoot[],
+  certs: X509Certificate[],
+  expectedRoot: string,
+  route: Route,
+  deps: TlsCheckDeps,
+  now: number
+): Promise<TlsProgramResult> {
+  const store = programStore(roots)
+  let chain = certs
+  let anchor = anchorIn(chain, store.certs)
+  const downloaded: string[] = []
+  for (let i = 0; !anchor && i < AIA_MAX_DOWNLOADS; i++) {
+    const last = chain[chain.length - 1] as X509Certificate
+    const url = isSelfSigned(last) ? null : aiaIssuerUrl(last)
+    if (!url) break
+    const issuer = await (deps.fetchIssuer ?? fetchIssuer)(url, route).catch(() => null)
+    if (!issuer || chain.some((c) => c.fingerprint256 === issuer.fingerprint256)) break
+    chain = [...chain, issuer]
+    downloaded.push(nameOf(issuer.subject))
+    anchor = anchorIn(chain, store.certs)
+  }
+  const base = { program: program.id, label: program.label }
+  if (!anchor) {
+    return {
+      ...base,
+      status: 'not-included',
+      root: null,
+      reasons: [`「${expectedRoot}」不在 ${program.label.replace(/（.*）$/, '')} 的根憑證清單中`],
+      notes: []
+    }
+  }
+  const root = store.byFingerprint.get(fingerprintHex(anchor))
+  const limits = root
+    ? programLimits(program.id, root, certs[0] as X509Certificate, now)
+    : { reasons: [], notes: [] }
+  return {
+    ...base,
+    status: limits.reasons.length > 0 ? 'restricted' : 'included',
+    root: root?.name || nameOf(anchor.subject),
+    reasons: limits.reasons,
+    notes: [
+      ...limits.notes,
+      ...(downloaded.length > 0
+        ? [`伺服器少送的「${downloaded.join('」「')}」依 AIA 下載後才接到根憑證`]
+        : [])
+    ]
+  }
+}
+
+async function ccadbResult(
+  certs: X509Certificate[],
+  expectedRoot: string,
+  route: Route,
+  deps: TlsCheckDeps,
+  now: number
+): Promise<TlsCcadbResult | undefined> {
+  if (!deps.ccadb) return undefined
+  const snapshot = await deps
+    .ccadb()
+    .catch((error: unknown): CcadbSnapshot => ({ cache: null, error: errorText(error) }))
+  const cache = snapshot.cache
+  return {
+    fetchedAt: cache?.fetchedAt ?? null,
+    error: snapshot.error,
+    programs: cache
+      ? await Promise.all(
+          CCADB_PROGRAMS.map((p) =>
+            programResult(p, cache.programs[p.id], certs, expectedRoot, route, deps, now)
+          )
+        )
+      : []
+  }
+}
+
 const ROOT_VERDICTS: TlsVerdict[] = ['untrusted-root', 'incomplete-chain', 'self-signed']
 
 /** The certificate a failed chain ends at (the root, or the missing issuer). */
@@ -521,21 +707,26 @@ export async function checkCertificates(
   // The OS gets Hachi's root too: a clear "root not trusted" instead of "missing issuer".
   const root = issuerIn(certs, trusted())
   const pems = [...certs, ...(root ? [root] : [])].map((c) => c.toString())
-  const [versions, system, apple] = await Promise.all([
+  const [versions, system, apple, ccadb] = await Promise.all([
     Promise.all(VERSIONS.map(([v]) => probeVersion(host, port, route, v))),
     deps.verifySystem
       ? deps.verifySystem(host, pems).catch((error: unknown) => errorText(error))
       : Promise.resolve(null),
-    appleTrust(host, certs, route, deps, now)
+    appleTrust(host, certs, route, deps, now),
+    ccadbResult(certs, rootName(hachi), route, deps, now)
   ])
+  const program = (id: CcadbProgram) => ccadb?.programs.find((p) => p.program === id)
 
   const checks = extraChecks({
     certs,
     main,
     versions,
+    // Apple's own list on macOS, else CCADB's copy of it.
     appleAnchored: apple
       ? apple.analysis.verdict === 'ok' || !ROOT_VERDICTS.includes(apple.analysis.verdict) // failed for another reason
-      : null,
+      : program('apple')
+        ? program('apple')?.status !== 'not-included'
+        : null,
     ctVerified: typeof system === 'object' && system ? system.ctVerified : null,
     now
   })
@@ -596,14 +787,17 @@ export async function checkCertificates(
   const advice: string[] = []
   const row = (s: TlsTrustResult['source']) => trust.find((t) => t.source === s)
   const passes = (s: TlsTrustResult['source']) => row(s)?.status === 'pass'
-  const somePass = trust.some((t) => t.status === 'pass')
+  const somePass =
+    trust.some((t) => t.status === 'pass') || !!ccadb?.programs.some((p) => p.status === 'included')
   const macRootFails =
     system !== null &&
     typeof system === 'object' &&
     system.label.includes('Mac') &&
     !system.ok &&
     system.reasons.some((r) => r.startsWith('根憑證不受信任'))
-  const appleRootFails = !!apple && ROOT_VERDICTS.includes(apple.analysis.verdict)
+  const appleRootFails =
+    (!!apple && ROOT_VERDICTS.includes(apple.analysis.verdict)) ||
+    program('apple')?.status === 'not-included'
   if (somePass && (appleRootFails || macRootFails)) {
     const name = apple && appleRootFails ? rootName(apple.analysis) : rootName(hachi)
     advice.push(
@@ -631,11 +825,30 @@ export async function checkCertificates(
       `「${rootName(mozilla)}」不在 Mozilla 的根憑證清單中，只在這台電腦的信任憑證裡（例如公司內部的 CA）：其他電腦、手機與伺服器上的程式不會信任它。`
     )
   }
+  // Other root programs that leave the root out, or limit it (CCADB).
+  const covered = advice.join('\n')
+  const missingFrom = (ccadb?.programs ?? []).filter(
+    (p) =>
+      p.status === 'not-included' &&
+      p.program !== 'apple' &&
+      !(p.program === 'microsoft' && covered.includes('Windows 不信任')) &&
+      !(p.program === 'mozilla' && covered.includes('不在 Mozilla 的根憑證清單'))
+  )
+  if (somePass && missingFrom.length > 0) {
+    advice.push(
+      `${missingFrom.map((p) => p.label).join('、')} 沒有收錄「${rootName(hachi)}」→ 請 CA 提供這些平台信任的根憑證（或交叉簽署的中繼憑證），或改用其他 CA。`
+    )
+  }
+  for (const p of ccadb?.programs ?? []) {
+    if (p.status === 'restricted') {
+      advice.push(`${p.reasons.join('；')} → 請 CA 改用其他根憑證重新簽發，或改用其他 CA。`)
+    }
+  }
   for (const item of appleFails) {
     const text = ADVICE[item.id]
     if (text && !advice.includes(text)) advice.push(text)
   }
   // Fails everywhere (or for a reason not covered above): the diagnosis' own advice.
   if (hachi.verdict !== 'ok' && (!somePass || advice.length === 0)) advice.unshift(hachi.advice)
-  return { host, port, diagnosis, trust, checks, advice }
+  return { host, port, diagnosis, trust, checks, advice, ...(ccadb ? { ccadb } : {}) }
 }

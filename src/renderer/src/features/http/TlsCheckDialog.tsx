@@ -1,6 +1,12 @@
 import { AlertTriangle, Lightbulb, Loader2, RotateCw, ShieldCheck, ShieldOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { TlsCheckItem, TlsCheckResult, TlsTrustResult } from '@shared/http'
+import type {
+  TlsCcadbResult,
+  TlsCheckItem,
+  TlsCheckResult,
+  TlsProgramResult,
+  TlsTrustResult
+} from '@shared/http'
 import type { HttpCheckTlsInput } from '@shared/ipc/api'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -26,6 +32,89 @@ const CHECK_BADGE: Record<TlsCheckItem['status'], [string, 'ok' | 'bad' | 'warn'
   warn: ['注意', 'warn'],
   fail: ['不符', 'bad'],
   info: ['說明', 'muted']
+}
+
+const PROGRAM_BADGE: Record<TlsProgramResult['status'], [string, 'ok' | 'bad']> = {
+  included: ['收錄', 'ok'],
+  'not-included': ['未收錄', 'bad'],
+  restricted: ['受限制', 'bad']
+}
+
+/** Root program inclusion from CCADB (issue #7), under the platforms. */
+function CcadbSection({ ccadb, onRefresh }: { ccadb: TlsCcadbResult; onRefresh(): void }) {
+  const day = ccadb.fetchedAt?.slice(0, 10)
+  return (
+    <section className="flex flex-col gap-1.5" data-testid="ccadb">
+      <div className="flex items-center gap-2 text-xs">
+        <h3 className="font-medium text-muted-foreground">各家根憑證計畫（CCADB）</h3>
+        {day && <span className="text-muted-foreground">資料日期 {day}</span>}
+        <div className="flex-1" />
+        <Button
+          variant="link"
+          size="sm"
+          className="h-auto px-0 text-xs"
+          onClick={onRefresh}
+          data-testid="ccadb-refresh"
+        >
+          {ccadb.programs.length === 0 ? '重試' : '更新'}
+        </Button>
+      </div>
+      {ccadb.programs.length === 0 ? (
+        <p
+          className="rounded-md border p-3 text-xs text-muted-foreground select-text"
+          data-testid="ccadb-unavailable"
+        >
+          需要網路才能取得 CCADB 資料{ccadb.error ? `（${ccadb.error}）` : ''}
+        </p>
+      ) : (
+        <>
+          {ccadb.error && (
+            <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="size-3.5 shrink-0" />
+              無法更新（{ccadb.error}），使用 {day} 的資料
+            </p>
+          )}
+          <div className="divide-y rounded-md border">
+            {ccadb.programs.map((p) => {
+              const [text, tone] = PROGRAM_BADGE[p.status]
+              return (
+                <div
+                  key={p.program}
+                  className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 px-3 py-2 text-xs"
+                  data-testid="ccadb-row"
+                  data-program={p.program}
+                  data-status={p.status}
+                >
+                  <div className="pt-px">
+                    <Badge tone={tone}>{text}</Badge>
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <p>
+                      <span className="font-medium">{p.label}</span>
+                      {p.root && <span className="text-muted-foreground"> · {p.root}</span>}
+                    </p>
+                    {p.reasons.map((r) => (
+                      <p key={r} className="break-words text-destructive select-text">
+                        {r}
+                      </p>
+                    ))}
+                    {p.notes.map((n) => (
+                      <p key={n} className="break-words text-muted-foreground select-text">
+                        {n}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+      <p className="text-[11px] text-muted-foreground">
+        只下載 CCADB 公開的根憑證清單，不會送出要檢查的網址。
+      </p>
+    </section>
+  )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -128,7 +217,7 @@ function Insecure({ scheme }: { scheme: 'http' | 'ws' }) {
   )
 }
 
-function Result({ result }: { result: TlsCheckResult }) {
+function Result({ result, onRefreshCcadb }: { result: TlsCheckResult; onRefreshCcadb(): void }) {
   const d = result.diagnosis
   if (result.insecure) return <Insecure scheme={result.insecure} />
   return (
@@ -144,6 +233,7 @@ function Result({ result }: { result: TlsCheckResult }) {
           <TrustTable rows={result.trust} />
         </Section>
       )}
+      {result.ccadb && <CcadbSection ccadb={result.ccadb} onRefresh={onRefreshCcadb} />}
       {result.advice.length > 0 && (
         <Section title="建議">
           <ul
@@ -179,25 +269,26 @@ function Result({ result }: { result: TlsCheckResult }) {
 }
 
 function CheckView({ input }: { input: HttpCheckTlsInput }) {
-  const [run, setRun] = useState(0)
+  const [request, setRequest] = useState(input)
   const [result, setResult] = useState<TlsCheckResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const loading = result === null && error === null
 
   useEffect(() => {
     let cancelled = false
-    unwrap(window.hachi.http.checkTls(input))
+    unwrap(window.hachi.http.checkTls(request))
       .then((r) => !cancelled && setResult(r))
       .catch((err: unknown) => !cancelled && setError(errorMessage(err)))
     return () => {
       cancelled = true
     }
-  }, [input, run])
+  }, [request])
 
-  const again = () => {
+  /** `refreshCcadb`: download the CCADB reports again too. */
+  const again = (refreshCcadb = false) => {
     setResult(null)
     setError(null)
-    setRun((n) => n + 1)
+    setRequest({ ...input, refreshCcadb })
   }
 
   return (
@@ -213,7 +304,7 @@ function CheckView({ input }: { input: HttpCheckTlsInput }) {
             variant="outline"
             size="sm"
             disabled={loading}
-            onClick={again}
+            onClick={() => again()}
             data-testid="tls-check-again"
           >
             <RotateCw />
@@ -229,7 +320,7 @@ function CheckView({ input }: { input: HttpCheckTlsInput }) {
           </p>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {result && <Result result={result} />}
+        {result && <Result result={result} onRefreshCcadb={() => again(true)} />}
       </div>
     </>
   )

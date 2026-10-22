@@ -98,11 +98,8 @@ export function signatureAlgorithm(der: Uint8Array): { name: string; weak: boole
 
 const SCT_LIST_OID = '1.3.6.1.4.1.11129.2.4.2'
 
-/**
- * How many SCTs are embedded in the certificate; null when it has no SCT extension.
- * (SCTs sent in the TLS handshake or a stapled OCSP response are not visible here.)
- */
-export function embeddedSctCount(der: Uint8Array): number | null {
+/** The embedded SCTs (each TLS-encoded); null when the certificate has no SCT extension. */
+function embeddedScts(der: Uint8Array): Uint8Array[] | null {
   const parts = top(der)
   if (!parts) return null
   const extensions = children(der, parts[0]).find((e) => e.tag === TAG.extensions)
@@ -120,13 +117,35 @@ export function embeddedSctCount(der: Uint8Array): number | null {
     const bytes = der.subarray(inner.start, inner.end)
     if (bytes.length < 2) return null
     const total = ((bytes[0] as number) << 8) | (bytes[1] as number)
-    let count = 0
-    for (let offset = 2; offset + 2 <= Math.min(bytes.length, total + 2);) {
+    const end = Math.min(bytes.length, total + 2)
+    const scts: Uint8Array[] = []
+    for (let offset = 2; offset + 2 <= end;) {
       const length = ((bytes[offset] as number) << 8) | (bytes[offset + 1] as number)
+      scts.push(bytes.subarray(offset + 2, Math.min(end, offset + 2 + length)))
       offset += 2 + length
-      count++
     }
-    return count
+    return scts
   }
   return null
+}
+
+/**
+ * How many SCTs are embedded in the certificate; null when it has no SCT extension.
+ * (SCTs sent in the TLS handshake or a stapled OCSP response are not visible here.)
+ */
+export function embeddedSctCount(der: Uint8Array): number | null {
+  return embeddedScts(der)?.length ?? null
+}
+
+/**
+ * When each embedded SCT was issued (epoch ms): version (1 byte), log id (32 bytes),
+ * then a 64-bit timestamp in milliseconds. Empty when there are none.
+ */
+export function embeddedSctTimes(der: Uint8Array): number[] {
+  return (embeddedScts(der) ?? []).flatMap((sct) => {
+    if (sct.length < 41) return []
+    let ms = 0
+    for (let i = 33; i < 41; i++) ms = ms * 256 + (sct[i] as number)
+    return [ms]
+  })
 }

@@ -340,6 +340,8 @@ export interface HttpCheckTlsInput {
   url: string
   /** The request's "use proxy" setting. */
   useProxy: boolean
+  /** Download the CCADB reports again even if the copy is recent (issue #7). */
+  refreshCcadb?: boolean
 }
 
 export interface HttpResolveInput {

@@ -60,7 +60,7 @@ function field(dn: string, key: string): string | null {
 export const nameOf = (dn: string) =>
   field(dn, 'CN') ?? field(dn, 'O') ?? dn.split('\n')[0] ?? '（沒有名稱）'
 
-function aiaIssuerUrl(cert: X509Certificate): string | null {
+export function aiaIssuerUrl(cert: X509Certificate): string | null {
   const m = /CA Issuers - URI:(\S+)/.exec(cert.infoAccess ?? '')
   return m ? (m[1] as string) : null
 }

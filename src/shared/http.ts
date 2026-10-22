@@ -230,6 +230,31 @@ export interface TlsCheckItem {
   detail: string
 }
 
+export type CcadbProgram = 'apple' | 'chrome' | 'microsoft' | 'mozilla'
+
+/** Whether one root program (as published in CCADB) includes the chain's root (issue #7). */
+export interface TlsProgramResult {
+  program: CcadbProgram
+  /** e.g. "Apple（iOS、macOS）". */
+  label: string
+  /** restricted: included, but one of the program's limits applies to this certificate. */
+  status: 'included' | 'not-included' | 'restricted'
+  /** The root the chain ends at in this program's list. */
+  root: string | null
+  /** Why not included / restricted. */
+  reasons: string[]
+  /** Limits that do not apply (yet), intermediates downloaded… */
+  notes: string[]
+}
+
+export interface TlsCcadbResult {
+  /** When the CCADB reports were downloaded (ISO); null when there is no data. */
+  fetchedAt: string | null
+  /** Why they could not be downloaded (older data, if any, is still used). */
+  error: string | null
+  programs: TlsProgramResult[]
+}
+
 /** A certificate check started by hand, the request succeeding or not (decision 142). */
 export interface TlsCheckResult {
   host: string
@@ -243,4 +268,6 @@ export interface TlsCheckResult {
   unresolvedVariables: string[]
   /** http:// or ws://: nothing to check, the dialog explains why (the rest is empty). */
   insecure?: 'http' | 'ws'
+  /** Root program inclusion from CCADB (issue #7). */
+  ccadb?: TlsCcadbResult
 }

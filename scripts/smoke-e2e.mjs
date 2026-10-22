@@ -9,6 +9,7 @@
  *     (runs the checks against a packaged app instead of the dev build)
  */
 import assert from 'node:assert/strict'
+import { X509Certificate } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
@@ -122,6 +123,26 @@ const brokenChainServer = await new Promise((resolve) => {
 // Decision 142: the same chain sent in full. Its root is trusted by Hachi only (through
 // NODE_EXTRA_CA_CERTS below), not by Mozilla's list or the OS: the TWCA CYBER Root CA case.
 const chainIntermediate = await readFile(path.join(chainDir, 'chain-intermediate.pem'))
+
+// Issue #7: a recent CCADB copy in userData, so the check never downloads in tests. The
+// test root is in Chrome's and Microsoft's lists only (Apple and Mozilla leave it out).
+{
+  const rootPem = await readFile(path.join(chainDir, 'chain-root.pem'), 'utf8')
+  const entry = {
+    sha256: new X509Certificate(rootPem).fingerprint256.replace(/:/g, ''),
+    name: 'Hachi Test Root CA',
+    pem: rootPem
+  }
+  await mkdir(path.join(userData, 'ccadb'), { recursive: true })
+  await writeFile(
+    path.join(userData, 'ccadb', 'tls-roots.json'),
+    JSON.stringify({
+      version: 1,
+      fetchedAt: new Date().toISOString(),
+      programs: { apple: [], chrome: [entry], microsoft: [entry], mozilla: [] }
+    })
+  )
+}
 const fullChainServer = await new Promise((resolve) => {
   const server = https.createServer(
     { ...chainCert, cert: Buffer.concat([chainCert.cert, chainIntermediate]) },
@@ -944,21 +965,34 @@ try {
   }
   if (process.platform === 'darwin') {
     assert.equal(await trustRow('apple').getAttribute('data-status'), 'fail')
-    assert.ok(
-      (await tlsCheck.getByTestId('tls-advice').innerText()).includes(
-        'macOS / iOS 不信任「Hachi Test Root CA」'
-      )
-    )
   }
+  // Issue #7: CCADB tells every platform that Apple leaves the root out.
+  const ccadbRows = await tlsCheck
+    .locator('[data-testid="ccadb-row"]')
+    .evaluateAll((els) => els.map((e) => `${e.dataset.program}:${e.dataset.status}`))
+  assert.deepEqual(ccadbRows, [
+    'apple:not-included',
+    'chrome:included',
+    'microsoft:included',
+    'mozilla:not-included'
+  ])
+  assert.ok(
+    (await tlsCheck.getByTestId('tls-advice').innerText()).includes(
+      'macOS / iOS 不信任「Hachi Test Root CA」'
+    )
+  )
   const checkItem = (id) =>
     tlsCheck.locator(`[data-testid="tls-check-item"][data-id="${id}"]`).getAttribute('data-status')
   assert.equal(await checkItem('versions'), 'pass')
   assert.equal(await checkItem('root-sent'), 'pass')
   assert.equal(await checkItem('apple-eku'), 'fail') // the test certificate has no EKU
   await page.screenshot({ path: path.join(shots, '32-tls-check.png') })
+  await tlsCheck.getByTestId('ccadb').evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  await page.screenshot({ path: path.join(shots, '34-ccadb.png') })
   await page.keyboard.press('Escape')
   await tlsCheck.waitFor({ state: 'detached' })
   step('certificate check: Hachi trusts the test CA, Mozilla / the OS / iOS do not (+ advice)')
+  step('certificate check: root programs from CCADB (Apple / Mozilla leave the test root out)')
 
   // http:// has no certificate: the button still works and explains the plain connection.
   await urlInput.fill(api('/json'))
