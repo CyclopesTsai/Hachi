@@ -8,6 +8,24 @@ export const httpMain = {
     noH2c:
       'http:// 不能使用 HTTP/2（Hachi 不支援 h2c）：請改用 https://，或把 HTTP 版本改成「自動」'
   },
+  clientCert: {
+    noFile: (host: string) => `用戶端憑證（${host}）沒有選擇檔案`,
+    notFound: (host: string, file: string) => `找不到用戶端憑證（${host}）的檔案：${file}`,
+    cannotRead: (host: string, file: string, reason: string) =>
+      `無法讀取用戶端憑證（${host}）的檔案 ${file}：${reason}`,
+    wrongPassphrase: (host: string) => `用戶端憑證（${host}）的密碼不正確`,
+    keyMismatch: (host: string) => `用戶端憑證（${host}）的私鑰和憑證不是同一組`,
+    badFile: (host: string, reason: string) =>
+      `用戶端憑證（${host}）的檔案無法使用，請確認格式（PEM 或 PKCS#12）：${reason}`,
+    required: (host: string) =>
+      `伺服器要求用戶端憑證，但沒有設定 ${host} 的憑證（App 設定 → 用戶端憑證）`,
+    likelyRequired: (host: string) =>
+      `伺服器在 TLS 交握時中斷連線，可能是要求用戶端憑證（沒有設定 ${host} 的憑證）`,
+    rejected: (host: string, files: string) => `伺服器不接受用戶端憑證「${host}」（${files}）`,
+    likelyRejected: (host: string, files: string) =>
+      `伺服器在 TLS 交握後中斷連線，可能是不接受用戶端憑證「${host}」（${files}）`,
+    detail: (message: string, original: string) => `${message}。原本的錯誤：${original}`
+  },
   oauth2: {
     empty: (label: string) => `OAuth 2.0 的 ${label} 是空的`,
     invalidUrl: (label: string, text: string) => `OAuth 2.0 的 ${label} 不是有效的網址：${text}`,

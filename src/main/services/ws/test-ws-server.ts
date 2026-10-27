@@ -2,12 +2,13 @@
  * Local WebSocket servers for unit tests (plain and TLS with the self-signed
  * localhost certificate). Not used by the app.
  */
+import { readFileSync } from 'node:fs'
 import http, { type IncomingMessage } from 'node:http'
 import https from 'node:https'
 import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { tlsOptions } from '../http/test-servers'
+import { mtlsFile, tlsOptions } from '../http/test-servers'
 
 export interface SeenConnection {
   url: string
@@ -33,8 +34,22 @@ export interface TestWsServer {
  * - `/hang` accepts the TCP connection but never answers
  * - anything else: echoes every message back (same text / binary type)
  */
-export function startWsServer(options: { tls?: boolean } = {}): Promise<TestWsServer> {
-  const server = options.tls ? https.createServer(tlsOptions) : http.createServer()
+export function startWsServer(
+  options: { tls?: boolean; clientCert?: boolean } = {}
+): Promise<TestWsServer> {
+  // `clientCert`: TLS 1.3, a client certificate from the mTLS test CA required (decision 147).
+  const server = options.clientCert
+    ? https.createServer({
+        key: readFileSync(mtlsFile('server-key.pem')),
+        cert: readFileSync(mtlsFile('server.pem')),
+        ca: [readFileSync(mtlsFile('ca.pem'))],
+        requestCert: true,
+        rejectUnauthorized: true,
+        minVersion: 'TLSv1.3'
+      })
+    : options.tls
+      ? https.createServer(tlsOptions)
+      : http.createServer()
   const wss = new WebSocketServer({
     noServer: true,
     handleProtocols: (protocols) => (protocols.has('chat.v2') ? 'chat.v2' : false)
@@ -81,7 +96,8 @@ export function startWsServer(options: { tls?: boolean } = {}): Promise<TestWsSe
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo
       resolve({
-        url: options.tls ? `wss://localhost:${port}` : `ws://127.0.0.1:${port}`,
+        url:
+          options.tls || options.clientCert ? `wss://localhost:${port}` : `ws://127.0.0.1:${port}`,
         connections,
         broadcast: (data) => sockets.forEach((ws) => ws.send(data)),
         close: () =>

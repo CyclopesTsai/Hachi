@@ -14,6 +14,7 @@ export const INVOKE = {
   appConfirmClose: 'app:confirmClose',
   configGet: 'config:get',
   configUpdate: 'config:update',
+  configCheckClientCertificate: 'config:checkClientCertificate',
   workspaceGetCurrent: 'workspace:getCurrent',
   workspaceCreate: 'workspace:create',
   workspaceOpen: 'workspace:open',

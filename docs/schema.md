@@ -94,11 +94,27 @@
   },
   "fileAccess": {
     "trustedWorkspaces": [] // 允許 {{$file:…}} 讀取資料夾外檔案的 Workspace（只在這台電腦）
-  }
+  },
+  "clientCertificates": [
+    // 用戶端憑證（mTLS），最多 100 筆；送出 https:// 與 wss:// 時依主機帶上（OAuth 2.0 取 Token、憑證檢查也會帶）
+    {
+      "id": "…",
+      "enabled": true,
+      "host": "api.example.com", // 完整主機名稱、"*.example.com"（只比對子網域，不含 example.com 本身）或 IP；存成小寫、IPv6 不含 []
+      "port": null, // null = 所有連接埠
+      "type": "pem", // "pem"（certPath + keyPath）| "pfx"（PKCS#12：pfxPath）
+      "certPath": "/Users/me/certs/client.pem", // 只存路徑，送出時才讀檔
+      "keyPath": "/Users/me/certs/client-key.pem",
+      "pfxPath": "",
+      "passphrase": "" // 加密私鑰或 PKCS#12 的密碼；和 Proxy 密碼一樣以明文存在 app-config.json
+    }
+  ]
 }
 ```
 
 新增的欄位都附預設值，不升版。
+
+多筆用戶端憑證都符合時，用最明確的一筆：完整主機名稱優先於 `*.`（`*.` 之間後綴較長的優先），有指定連接埠的優先於所有連接埠；停用的不算。檔案找不到、密碼錯、私鑰與憑證不符時，連到那個主機的請求失敗（不會不帶憑證就送出）。
 
 ## `workspace.json`
 
@@ -525,6 +541,7 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（新增欄位一律附預設�
 | `script:pre-request` / `script:post-response`、`tests`     | `scripts.preRequest` / `scripts.postResponse`（`tests` 接在後面）；用到不支援的 API（`bru.cookies`、`process.env`、`bru.runner.skipRequest` 等）時提示；Collection / 資料夾的腳本也會執行，`scripts.flow` 對應 `scriptFlow`（沒寫時三明治）                                                                                                                                                                                                                                                |
 | `docs`                                                     | `docs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `environments/*.bru`                                       | 環境（`vars:secret` 只有名稱 → 空值的機密變數，提示重新輸入）                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `bruno.json` 的 `clientCertificates`                       | 不匯入（Hachi 的用戶端憑證在 App 設定）；提示到 App 設定加入                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 OpenCollection YAML 與 `.bru` 的對照（YAML 讀進同一個模型）：
 
@@ -573,6 +590,7 @@ Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: 
 - 斷詞：POSIX shell（單 / 雙引號、`$'…'`、`\` 跳脫與換行接續、`#` 註解）；含 `^"` 或 `^` 換行時改用 Windows cmd 規則（瀏覽器的「Copy as cURL (cmd)」）。開頭的 `$ ` 提示字元與 `curl.exe` 也接受。
 - 支援：`-X`、`-H`、`-d` / `--data` / `--data-raw` / `--data-binary` / `--data-ascii` / `--data-urlencode`、`--json`、`-F` / `--form` / `--form-string`、`-u`、`--oauth2-bearer`、`-A`、`-e`、`-b`（Cookie 字串）、`-G`、`-I`、`-k`、`-m`、`--url`，以及合併的短選項（`-sSL`、`-XPOST`）。
 - HTTP 版本：`--http1.1` / `--http1.0` / `-0` → 只用 HTTP/1.1；`--http2` → 自動（curl 的 `--http2` 也會退回 HTTP/1.1）；`--http2-prior-knowledge` → 只用 HTTP/2；`--http3` 忽略。
+- 用戶端憑證（`-E` / `--cert`、`--key`、`--cert-type`、`--pass`）不匯入（憑證在 App 設定），列為不支援的選項提示。
 - 方法：`-X` > `-I`（HEAD）> 有 Body 時 POST > GET。`-G` 把 data 放進 Params。
 - Body：有 `-F` → Form-data；Content-Type 含 json 或內容是 JSON → JSON；`a=1&b=2` 形式（且沒有其他 Content-Type）→ x-www-form-urlencoded（值會解碼）；其餘 → Raw（Content-Type 預設 `application/x-www-form-urlencoded`，同 curl）。與 Body 模式重複的 Content-Type Header 會移除。
 - URL 照原樣放進 URL 欄位（含 query）；請求名稱為「方法 + 網址（不含 scheme 與 query）」。沒有指定 Auth 時為「沿用上層」。

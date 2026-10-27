@@ -32,6 +32,8 @@ export interface CodegenRequest {
   headers: [string, string][]
   /** Basic auth is passed separately so each language can use its own helper. */
   basicAuth: { username: string; password: string } | null
+  /** The client certificate sending would present (decision 147); the passphrase stays out. */
+  clientCertificate: CodegenClientCert | null
   body: CodegenBody
   options: {
     validateSSL: boolean
@@ -42,6 +44,32 @@ export interface CodegenRequest {
     httpVersion: HttpVersionSetting
   }
 }
+
+export interface CodegenClientCert {
+  /** The entry's host, as the settings list shows it. */
+  host: string
+  type: 'pem' | 'pfx'
+  certPath: string
+  keyPath: string
+  pfxPath: string
+  hasPassphrase: boolean
+}
+
+/** cURL options presenting the certificate; the passphrase is a placeholder. */
+function curlClientCert(cert: CodegenClientCert): string[] {
+  const lines =
+    cert.type === 'pfx'
+      ? [`--cert-type P12 --cert ${shellQuote(cert.pfxPath)}`]
+      : [`--cert ${shellQuote(cert.certPath)}`, `--key ${shellQuote(cert.keyPath)}`]
+  if (cert.hasPassphrase) lines.push(`--pass ${shellQuote('<passphrase>')}`)
+  return lines
+}
+
+/** For the languages without generated certificate code. */
+const clientCertNote = (cert: CodegenClientCert, comment: string) =>
+  `${comment} Hachi presents the client certificate for ${cert.host} (${
+    cert.type === 'pfx' ? cert.pfxPath : `${cert.certPath} + ${cert.keyPath}`
+  }); set it up in your HTTP client.`
 
 /** Repeated header names are joined (`Cookie` with "; ", others with ", "). */
 function headerObject(headers: [string, string][]): [string, string][] {
@@ -113,6 +141,7 @@ function curl(r: CodegenRequest): string {
   if (!r.options.validateSSL) lines.push('--insecure')
   if (r.options.followRedirects) lines.push(`-L --max-redirs ${r.options.maxRedirects}`)
   if (r.options.timeoutMs > 0) lines.push(`--max-time ${r.options.timeoutMs / 1000}`)
+  if (r.clientCertificate) lines.push(...curlClientCert(r.clientCertificate))
   if (r.options.httpVersion === 'http1') lines.push('--http1.1')
   if (r.options.httpVersion === 'http2') lines.push('--http2-prior-knowledge')
   return lines.join(' \\\n  ')
@@ -230,6 +259,7 @@ function fetchCode(r: CodegenRequest): string {
       '// (Node.js: NODE_TLS_REJECT_UNAUTHORIZED=0 turns it off for the whole process).'
     )
   }
+  if (r.clientCertificate) comments.push(clientCertNote(r.clientCertificate, '//'))
   if (r.options.httpVersion !== 'auto') {
     comments.push(
       `// Hachi sends this request with ${HTTP_VERSION_TEXT[r.options.httpVersion]}; fetch picks the HTTP version itself.`
@@ -293,6 +323,7 @@ function axiosCode(r: CodegenRequest): string {
   return [
     ...imports,
     '',
+    ...(r.clientCertificate ? [clientCertNote(r.clientCertificate, '//'), ''] : []),
     ...(r.options.httpVersion === 'http2'
       ? ['// Hachi sends this request with HTTP/2 only; axios in Node.js sends HTTP/1.1.', '']
       : []),
@@ -339,6 +370,7 @@ function pyPairs(pairs: [string, string][], valueOf: (v: string) => string = pyS
 
 function pythonCode(r: CodegenRequest): string {
   const lines = ['import requests', '']
+  if (r.clientCertificate) lines.push(clientCertNote(r.clientCertificate, '#'), '')
   if (r.options.httpVersion === 'http2') {
     lines.push(
       '# Hachi sends this request with HTTP/2 only; requests speaks HTTP/1.1',

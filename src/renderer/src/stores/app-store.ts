@@ -58,6 +58,8 @@ interface AppState {
   /** Request defaults of the current Workspace. */
   workspaceSettings: WorkspaceSettings | null
   appSettingsOpen: boolean
+  /** The client certificates dialog (decision 147). */
+  clientCertsOpen: boolean
   /** Error from an action without its own error display (e.g. a menu command). */
   notice: string | null
 
@@ -66,6 +68,7 @@ interface AppState {
   saveWorkspaceSettings(settings: WorkspaceSettings): Promise<void>
   updateConfig(input: ConfigUpdateInput): Promise<void>
   setAppSettingsOpen(open: boolean): void
+  setClientCertsOpen(open: boolean): void
   setNotice(notice: string | null): void
   refreshRecent(): Promise<void>
   /** These resolve null when the user cancelled (unsaved tabs prompt or folder picker). */
@@ -98,6 +101,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   createFocusNonce: 0,
   workspaceSettings: null,
   appSettingsOpen: false,
+  clientCertsOpen: false,
   notice: null,
 
   async loadWorkspaceSettings() {
@@ -123,6 +127,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   setAppSettingsOpen(open) {
     set({ appSettingsOpen: open })
+  },
+
+  setClientCertsOpen(open) {
+    set({ clientCertsOpen: open })
   },
 
   setNotice(notice) {

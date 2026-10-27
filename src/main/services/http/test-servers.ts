@@ -8,6 +8,7 @@ import http2 from 'node:http2'
 import https from 'node:https'
 import net, { type AddressInfo } from 'node:net'
 import path from 'node:path'
+import type { TLSSocket } from 'node:tls'
 import zlib from 'node:zlib'
 
 const fixtures = path.join(import.meta.dirname, '__fixtures__')
@@ -194,6 +195,43 @@ export function startHttp2Server(options: { h2Only?: boolean } = {}): Promise<Te
       for (const session of sessions) session.destroy()
       return s.close()
     }
+  }))
+}
+
+const mtlsDir = path.join(fixtures, 'mtls')
+/** The mTLS test files (decision 147): `mtlsFile('client.pem')`. */
+export const mtlsFile = (name: string) => path.join(mtlsDir, name)
+
+/**
+ * HTTPS server that requires a client certificate from the test CA (decision 147).
+ * Answers with the certificate's CN. TLS 1.3 servers refuse after the handshake.
+ */
+export function startMtlsServer(version: 'TLSv1.2' | 'TLSv1.3' = 'TLSv1.3'): Promise<TestServer> {
+  const server = https.createServer(
+    {
+      key: readFileSync(mtlsFile('server-key.pem')),
+      cert: readFileSync(mtlsFile('server.pem')),
+      ca: [readFileSync(mtlsFile('ca.pem'))],
+      requestCert: true,
+      rejectUnauthorized: true,
+      minVersion: version,
+      maxVersion: version
+    },
+    (req, res) => {
+      const url = new URL(req.url ?? '/', 'https://x')
+      if (url.pathname === '/redirect') {
+        res.writeHead(302, { location: url.searchParams.get('to') ?? '/' })
+        res.end()
+        return
+      }
+      const cn = (req.socket as TLSSocket).getPeerCertificate().subject?.CN
+      res.setHeader('content-type', 'text/plain')
+      res.end(`hello ${cn}`)
+    }
+  )
+  return listen(server, 'https').then((s) => ({
+    ...s,
+    url: s.url.replace('127.0.0.1', 'localhost')
   }))
 }
 

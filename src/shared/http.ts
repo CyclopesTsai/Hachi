@@ -36,6 +36,14 @@ export type ResponseHttpVersion = (typeof RESPONSE_HTTP_VERSIONS)[number]
 /** "HTTP/1.1" / "HTTP/2", as the response bar shows it. */
 export const httpVersionLabel = (version: ResponseHttpVersion) => `HTTP/${version}`
 
+/** The client certificate a response's connection presented (decision 147). */
+export interface ResponseClientCert {
+  /** The entry's host, as the settings list shows it ("*.example.com", "api.test:8443"). */
+  host: string
+  /** Its file names. */
+  files: string
+}
+
 export interface HttpResponseData {
   kind: 'response'
   runId: string
@@ -50,6 +58,8 @@ export interface HttpResponseData {
   bodyBytes: number
   /** Protocol of the final response, from the connection's TLS ALPN (decision 146). */
   httpVersion: ResponseHttpVersion
+  /** null when the final response's connection sent no client certificate. */
+  clientCertificate: ResponseClientCert | null
   /** Approximate size of the response headers in bytes (HTTP/2: uncompressed fields). */
   headerBytes: number
   /** Time until the response headers arrived / until the body was fully read. */
@@ -83,6 +93,8 @@ export const HTTP_ERROR_CODES = [
   'FILE_ACCESS',
   /** The server and the request's HTTP version setting do not match (decision 146). */
   'HTTP_VERSION',
+  /** A client certificate file cannot be used, or the server refused / asked for one (decision 147). */
+  'CLIENT_CERT',
   'UNKNOWN'
 ] as const
 export type HttpErrorCode = (typeof HTTP_ERROR_CODES)[number]
@@ -279,4 +291,6 @@ export interface TlsCheckResult {
   insecure?: 'http' | 'ws'
   /** Root program inclusion from CCADB (issue #7). */
   ccadb?: TlsCcadbResult
+  /** The client certificate the check presented (decision 147); null / absent: none. */
+  clientCertificate?: ResponseClientCert | null
 }

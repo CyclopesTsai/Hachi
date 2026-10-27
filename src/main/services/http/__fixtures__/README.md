@@ -18,3 +18,11 @@ only because it embeds two Certificate Transparency SCTs; the SCT parsing tests 
 Mozilla; downloaded 2026-10-22 from `https://ccadb.my.salesforce-sites.com/ccadb/Report?Name=<Program>TLSServerAuthenticationCSV`)
 for the CCADB parser and root program tests (issue #7): they include TWCA CYBER Root CA
 (not in Apple's list) and roots with each program's limits.
+
+`mtls/` holds throwaway certificates for the client certificate (mTLS) tests (decision 147):
+a test CA (`ca.pem`) with a server certificate for `localhost` / `127.0.0.1` and a client
+certificate (PEM key, the key encrypted with `secret`, `client.p12` with AES and
+`client-legacy.p12` with RC2-40 / 3DES, both with the passphrase `secret`), plus `stranger.pem`
+from another CA (`other-ca.pem`). System Node's OpenSSL 3 cannot read the legacy `.p12`
+(Electron's BoringSSL can): only the E2E test uses it. Regenerate with `sh make.sh` in that
+folder; the CA keys are deleted afterwards.

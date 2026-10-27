@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Eye, Loader2, Send } from 'lucide-react'
+import { AlertTriangle, Download, Eye, KeyRound, Loader2, Send } from 'lucide-react'
 import { useState } from 'react'
 import {
   formatBytes,
@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/u
 import { cn } from '@renderer/lib/utils'
 import { statusColor } from '@renderer/lib/status-color'
 import type { RequestTab } from '@renderer/features/tabs/tab-model'
+import { useAppStore } from '@renderer/stores/app-store'
 import { useTabsStore } from '@renderer/stores/tabs-store'
 import { testSummary } from '@shared/scripts'
 import { HeadersTable, ResponseBody } from './ResponseBody'
@@ -185,6 +186,19 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
           <p className="text-xs text-muted-foreground">
             {result.url} · {formatDuration(result.timings.totalMs)}
           </p>
+          {result.code === 'CLIENT_CERT' && (
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="client-cert-settings"
+                onClick={() => useAppStore.getState().setClientCertsOpen(true)}
+              >
+                <KeyRound />
+                {msg().http.response.clientCertSettings}
+              </Button>
+            </div>
+          )}
           {result.tls && (
             <TlsDiagnosisView
               diagnosis={result.tls}
@@ -259,6 +273,22 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
           )}
         </TabsList>
         <div className="flex-1" />
+        {result.clientCertificate && (
+          <span
+            className="text-muted-foreground"
+            title={msg().http.response.clientCert(
+              result.clientCertificate.host,
+              result.clientCertificate.files
+            )}
+            aria-label={msg().http.response.clientCert(
+              result.clientCertificate.host,
+              result.clientCertificate.files
+            )}
+            data-testid="response-client-cert"
+          >
+            <KeyRound className="size-3.5" />
+          </span>
+        )}
         <span className="font-mono text-xs text-muted-foreground" data-testid="response-protocol">
           {httpVersionLabel(result.httpVersion)}
         </span>

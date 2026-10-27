@@ -445,6 +445,22 @@ describe('exportBrunoCollection', () => {
     expect(strip(again.environments)).toEqual(strip(environments))
   })
 
+  it('does not import client certificates, and says where they go (decision 147)', () => {
+    const certs = {
+      clientCertificates: {
+        enabled: true,
+        certs: [{ domain: 'api.test', type: 'pfx', pfxFilePath: 'apns.p12', passphrase: 'x' }]
+      }
+    }
+    const withCerts = {
+      ...folderFiles,
+      'bruno.json': JSON.stringify({ version: '1', name: 'Shop', type: 'collection', ...certs })
+    }
+    const note = msg().transferMain.bruno.clientCertificates
+    expect(importBrunoFolder(withCerts, id).warnings.join()).toContain(note)
+    expect(importBrunoFolder(folderFiles, id).warnings.join()).not.toContain(note)
+  })
+
   it('warns that Bruno has no HTTP version setting (decision 146)', () => {
     const { collection } = importBrunoFolder(folderFiles, id)
     expect(exportBrunoCollection(collection, []).warnings.join()).not.toMatch(/HTTP 版本/)

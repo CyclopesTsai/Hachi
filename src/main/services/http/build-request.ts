@@ -332,6 +332,7 @@ export function buildCodegenRequest(input: {
       url,
       headers,
       basicAuth,
+      clientCertificate: null,
       body,
       options: {
         validateSSL: s.validateSSL ?? workspace.validateSSL,

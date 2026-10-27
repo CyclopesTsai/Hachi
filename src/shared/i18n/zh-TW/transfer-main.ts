@@ -32,6 +32,8 @@ export const transferMain = {
     hachiScript: '腳本使用了 hachi.* 寫法，Bruno 無法執行，請改成 bru / req / res',
     ssl: '請求的 SSL 設定 Bruno 沒有對應，未匯出',
     httpVersion: '請求的 HTTP 版本設定 Bruno 沒有對應，未匯出',
+    clientCertificates:
+      'Collection 設定了用戶端憑證，沒有匯入：Hachi 的用戶端憑證在 App 設定（設定 → 用戶端憑證），請在那裡加入',
     settings: '請求的逾時 / SSL / 轉址設定 Bruno 的 .bru 檔沒有對應，未匯出',
     secretCollectionVars: '機密的 Collection 變數不會匯出值（已留空）',
     envSecretNames: '環境的機密變數只匯出名稱（Bruno 也不把值存在檔案中）',

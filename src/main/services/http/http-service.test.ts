@@ -1,12 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { proxySettingsSchema } from '@shared/schemas/app-config'
+import { msg } from '@shared/i18n'
+import {
+  clientCertificateSchema,
+  proxySettingsSchema,
+  type ClientCertificate
+} from '@shared/schemas/app-config'
 import { httpRequestSchema } from '@shared/schemas/http-request'
 import { workspaceSettingsSchema } from '@shared/schemas/workspace'
 import { resolveInherited, type ContainerLevel } from './build-request'
 import type { VariableLayer } from '@shared/variables'
 import { CookieJar } from './cookie-jar'
 import { HttpService, ResponseStore } from './http-service'
-import { startHttpServer, type TestServer } from './test-servers'
+import { mtlsFile, startHttpServer, startMtlsServer, type TestServer } from './test-servers'
 
 let server: TestServer
 beforeAll(async () => {
@@ -365,5 +370,100 @@ describe('HttpService cookie jar (decision 129)', () => {
     expect(await send(http, '/redirect?n=5')).toMatchObject({ code: 'TOO_MANY_REDIRECTS' })
     const kept = await send(http, '/redirect?n=1', { settings: { followRedirects: false } })
     expect(kept).toMatchObject({ status: 302, redirects: 0 })
+  })
+})
+
+describe('HttpService client certificates (decision 147)', () => {
+  let mtls: TestServer
+  beforeAll(async () => {
+    mtls = await startMtlsServer()
+  })
+  afterAll(() => mtls.close())
+
+  const cert = (host: string, files: [string, string] = ['client.pem', 'client-key.pem']) =>
+    clientCertificateSchema.parse({
+      id: host,
+      host,
+      certPath: mtlsFile(files[0]),
+      keyPath: mtlsFile(files[1])
+    })
+  const withCerts = (list: ClientCertificate[]) =>
+    new HttpService({
+      getContainerChain: async () => [],
+      resolveInherited,
+      getVariableLayers: async () => [],
+      getWorkspaceSettings: async () => workspaceSettingsSchema.parse({ validateSSL: false }),
+      getProxySettings: () => proxySettingsSchema.parse({}),
+      resolveSystemProxy: async () => 'DIRECT',
+      userAgent: 'Hachi/test',
+      getClientCertificates: () => list
+    })
+  const send = (http: HttpService, url: string) =>
+    http.send({ runId: url, parentId: null, environmentId: null, request: request(url) })
+  const host = () => new URL(mtls.url).host
+
+  it('sends the certificate and shows which one', async () => {
+    const result = await send(withCerts([cert('localhost')]), `${mtls.url}/`)
+    expect(result).toMatchObject({
+      kind: 'response',
+      status: 200,
+      clientCertificate: { host: 'localhost', files: 'client.pem + client-key.pem' }
+    })
+  })
+
+  it('explains a server asking for, or refusing, the certificate', async () => {
+    const missing = await send(withCerts([]), `${mtls.url}/`)
+    expect(missing).toMatchObject({ kind: 'error', code: 'CLIENT_CERT' })
+    expect(missing.kind === 'error' && missing.message).toContain(
+      msg().httpMain.clientCert.required(host())
+    )
+    const refused = await send(
+      withCerts([cert('localhost', ['stranger.pem', 'stranger-key.pem'])]),
+      `${mtls.url}/`
+    )
+    expect(refused.kind === 'error' && [refused.code, refused.message]).toEqual([
+      'CLIENT_CERT',
+      expect.stringContaining('stranger.pem + stranger-key.pem')
+    ])
+  })
+
+  it('puts the certificate in generated cURL without its passphrase', async () => {
+    const code = await withCerts([
+      clientCertificateSchema.parse({
+        id: 'p',
+        host: 'localhost',
+        type: 'pfx',
+        pfxPath: '/certs/client.p12',
+        passphrase: 'secret'
+      })
+    ]).resolveForCode({
+      parentId: null,
+      environmentId: null,
+      request: request(`${mtls.url}/`),
+      revealSecrets: false
+    })
+    expect(code.request.clientCertificate).toEqual({
+      host: 'localhost',
+      type: 'pfx',
+      certPath: '',
+      keyPath: '',
+      pfxPath: '/certs/client.p12',
+      hasPassphrase: true
+    })
+    expect(JSON.stringify(code)).not.toContain('secret')
+  })
+
+  it('the certificate check presents it too', async () => {
+    const result = await withCerts([cert('localhost')]).checkTls({
+      parentId: null,
+      environmentId: null,
+      url: `${mtls.url}/`,
+      useProxy: false
+    })
+    expect(result.clientCertificate).toEqual({
+      host: 'localhost',
+      files: 'client.pem + client-key.pem'
+    })
+    expect(result.diagnosis.chain.length).toBeGreaterThan(0)
   })
 })

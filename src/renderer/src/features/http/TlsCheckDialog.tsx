@@ -1,4 +1,12 @@
-import { AlertTriangle, Lightbulb, Loader2, RotateCw, ShieldCheck, ShieldOff } from 'lucide-react'
+import {
+  AlertTriangle,
+  KeyRound,
+  Lightbulb,
+  Loader2,
+  RotateCw,
+  ShieldCheck,
+  ShieldOff
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type {
   TlsCcadbResult,
@@ -220,6 +228,15 @@ function Result({ result, onRefreshCcadb }: { result: TlsCheckResult; onRefreshC
         <p className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
           <AlertTriangle className="size-3.5 shrink-0" />
           {msg().common.unresolvedVars(result.unresolvedVariables)}
+        </p>
+      )}
+      {result.clientCertificate && (
+        <p
+          className="flex items-center gap-1.5 text-xs text-muted-foreground"
+          data-testid="tls-client-cert"
+        >
+          <KeyRound className="size-3.5 shrink-0" />
+          {msg().tls.clientCert(result.clientCertificate.host, result.clientCertificate.files)}
         </p>
       )}
       {result.trust.length > 0 && (

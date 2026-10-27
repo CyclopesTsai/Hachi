@@ -88,6 +88,38 @@ export const fileAccessSettingsSchema = z.object({
   trustedWorkspaces: z.array(z.string().min(1)).max(1000).default([])
 })
 
+/**
+ * Client certificates (mTLS, decision 147): sent to the servers whose host matches, for
+ * https:// and wss://. Only file paths are kept; the files are read when sending.
+ */
+export const CLIENT_CERT_TYPES = ['pem', 'pfx'] as const
+export type ClientCertType = (typeof CLIENT_CERT_TYPES)[number]
+export const CLIENT_CERTS_MAX = 100
+/** "api.example.com", "*.example.com" (subdomains only), an IPv4 or IPv6 address. */
+export const CLIENT_CERT_HOST_PATTERN = /^(\*\.)?[a-z0-9_-]+(\.[a-z0-9_-]+)*$|^[0-9a-f:.]+$/
+
+export const clientCertificateSchema = z.object({
+  id: z.string().min(1).max(100),
+  enabled: z.boolean().default(true),
+  host: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .transform((h) => h.replace(/^\[|\]$/g, ''))
+    .pipe(z.string().min(1).max(255).regex(CLIENT_CERT_HOST_PATTERN)),
+  /** null = every port. */
+  port: z.number().int().min(1).max(65535).nullable().default(null),
+  type: z.enum(CLIENT_CERT_TYPES).default('pem'),
+  /** PEM: the certificate (may hold the chain) and the private key. */
+  certPath: z.string().max(4096).default(''),
+  keyPath: z.string().max(4096).default(''),
+  /** PKCS#12 (.p12 / .pfx). */
+  pfxPath: z.string().max(4096).default(''),
+  /** Of the PEM private key or the PKCS#12 file; stored here like the proxy password. */
+  passphrase: z.string().max(1024).default('')
+})
+export type ClientCertificate = z.infer<typeof clientCertificateSchema>
+
 export const appConfigSchema = z.object({
   version: z.literal(APP_CONFIG_VERSION),
   theme: themeSchema.default('system'),
@@ -99,7 +131,8 @@ export const appConfigSchema = z.object({
   history: historySettingsSchema.prefault({}),
   websocket: websocketSettingsSchema.prefault({}),
   scripts: scriptSettingsSchema.prefault({}),
-  fileAccess: fileAccessSettingsSchema.prefault({})
+  fileAccess: fileAccessSettingsSchema.prefault({}),
+  clientCertificates: z.array(clientCertificateSchema).max(CLIENT_CERTS_MAX).default([])
 })
 export type AppConfig = z.infer<typeof appConfigSchema>
 

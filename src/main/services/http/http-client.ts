@@ -18,8 +18,16 @@ import {
   type ResponseBody,
   type ResponseHttpVersion
 } from '@shared/http'
+import { portOf } from '@shared/client-certs'
 import { msg } from '@shared/i18n'
 import type { HttpVersionSetting } from '@shared/schemas/http-request'
+import {
+  ClientCertError,
+  ClientCertSet,
+  certUse,
+  type ClientCertMatch,
+  type ClientCertUse
+} from './client-certs'
 import type { BuiltRequest } from './build-request'
 import {
   BodyTooLargeError,
@@ -43,6 +51,8 @@ export interface SendOptions {
    * so every response's Set-Cookie is kept and every hop gets its cookies.
    */
   cookies?: CookieHooks
+  /** Client certificates by host (decision 147); none when absent. */
+  clientCerts?: ClientCertSet
 }
 
 export interface CookieHooks {
@@ -73,6 +83,21 @@ export interface SendOutcome {
   result: HttpResult
   /** Decoded body bytes (kept in main for "show" / "download"); null on error. */
   body: Buffer | null
+  /**
+   * The server ended the connection or sent a TLS alert: perhaps over the client
+   * certificate (decision 147), worth a second look.
+   */
+  refused?: boolean
+}
+
+/** Codes along an error's cause chain. */
+function errorCodes(error: unknown): string[] {
+  const codes: string[] = []
+  for (let c = error as { code?: unknown; cause?: unknown } | undefined, i = 0; c && i < 5; i++) {
+    if (typeof c.code === 'string') codes.push(c.code)
+    c = c.cause as typeof c
+  }
+  return codes
 }
 
 const TLS_CODES = new Set([
@@ -118,16 +143,25 @@ function originKey(protocol: string, hostname: string, port: string): string {
   return `${protocol}//${hostname}:${port || (protocol === 'https:' ? '443' : '80')}`
 }
 
+/** What the connections of one send negotiated, by origin. */
+interface Seen {
+  versions: Map<string, ResponseHttpVersion>
+  certs: Map<string, ClientCertUse>
+}
+
 /**
- * Wraps a connector: records each connection's protocol (TLS ALPN) and, for `http2`,
- * refuses connections that did not negotiate h2 (plain http:// included: no h2c).
+ * Wraps a connector: records each connection's protocol (TLS ALPN) and client certificate
+ * and, for `http2`, refuses connections that did not negotiate h2 (plain http:// included:
+ * no h2c). An unusable certificate file fails the connection before it starts.
  */
-function versionedConnector(
+function trackedConnector(
   connect: buildConnector.connector,
   version: HttpVersionSetting,
-  seen: Map<string, ResponseHttpVersion>
+  seen: Seen,
+  cert: ClientCertMatch | null
 ): buildConnector.connector {
-  return (options, callback) =>
+  return (options, callback) => {
+    if (options.protocol === 'https:' && cert?.error) return callback(cert.error, null)
     connect(options, (...args) => {
       const [error, socket] = args
       if (error) return callback(error, null)
@@ -141,9 +175,12 @@ function versionedConnector(
         )
         return
       }
-      seen.set(originKey(options.protocol, options.hostname, options.port), h2 ? '2' : '1.1')
+      const key = originKey(options.protocol, options.hostname, options.port)
+      seen.versions.set(key, h2 ? '2' : '1.1')
+      if (options.protocol === 'https:' && cert?.tls) seen.certs.set(key, certUse(cert.entry))
       callback(null, socket)
     })
+  }
 }
 
 /** Maps any error thrown while sending to an error code + readable message. */
@@ -171,6 +208,7 @@ export function classifyError(
     const name = e.name ?? ''
     if (current instanceof HttpVersionError)
       return { code: 'HTTP_VERSION', message: current.message }
+    if (current instanceof ClientCertError) return { code: 'CLIENT_CERT', message: current.message }
     // The server accepts none of the protocols offered in TLS ALPN.
     if (code.endsWith('NO_APPLICATION_PROTOCOL')) {
       const text = msg().httpMain.version
@@ -224,31 +262,59 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
   const idle = { headersTimeout: timeoutMs, bodyTimeout: timeoutMs }
   // HTTP version (decision 146): ALPN offers h2 unless `http1`; `http2` asks for it first.
   const alpn = { allowH2: httpVersion !== 'http1', preferH2: httpVersion === 'http2' }
-  const seen = new Map<string, ResponseHttpVersion>()
-  // Every connection (direct, or the TLS session inside a proxy tunnel) goes through here.
-  const factory = (origin: string | URL, opts: object) => {
-    const o = opts as { connect: buildConnector.connector }
-    return new Pool(origin, { ...o, connect: versionedConnector(o.connect, httpVersion, seen) })
+  const seen: Seen = { versions: new Map(), certs: new Map() }
+  // Client certificate of each origin (decision 147): picked when its first connection opens.
+  const certs = options.clientCerts ?? ClientCertSet.empty
+  const certFor = (origin: string | URL): ClientCertMatch | null => {
+    const url = new URL(origin)
+    return url.protocol === 'https:' ? certs.match(url.hostname, portOf(url)) : null
   }
-
-  const agent: Dispatcher = options.proxyUrl
-    ? new ProxyAgent({
-        uri: options.proxyUrl,
-        ...(options.proxyAuth
-          ? {
-              token: `Basic ${Buffer.from(
-                `${options.proxyAuth.username}:${options.proxyAuth.password}`,
-                'utf8'
-              ).toString('base64')}`
-            }
-          : {}),
-        requestTls: { ...tls, preferH2: alpn.preferH2 },
-        proxyTls: tls,
-        allowH2: alpn.allowH2,
-        factory,
-        ...idle
+  // Every connection (direct, or the TLS session inside a proxy tunnel) goes through here.
+  const pool =
+    (cert: ClientCertMatch | null) =>
+    (origin: string | URL, opts: object): Dispatcher => {
+      const o = opts as { connect: buildConnector.connector }
+      return new Pool(origin, {
+        ...o,
+        connect: trackedConnector(o.connect, httpVersion, seen, cert)
       })
-    : new Agent({ connect: buildConnector({ ...tls, ...alpn }), factory, ...idle })
+    }
+  const proxyUrl = options.proxyUrl
+  const proxyToken = options.proxyAuth
+    ? `Basic ${Buffer.from(
+        `${options.proxyAuth.username}:${options.proxyAuth.password}`,
+        'utf8'
+      ).toString('base64')}`
+    : null
+
+  // One dispatcher per origin, so each gets its own certificate (a ProxyAgent has a single
+  // TLS setup for all its tunnels).
+  const agent: Dispatcher = proxyUrl
+    ? new Agent({
+        ...idle,
+        factory: (origin) => {
+          const cert = certFor(origin)
+          return new ProxyAgent({
+            uri: proxyUrl,
+            ...(proxyToken ? { token: proxyToken } : {}),
+            requestTls: { ...tls, preferH2: alpn.preferH2, ...cert?.tls },
+            proxyTls: tls,
+            allowH2: alpn.allowH2,
+            factory: pool(cert),
+            ...idle
+          })
+        }
+      })
+    : new Agent({
+        ...idle,
+        factory: (origin, opts) => {
+          const cert = certFor(origin)
+          return pool(cert)(origin, {
+            ...opts,
+            connect: buildConnector({ ...tls, ...alpn, ...cert?.tls })
+          })
+        }
+      })
   const manual = options.cookies !== undefined
   const dispatcher =
     followRedirects && maxRedirects > 0 && !manual
@@ -343,8 +409,8 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
     const statusText = response.statusText || STATUS_CODES[response.statusCode] || ''
     const history = (response.context as { history?: URL[] } | undefined)?.history
     const finalUrl = new URL(manual ? hop.url : (history?.at(-1)?.toString() ?? built.url))
-    const protocol: ResponseHttpVersion =
-      seen.get(originKey(finalUrl.protocol, finalUrl.hostname, finalUrl.port)) ?? '1.1'
+    const finalKey = originKey(finalUrl.protocol, finalUrl.hostname, finalUrl.port)
+    const protocol: ResponseHttpVersion = seen.versions.get(finalKey) ?? '1.1'
     return {
       result: {
         kind: 'response',
@@ -359,6 +425,7 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
         body,
         bodyBytes: decoded.length,
         httpVersion: protocol,
+        clientCertificate: seen.certs.get(finalKey) ?? null,
         // HTTP/2 has no status line and compresses headers (HPACK): count the fields as is.
         headerBytes:
           protocol === '2'
@@ -390,7 +457,8 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
         timings: { totalMs: performance.now() - started },
         unresolvedVariables: []
       },
-      body: null
+      body: null,
+      refused: errorCodes(error).some((c) => /_ALERT_|^(ECONNRESET|EPIPE|UND_ERR_SOCKET)$/.test(c))
     }
   } finally {
     void agent.destroy().catch(() => undefined)

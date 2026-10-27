@@ -44,6 +44,7 @@ export const tls = {
   title: '憑證檢查',
   notEncrypted: '沒有加密',
   readOnly: '只讀取伺服器送出的憑證，不會修改任何信任設定',
+  clientCert: (host: string, files: string) => `已送出用戶端憑證：${host}（${files}）`,
   again: '重新檢查',
   checking: '檢查中…（會連線幾次並請作業系統驗證，可能需要十幾秒）',
   button: '憑證',

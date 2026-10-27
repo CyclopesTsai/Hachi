@@ -47,6 +47,7 @@ export const tls: Messages['tls'] = {
   title: 'Certificate Check',
   notEncrypted: 'Not encrypted',
   readOnly: 'Only reads the certificates the server sends; no trust settings are changed',
+  clientCert: (host, files) => `Client certificate presented: ${host} (${files})`,
   again: 'Check Again',
   checking:
     'Checking… (connects a few times and asks the operating system; may take a few seconds)',

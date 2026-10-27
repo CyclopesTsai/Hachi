@@ -10,8 +10,9 @@ import net from 'node:net'
 import tls, { type DetailedPeerCertificate, type TLSSocket } from 'node:tls'
 import type { TlsCertInfo, TlsDiagnosis, TlsVerdict } from '@shared/http'
 import { msg } from '@shared/i18n'
+import type { ClientCertTls } from './client-certs'
 
-const DIAGNOSIS_TIMEOUT_MS = 10_000
+export const DIAGNOSIS_TIMEOUT_MS = 10_000
 const MAX_CHAIN = 10
 
 let trustStore: X509Certificate[] | null = null
@@ -219,6 +220,8 @@ export interface Route {
   /** http://host:port of an HTTP proxy, or null to connect directly. */
   proxyUrl: string | null
   proxyAuth: { username: string; password: string } | null
+  /** The client certificate a request to this host presents (decision 147). */
+  clientCert?: ClientCertTls | null
 }
 
 /** A TCP socket to the target, through the proxy's CONNECT when there is one. */
@@ -308,6 +311,7 @@ export async function handshake(
       let s: TLSSocket
       try {
         s = tls.connect({
+          ...route.clientCert,
           ...options,
           socket: raw,
           servername: net.isIP(host) ? undefined : host,

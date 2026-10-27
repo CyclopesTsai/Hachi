@@ -13,6 +13,7 @@ import type {
 } from '../http'
 import type {
   AppConfig,
+  ClientCertificate,
   HistorySettings,
   WebsocketSettings,
   ProxySettings,
@@ -102,6 +103,8 @@ export interface ConfigUpdateInput {
   /** Lowering the limit removes the oldest entries (in all Workspaces) right away. */
   history?: HistorySettings
   websocket?: WebsocketSettings
+  /** The whole list (decision 147). */
+  clientCertificates?: ClientCertificate[]
 }
 
 export interface WorkspaceCreateInput {
@@ -488,6 +491,11 @@ export interface InvokeMap {
   'app:confirmClose': { input: void; output: void }
   'config:get': { input: void; output: AppConfig }
   'config:update': { input: ConfigUpdateInput; output: AppConfig }
+  /** Reads an entry's files now; the reason it cannot be used, or null (decision 147). */
+  'config:checkClientCertificate': {
+    input: ClientCertificate
+    output: { error: string | null }
+  }
   'workspace:getCurrent': { input: void; output: WorkspaceInfo | null }
   'workspace:create': { input: WorkspaceCreateInput; output: WorkspaceInfo }
   'workspace:open': { input: WorkspacePathInput; output: WorkspaceInfo }
@@ -655,6 +663,7 @@ export interface HachiApi {
   config: {
     get: InvokeFn<'config:get'>
     update: InvokeFn<'config:update'>
+    checkClientCertificate: InvokeFn<'config:checkClientCertificate'>
   }
   workspace: {
     getCurrent: InvokeFn<'workspace:getCurrent'>

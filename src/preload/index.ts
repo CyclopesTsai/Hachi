@@ -26,7 +26,8 @@ const api: HachiApi = {
   },
   config: {
     get: () => invoke(INVOKE.configGet),
-    update: (input) => invoke(INVOKE.configUpdate, input)
+    update: (input) => invoke(INVOKE.configUpdate, input),
+    checkClientCertificate: (input) => invoke(INVOKE.configCheckClientCertificate, input)
   },
   workspace: {
     getCurrent: () => invoke(INVOKE.workspaceGetCurrent),

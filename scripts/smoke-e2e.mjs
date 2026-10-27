@@ -181,6 +181,38 @@ const startHttp2 = (allowHTTP1) =>
   })
 const [h2Server, h2OnlyServer] = await Promise.all([startHttp2(true), startHttp2(false)])
 
+// Decision 147: HTTPS + WSS server that requires a client certificate from the test CA.
+const mtlsDir = path.join(chainDir, 'mtls')
+const legacyP12 = path.join(mtlsDir, 'client-legacy.p12')
+const mtlsTls = {
+  key: await readFile(path.join(mtlsDir, 'server-key.pem')),
+  cert: await readFile(path.join(mtlsDir, 'server.pem')),
+  ca: [await readFile(path.join(mtlsDir, 'ca.pem'))]
+}
+const mtlsServer = await new Promise((resolve) => {
+  const server = https.createServer(
+    {
+      ...mtlsTls,
+      requestCert: true,
+      rejectUnauthorized: true,
+      minVersion: 'TLSv1.3'
+    },
+    (req, res) => res.end(`hello ${req.socket.getPeerCertificate().subject?.CN}`)
+  )
+  const wss = new WebSocketServer({ server })
+  wss.on('connection', (socket) => socket.send('hello over wss'))
+  server.listen(0, '127.0.0.1', () =>
+    resolve({
+      port: server.address().port,
+      close: () => {
+        wss.clients.forEach((c) => c.terminate())
+        server.closeAllConnections()
+        server.close()
+      }
+    })
+  )
+})
+
 // Local WebSocket echo server for the Phase 4 checks.
 const wsSeen = []
 const wsServer = await new Promise((resolve) => {
@@ -2344,6 +2376,101 @@ try {
   await httpVersion.selectOption('auto')
   step('HTTP version: Auto uses HTTP/2, HTTP/1.1 only / HTTP/2 only, mismatch errors')
 
+  // ---- Decision 147: client certificates (mTLS) ----
+  const mtlsUrl = `https://localhost:${mtlsServer.port}/`
+  const sslSelect = page.getByTestId('request-settings').getByLabel('SSL 憑證驗證')
+  await sslSelect.selectOption('off') // the test CA is not trusted
+  await sendAndWait(mtlsUrl, 'response-error')
+  const certError = page.getByTestId('response-error')
+  await waitUntil(
+    async () => (await certError.innerText()).includes('伺服器要求用戶端憑證'),
+    'client certificate error',
+    30_000
+  )
+  assert.ok((await certError.innerText()).includes('用戶端憑證錯誤'))
+  await page.getByTestId('client-cert-settings').click()
+  const certs = page.getByTestId('client-certs')
+  await certs.waitFor()
+  await certs.getByRole('button', { name: '新增憑證' }).click()
+  await certs.getByLabel('主機').fill('localhost')
+  await certs.getByLabel('PKCS#12（.p12 / .pfx）').check()
+  await app.evaluate(({ dialog }, file) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] })
+  }, legacyP12)
+  await certs.getByRole('button', { name: '選擇…' }).click()
+  await waitUntil(
+    async () =>
+      (await certs.getByTestId('client-cert-pfx-path').getAttribute('data-path')) === legacyP12,
+    'p12 chosen'
+  )
+  await certs.getByLabel('密碼').fill('wrong')
+  await certs.getByRole('button', { name: '完成' }).click()
+  await waitUntil(
+    async () =>
+      (
+        await certs
+          .getByRole('alert')
+          .innerText()
+          .catch(() => '')
+      ).includes('密碼不正確'),
+    'wrong passphrase reported'
+  )
+  await certs.getByLabel('密碼').fill('secret')
+  await certs.getByRole('button', { name: '完成' }).click()
+  await certs.getByTestId('client-cert-row').waitFor()
+  const savedCerts = (await readJson(path.join(userData, 'app-config.json'))).clientCertificates
+  assert.deepEqual(
+    savedCerts.map((c) => [c.host, c.port, c.type, c.pfxPath, c.passphrase, c.enabled]),
+    [['localhost', null, 'pfx', legacyP12, 'secret', true]]
+  )
+  await page.screenshot({ path: path.join(shots, '36-client-certs.png') })
+  await certs.getByRole('button', { name: '關閉', exact: true }).click()
+  await certs.waitFor({ state: 'detached' })
+  await sendAndWait(mtlsUrl, 'response-protocol')
+  await waitUntil(
+    async () => (await page.getByTestId('response-client-cert').count()) === 1,
+    'response with the client certificate',
+    30_000
+  )
+  assert.match(await page.getByTestId('response-status').innerText(), /^200/)
+  assert.ok(
+    (await page.getByTestId('response-viewer').innerText()).includes('hello client'),
+    'the server saw the certificate'
+  )
+  await sslSelect.selectOption('default')
+
+  // wss:// presents it too (an unsaved WebSocket tab, discarded afterwards).
+  await page.getByTestId('new-tab').click()
+  await page.getByRole('menuitem', { name: 'WebSocket' }).click()
+  const certWs = page.getByTestId('ws-editor')
+  await certWs.waitFor()
+  await page.getByTestId('ws-url-input').fill(`wss://localhost:${mtlsServer.port}/`)
+  await certWs.getByRole('tab', { name: 'Settings' }).click()
+  await certWs.getByLabel('SSL 憑證驗證').selectOption('off')
+  // The App proxy still points at a closed port (set above).
+  await certWs.getByText('使用 App 的 Proxy 設定').click()
+  await certWs.getByRole('button', { name: '連線' }).click()
+  await waitUntil(
+    async () => (await page.getByTestId('ws-status').getAttribute('data-status')) === 'open',
+    'wss open with the client certificate',
+    30_000
+  )
+  await page.locator('[data-testid="ws-log-row"][data-kind="received"]').waitFor()
+  await certWs.getByRole('button', { name: '中斷' }).click()
+  await waitUntil(
+    async () => (await page.getByTestId('ws-status').getAttribute('data-status')) === 'closed',
+    'wss closed'
+  )
+  await app.evaluate(({ Menu }) => {
+    const file = Menu.getApplicationMenu().items.find((i) => i.label === 'File')
+    file.submenu.items.find((i) => i.label === 'Close Tab').click()
+  })
+  await page.getByTestId('unsaved-dialog').getByRole('button', { name: '不儲存' }).click()
+  await page.getByTestId('unsaved-dialog').waitFor({ state: 'detached' })
+  step(
+    'client certificates: refusal explained, legacy .p12 added (wrong passphrase caught), HTTPS and WSS present it'
+  )
+
   // ---- Sidebar "+" menu, Bruno / OpenAPI export and import (decisions 103–106) ----
   // "+" adds into the selected place: the selected Collection here.
   await page.locator('[data-testid="tree-row"][title="collections/shop"]').click()
@@ -3071,6 +3198,7 @@ try {
   fullChainServer.close()
   h2Server.close()
   h2OnlyServer.close()
+  mtlsServer.close()
   wsServer.close()
   // Killed (SIGKILL), not closed: with unsaved tabs a close or SIGTERM waits for the save prompt.
   const proc = lastProcess

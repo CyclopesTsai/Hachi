@@ -46,7 +46,50 @@ export const settings: Messages['settings'] = {
     historyConfirm: (limit, remove) =>
       `With a limit of ${limit}, ${remove === 1 ? 'the oldest entry' : `the ${remove} oldest entries`} of all Workspaces will be removed. Continue?`,
     wsMessages: 'WebSocket messages',
-    wsMessagesHint: (min, max) => `per tab (${min}–${max}; the oldest are removed beyond that)`
+    wsMessagesHint: (min, max) => `per tab (${min}–${max}; the oldest are removed beyond that)`,
+    clientCerts: 'Client certificates',
+    clientCertsCount: (enabled, total) =>
+      total === 0 ? 'None' : enabled === total ? `${total}` : `${total} (${enabled} enabled)`,
+    clientCertsManage: 'Manage…'
+  },
+  clientCerts: {
+    title: 'Client Certificates',
+    description:
+      'Presented by host when sending https:// and wss:// requests (mTLS). Only the file paths are kept, on this computer, never in the Workspace.',
+    empty: 'No client certificates yet.',
+    add: 'Add Certificate',
+    addTitle: 'Add Client Certificate',
+    editTitle: (host) => `Edit Client Certificate: ${host}`,
+    edit: 'Edit',
+    remove: 'Delete',
+    removeConfirm: (host) =>
+      `Delete the client certificate setting for ${host}? (The certificate files stay.)`,
+    enabled: 'Enabled',
+    anyPort: 'any port',
+    host: 'Host',
+    hostHint: 'api.example.com, or *.example.com (subdomains only)',
+    badHost: 'Invalid host',
+    port: 'Port',
+    portPlaceholder: 'Any',
+    badPort: 'The port must be 1–65535, or empty',
+    type: 'Type',
+    types: { pem: 'PEM (certificate + key)', pfx: 'PKCS#12 (.p12 / .pfx)' },
+    certFile: 'Certificate',
+    keyFile: 'Private key',
+    pfxFile: '.p12 / .pfx file',
+    choose: 'Choose…',
+    noFile: 'None chosen',
+    passphrase: 'Passphrase',
+    passphraseHint:
+      'For an encrypted key or a PKCS#12 file with a password; stored as plain text in this computer’s settings file (app-config.json).',
+    checking: 'Checking…',
+    done: 'Done',
+    pickTitle: {
+      cert: 'Choose the Certificate',
+      key: 'Choose the Private Key',
+      pfx: 'Choose the PKCS#12 File'
+    },
+    rule: 'When several match, the most specific wins: a full host name before *., a set port before any port.'
   },
   legal: {
     notice: (name, license) =>

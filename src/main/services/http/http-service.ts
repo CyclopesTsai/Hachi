@@ -8,7 +8,8 @@ import type {
   OAuth2TokenStatus,
   TlsCheckResult
 } from '@shared/http'
-import type { ProxySettings } from '@shared/schemas/app-config'
+import { clientCertHostLabel, matchClientCertificate, portOf } from '@shared/client-certs'
+import type { ClientCertificate, ProxySettings } from '@shared/schemas/app-config'
 import type { Auth, OAuth2Auth } from '@shared/schemas/collection'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
@@ -23,7 +24,8 @@ import { digestAuthorization, parseDigestChallenge } from './auth/digest'
 import { loadFileVariables, type FileAccess } from './file-variables'
 import { CCADB_MAX_REPORT_BYTES, CcadbStore } from './ccadb'
 import { checkCertificates, type TlsCheckDeps } from './tls-check'
-import { diagnoseTls, unavailable } from './tls-diagnosis'
+import { diagnoseTls, targetOf, unavailable, type Route } from './tls-diagnosis'
+import { ClientCertSet, certUse, probeClientCert, verdictMessage } from './client-certs'
 import { OAuth2Error, OAuth2Service, type TokenRequest } from './auth/oauth2'
 import {
   buildCodegenRequest,
@@ -113,6 +115,8 @@ export interface HttpServiceDeps {
   tlsCheck?: TlsCheckDeps
   /** Where the CCADB reports are kept (issue #7); absent: no root program section. */
   ccadbDir?: string
+  /** Client certificates from the App settings (decision 147); absent: none. */
+  getClientCertificates?: () => readonly ClientCertificate[]
 }
 
 export interface TlsCheckInput {
@@ -266,15 +270,17 @@ export class HttpService {
       const cookies: CookieHooks | undefined = jar
         ? { header: (url) => jar.header(url), store: (url, list) => jar.store(url, list) }
         : undefined
+      const clientCerts = await this.clientCerts()
       const transport = (b: BuiltRequest): Promise<SendOutcome> =>
         sendHttp(b, {
           runId: input.runId,
           proxyUrl,
           proxyAuth: this.proxyAuth(proxyUrl),
           signal: controller.signal,
-          cookies
+          cookies,
+          clientCerts
         })
-      let { result, body } = await transport(built)
+      let { result, body, refused } = await transport(built)
       // Digest: answer the server's challenge once.
       if (
         auth.type === 'digest' &&
@@ -294,16 +300,36 @@ export class HttpService {
             uri: `${url.pathname}${url.search}`,
             challenge
           })
-          ;({ result, body } = await transport({
+          ;({ result, body, refused } = await transport({
             ...built,
             headers: [...built.headers, ['Authorization', authorization]]
           }))
         }
       }
+      const route: Route = { proxyUrl, proxyAuth: this.proxyAuth(proxyUrl) }
+      // A server that wants (another) client certificate often just ends the connection.
+      if (
+        result.kind === 'error' &&
+        refused &&
+        (result.code === 'TLS' || result.code === 'NETWORK') &&
+        new URL(built.url).protocol === 'https:'
+      ) {
+        const refusal = await this.clientCertRefusal(built.url, route, clientCerts)
+        if (refusal) {
+          result = {
+            ...result,
+            code: 'CLIENT_CERT',
+            message: msg().httpMain.clientCert.detail(refusal, result.message)
+          }
+        }
+      }
       if (result.kind === 'error' && result.code === 'TLS' && input.diagnoseTls) {
         result = {
           ...result,
-          tls: await diagnoseTls(built.url, { proxyUrl, proxyAuth: this.proxyAuth(proxyUrl) })
+          tls: await diagnoseTls(built.url, {
+            ...route,
+            clientCert: this.certTls(built.url, clientCerts)
+          })
         }
       }
       if (result.kind === 'response' && body && input.storeBody !== false) {
@@ -390,6 +416,37 @@ export class HttpService {
     )
   }
 
+  /** The App's client certificates, files read now (decision 147). */
+  private clientCerts(): Promise<ClientCertSet> {
+    const list = this.deps.getClientCertificates?.() ?? []
+    if (list.length === 0) return Promise.resolve(ClientCertSet.empty)
+    const read = this.deps.readFile ?? ((p: string) => readFile(p))
+    return ClientCertSet.load(list, async (p) => Buffer.from(await read(p)))
+  }
+
+  /** What a TLS connection to `url` presents; null without a (usable) certificate. */
+  private certTls(url: string, certs: ClientCertSet) {
+    const u = new URL(url.replace(/^wss:/i, 'https:'))
+    return certs.match(u.hostname, portOf(u))?.tls ?? null
+  }
+
+  /** Why the server refused the connection, if it was over the client certificate. */
+  private async clientCertRefusal(
+    url: string,
+    route: Route,
+    certs: ClientCertSet
+  ): Promise<string | null> {
+    const target = targetOf(url)
+    if (!target) return null
+    const match = certs.match(target.host, target.port)
+    // An unusable file was already reported as CLIENT_CERT before connecting.
+    const tls = match?.tls ?? null
+    const verdict = await probeClientCert(target.host, target.port, { ...route, clientCert: tls })
+    if (!verdict) return null
+    const host = new URL(url).host
+    return verdictMessage(verdict, match && tls ? certUse(match.entry) : null, host)
+  }
+
   private proxyAuth(proxyUrl: string | null) {
     const proxy = this.deps.getProxySettings()
     return proxyUrl && proxy.username
@@ -419,7 +476,8 @@ export class HttpService {
       runId: 'oauth2',
       proxyUrl,
       proxyAuth: this.proxyAuth(proxyUrl),
-      signal: new AbortController().signal
+      signal: new AbortController().signal,
+      clientCerts: await this.clientCerts()
     })
     if (result.kind === 'error') {
       throw new OAuth2Error(msg().httpMain.oauth2.tokenUrl(result.message))
@@ -517,6 +575,30 @@ export class HttpService {
       inherited,
       workspace: await this.deps.getWorkspaceSettings()
     })
+    // The client certificate for the URL's host (decision 147); files are not read here.
+    try {
+      const url = new URL(built.request.url)
+      const entry =
+        url.protocol === 'https:'
+          ? matchClientCertificate(
+              this.deps.getClientCertificates?.() ?? [],
+              url.hostname,
+              portOf(url)
+            )
+          : null
+      if (entry) {
+        built.request.clientCertificate = {
+          host: clientCertHostLabel(entry),
+          type: entry.type,
+          certPath: entry.certPath,
+          keyPath: entry.keyPath,
+          pfxPath: entry.pfxPath,
+          hasPassphrase: entry.passphrase !== ''
+        }
+      }
+    } catch {
+      // The URL does not parse (urlError says so): no certificate.
+    }
     let authNote: string | null = null
     const auth = effectiveAuth(request.auth, inherited)
     if (!hasHeader(built.request.headers, 'authorization')) {
@@ -585,15 +667,22 @@ export class HttpService {
       throw new HachiError('INVALID_OPERATION', `Cannot resolve proxy: ${String(error)}`)
     }
     const ccadb = this.ccadb
+    const certs = await this.clientCerts()
+    const match = certs.match(url.hostname.replace(/^\[|\]$/g, ''), portOf(url))
+    if (match?.error) throw new HachiError('INVALID_OPERATION', match.error.message)
     const result = await checkCertificates(
       target,
-      { proxyUrl, proxyAuth: this.proxyAuth(proxyUrl) },
+      { proxyUrl, proxyAuth: this.proxyAuth(proxyUrl), clientCert: match?.tls ?? null },
       {
         ...this.deps.tlsCheck,
         ...(ccadb ? { ccadb: () => ccadb.get(input.refreshCcadb ?? false) } : {})
       }
     )
-    return { ...result, unresolvedVariables: [...resolver.unresolved].sort() }
+    return {
+      ...result,
+      clientCertificate: match ? certUse(match.entry) : null,
+      unresolvedVariables: [...resolver.unresolved].sort()
+    }
   }
 
   /** Cancels a running request. Returns false if it already finished. */

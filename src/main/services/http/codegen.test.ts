@@ -15,6 +15,7 @@ const base = (over: Partial<CodegenRequest> = {}): CodegenRequest => ({
   url: 'https://api.test/users?q=1',
   headers: [],
   basicAuth: null,
+  clientCertificate: null,
   body: { kind: 'none' },
   options: {
     validateSSL: true,
@@ -90,6 +91,39 @@ describe('generateCode (text)', () => {
       generateCode('curl', base({ options: { ...base().options, followRedirects: false } }))
     ).toBe(`curl 'https://api.test/users?q=1'`)
     expect(generateCode('curl', base({ method: 'HEAD' }))).toMatch(/^curl --head /)
+  })
+
+  it('adds the client certificate to cURL, a note elsewhere; never the passphrase (decision 147)', () => {
+    const cert = {
+      host: 'api.test',
+      certPath: '',
+      keyPath: '',
+      pfxPath: '',
+      hasPassphrase: false
+    }
+    const pemCode = generateCode(
+      'curl',
+      base({
+        clientCertificate: {
+          ...cert,
+          type: 'pem',
+          certPath: '/c/client.pem',
+          keyPath: "/c/it's.key"
+        }
+      })
+    )
+    expect(pemCode).toContain(`--cert /c/client.pem`)
+    expect(pemCode).toContain(`--key '/c/it'\\''s.key'`)
+    expect(pemCode).not.toContain('--pass')
+    const pfx = base({
+      clientCertificate: { ...cert, type: 'pfx', pfxPath: '/c/apns.p12', hasPassphrase: true }
+    })
+    expect(generateCode('curl', pfx)).toContain(
+      `--cert-type P12 --cert /c/apns.p12 \\\n  --pass '<passphrase>'`
+    )
+    for (const language of ['fetch', 'axios', 'python'] as const) {
+      expect(generateCode(language, pfx)).toContain('client certificate for api.test (/c/apns.p12)')
+    }
   })
 
   it('passes the HTTP version on (decision 146)', () => {

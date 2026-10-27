@@ -1,11 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { proxySettingsSchema, type ProxySettings } from '@shared/schemas/app-config'
+import { msg } from '@shared/i18n'
+import {
+  clientCertificateSchema,
+  proxySettingsSchema,
+  type ClientCertificate,
+  type ProxySettings
+} from '@shared/schemas/app-config'
 import { workspaceSettingsSchema } from '@shared/schemas/workspace'
 import { wsRequestSchema } from '@shared/schemas/ws-request'
 import type { VariableLayer } from '@shared/variables'
 import type { WsEventPayload, WsLogEntry } from '@shared/ws'
 import { resolveInherited, type ContainerLevel } from '../http/build-request'
-import { startProxy, type TestProxy } from '../http/test-servers'
+import { mtlsFile, startProxy, type TestProxy } from '../http/test-servers'
 import { startWsServer, type TestWsServer } from './test-ws-server'
 import { WsService, type WsConnectionSummary } from './ws-service'
 
@@ -33,7 +39,12 @@ const variable = (key: string, value: string, secret = false) => ({
 })
 
 function setup(
-  options: { layers?: VariableLayer[]; chain?: ContainerLevel[]; proxy?: ProxySettings } = {}
+  options: {
+    layers?: VariableLayer[]
+    chain?: ContainerLevel[]
+    proxy?: ProxySettings
+    clientCertificates?: ClientCertificate[]
+  } = {}
 ) {
   const payloads: WsEventPayload[] = []
   const finished: WsConnectionSummary[] = []
@@ -47,7 +58,8 @@ function setup(
     userAgent: 'Hachi/test',
     emit: (p) => payloads.push(p),
     onFinished: (s) => finished.push(s),
-    flushIntervalMs: 5
+    flushIntervalMs: 5,
+    getClientCertificates: () => options.clientCertificates ?? []
   })
   const entries = (id: string): WsLogEntry[] =>
     payloads.filter((p) => p.connectionId === id).flatMap((p) => p.entries)
@@ -331,5 +343,63 @@ describe('WsService', () => {
       'closed'
     )
     expect(status('h1')?.closeCode).toBe(1001)
+  })
+})
+
+describe('WsService client certificates (decision 147)', () => {
+  let mtls: TestWsServer
+  beforeAll(async () => {
+    mtls = await startWsServer({ clientCert: true })
+  })
+  afterAll(() => mtls.close())
+
+  const insecure = (url: string) => request(url, { settings: { validateSSL: false } })
+  const cert = (extra: Partial<ClientCertificate> = {}) =>
+    clientCertificateSchema.parse({
+      id: 'c',
+      host: new URL(mtls.url).hostname,
+      type: 'pfx',
+      pfxPath: mtlsFile('client.p12'),
+      passphrase: 'secret',
+      ...extra
+    })
+
+  it('presents the certificate of the host on wss://', async () => {
+    const { service, status } = setup({ clientCertificates: [cert()] })
+    await service.connect({
+      connectionId: 'm1',
+      parentId: null,
+      environmentId: null,
+      request: insecure(`${mtls.url}/live`)
+    })
+    await until(() => status('m1')?.status === 'open', 'open')
+    service.disconnect('m1')
+    await until(() => status('m1')?.status === 'closed', 'closed')
+  })
+
+  it('explains a missing certificate or an unusable file', async () => {
+    const { service, status } = setup()
+    await service.connect({
+      connectionId: 'm2',
+      parentId: null,
+      environmentId: null,
+      request: insecure(`${mtls.url}/live`)
+    })
+    await until(() => status('m2')?.status === 'error', 'error')
+    const host = new URL(mtls.url).host
+    expect(status('m2')?.error).toContain(msg().httpMain.clientCert.required(host))
+    expect(status('m2')?.tls).toBeUndefined()
+
+    const broken = setup({ clientCertificates: [cert({ passphrase: 'nope' })] })
+    await broken.service.connect({
+      connectionId: 'm3',
+      parentId: null,
+      environmentId: null,
+      request: insecure(`${mtls.url}/live`)
+    })
+    await until(() => broken.status('m3')?.status === 'error', 'error')
+    expect(broken.status('m3')?.error).toBe(
+      msg().httpMain.clientCert.wrongPassphrase(new URL(mtls.url).hostname)
+    )
   })
 })

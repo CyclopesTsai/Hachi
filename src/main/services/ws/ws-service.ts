@@ -1,8 +1,11 @@
+import { readFile } from 'node:fs/promises'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import WebSocket from 'ws'
 import { HachiError } from '@shared/errors'
 import { MAX_RESPONSE_BYTES, type InheritedSettings } from '@shared/http'
-import type { ProxySettings } from '@shared/schemas/app-config'
+import { matchClientCertificate, portOf } from '@shared/client-certs'
+import { msg } from '@shared/i18n'
+import type { ClientCertificate, ProxySettings } from '@shared/schemas/app-config'
 import type { OAuth2Auth } from '@shared/schemas/collection'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import type { WsMessageFormat, WsRequest } from '@shared/schemas/ws-request'
@@ -29,6 +32,15 @@ import type { CookieJar } from '../http/cookie-jar'
 import { isTlsErrorCode, withJarCookies } from '../http/http-client'
 import { resolveProxyUrl } from '../http/proxy'
 import { diagnoseTls, type Route } from '../http/tls-diagnosis'
+import {
+  certUse,
+  loadClientCertificate,
+  probeClientCert,
+  verdictFromCode,
+  verdictMessage,
+  type ClientCertTls,
+  type ClientCertUse
+} from '../http/client-certs'
 
 export interface WsServiceDeps {
   /** Collections / folders from the collection down to `parentId`, outermost first. */
@@ -51,6 +63,9 @@ export interface WsServiceDeps {
   cookieJar?: () => CookieJar | null
   /** Authorization header value for OAuth 2.0 auth (decision 128). */
   oauth2Header?: (auth: OAuth2Auth) => Promise<string>
+  /** Client certificates from the App settings, for wss:// (decision 147). */
+  getClientCertificates?: () => readonly ClientCertificate[]
+  readFile?: (absPath: string) => Promise<Uint8Array>
 }
 
 export interface WsConnectInput {
@@ -103,6 +118,8 @@ interface Connection {
   route: Route
   /** The diagnosis being made; the close waits for it. */
   tls: Promise<void> | null
+  /** The client certificate the handshake presented (decision 147). */
+  clientCert: ClientCertUse | null
 }
 
 /** ws:// stays ws://; proxies and Chromium's proxy lookup think in http(s). */
@@ -146,13 +163,18 @@ export class WsService {
       sent: 0,
       received: 0,
       route: { proxyUrl: null, proxyAuth: null },
-      tls: null
+      tls: null,
+      clientCert: null
     }
     this.connections.set(conn.id, conn)
 
     try {
-      const { url, headers, protocols, options, route } = await this.prepare(input, resolver)
+      const { url, headers, protocols, options, route, clientCert } = await this.prepare(
+        input,
+        resolver
+      )
       conn.route = route
+      conn.clientCert = clientCert
       conn.state = { status: 'connecting', url }
       this.log(conn, { kind: 'event', event: 'connecting', url })
       this.emitState(conn)
@@ -254,6 +276,24 @@ export class WsService {
     }
     const protocols = request.subprotocols.map((p) => resolver.resolve(p).trim()).filter(Boolean)
 
+    // wss://: the client certificate for this host; an unusable file fails the connection.
+    let certTls: ClientCertTls | null = null
+    let clientCert: ClientCertUse | null = null
+    const target = new URL(url)
+    const entry =
+      target.protocol === 'wss:'
+        ? matchClientCertificate(
+            this.deps.getClientCertificates?.() ?? [],
+            target.hostname,
+            portOf(target)
+          )
+        : null
+    if (entry) {
+      const read = this.deps.readFile ?? ((p: string) => readFile(p))
+      certTls = await loadClientCertificate(entry, async (p) => Buffer.from(await read(p)))
+      clientCert = certUse(entry)
+    }
+
     const workspace = await this.deps.getWorkspaceSettings()
     const s = request.settings
     const timeout = s.connectTimeoutMs ?? workspace.timeoutMs
@@ -280,8 +320,10 @@ export class WsService {
         proxyAuth:
           proxyUrl && proxySettings.username
             ? { username: proxySettings.username, password: proxySettings.password }
-            : null
+            : null,
+        clientCert: certTls
       } satisfies Route,
+      clientCert,
       headers: headerObject,
       protocols,
       options: {
@@ -289,6 +331,7 @@ export class WsService {
         rejectUnauthorized: s.validateSSL ?? workspace.validateSSL,
         maxPayload: MAX_RESPONSE_BYTES,
         followRedirects: false,
+        ...certTls,
         ...(agent ? { agent } : {})
       } satisfies WebSocket.ClientOptions
     }
@@ -340,14 +383,49 @@ export class WsService {
     })
     socket.on('error', (error) => {
       // Node's hint about --use-system-ca does not apply: Hachi trusts the system's roots.
-      const message = error.message.replace(/; if the root CA is installed locally.*$/, '')
+      let message = error.message.replace(/; if the root CA is installed locally.*$/, '')
+      const code = (error as { code?: unknown }).code
+      // The server asked for, or refused, the client certificate (decision 147).
+      const verdict = typeof code === 'string' ? verdictFromCode(code, !!conn.clientCert) : null
+      if (verdict) {
+        const target = new URL(conn.state.url)
+        message = msg().httpMain.clientCert.detail(
+          verdictMessage(verdict, conn.clientCert, target.host),
+          message
+        )
+      }
       conn.state = { ...conn.state, error: message }
       this.log(conn, { kind: 'event', event: 'error', message })
-      const code = (error as { code?: unknown }).code
-      if (typeof code === 'string' && isTlsErrorCode(code) && !conn.tls && !conn.userClosed) {
+      if (
+        !verdict &&
+        typeof code === 'string' &&
+        isTlsErrorCode(code) &&
+        !conn.tls &&
+        !conn.userClosed
+      ) {
         // Read the chain again and tell what is wrong, as for HTTP (decision 142).
         conn.tls = diagnoseTls(asHttpUrl(conn.state.url), conn.route).then((tls) => {
           conn.state = { ...conn.state, tls }
+        })
+      }
+      // Ended without a word (often a refused client certificate): connect again to see.
+      const target = new URL(conn.state.url)
+      if (
+        !verdict &&
+        target.protocol === 'wss:' &&
+        (code === 'ECONNRESET' || code === 'EPIPE') &&
+        !conn.tls &&
+        !conn.userClosed
+      ) {
+        const host = target.hostname.replace(/^\[|\]$/g, '')
+        conn.tls = probeClientCert(host, portOf(target), conn.route).then((found) => {
+          if (!found) return
+          const explained = msg().httpMain.clientCert.detail(
+            verdictMessage(found, conn.clientCert, target.host),
+            message
+          )
+          conn.state = { ...conn.state, error: explained }
+          this.log(conn, { kind: 'event', event: 'error', message: explained })
         })
       }
     })

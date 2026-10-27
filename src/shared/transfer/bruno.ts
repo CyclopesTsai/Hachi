@@ -198,6 +198,12 @@ function normalizeExample(raw: Json): BrunoExample {
   }
 }
 
+/** Whether bruno.json (or the JSON's brunoConfig) lists client certificates. */
+function hasClientCerts(config: Json): boolean {
+  const certs = isObject(config.clientCertificates) ? config.clientCertificates.certs : undefined
+  return asArray(certs).length > 0
+}
+
 /** `scripts.flow` of bruno.json / opencollection.yml / the exported JSON's brunoConfig. */
 function flowOf(scripts: unknown): 'sequential' | 'sandwich' | undefined {
   const flow = isObject(scripts) ? scripts.flow : undefined
@@ -210,6 +216,7 @@ function normalizeJson(json: Json): BrunoCollectionData {
   const flow = flowOf(config.scripts)
   return {
     ...(flow ? { scriptFlow: flow } : {}),
+    ...(hasClientCerts(config) ? { clientCertificates: true } : {}),
     name: asString(json.name),
     items: normalizeItems(json.items),
     root: root ? normalizePart(root) : null,
@@ -262,6 +269,7 @@ export function brunoFolderToData(
   const environments: BrunoCollectionData['environments'] = []
   let format: 'bru' | 'yaml' | null = null
   let flow: 'sequential' | 'sandwich' | undefined
+  let clientCertificates = false
   const yaml = files['opencollection.yml']
   const config = files['bruno.json']
   if (yaml !== undefined) {
@@ -278,6 +286,7 @@ export function brunoFolderToData(
       const parsed = JSON.parse(config) as Json
       name = asString(parsed.name)
       flow = flowOf(parsed.scripts)
+      clientCertificates = hasClientCerts(parsed)
     } catch {
       throw new TransferError(msg().transferMain.bruno.badBrunoJson)
     }
@@ -314,7 +323,8 @@ export function brunoFolderToData(
     root,
     environments,
     partial: format === null,
-    ...(flow ? { scriptFlow: flow } : {})
+    ...(flow ? { scriptFlow: flow } : {}),
+    ...(clientCertificates ? { clientCertificates: true } : {})
   }
 }
 
@@ -759,6 +769,7 @@ function mapCollection(data: BrunoCollectionData, newId: () => string): BrunoImp
   if (data.partial) {
     warnings.add(msg().transferMain.bruno.subfolder)
   }
+  if (data.clientCertificates) warnings.add(msg().transferMain.bruno.clientCertificates)
   const name = itemName(data.name, 'Bruno Collection')
   const collection: PortableCollection = {
     name,

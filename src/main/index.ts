@@ -157,6 +157,8 @@ async function bootstrap(): Promise<void> {
     },
     getWorkspaceSettings: () => workspaces.getSettings(),
     getProxySettings: () => config.get().proxy,
+    // Client certificates (decision 147), for HTTP and WebSocket.
+    getClientCertificates: () => config.get().clientCertificates,
     // Platform-specific system proxy lookup is delegated to Chromium (macOS / Windows / Linux).
     resolveSystemProxy: (url: string) => session.defaultSession.resolveProxy(url),
     userAgent: `${APP_NAME}/${app.getVersion()}`

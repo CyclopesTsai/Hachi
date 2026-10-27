@@ -9,6 +9,7 @@ import {
   type AppConfig,
   type HistorySettings,
   type WebsocketSettings,
+  type ClientCertificate,
   type ProxySettings,
   type Theme,
   type UiSettings,
@@ -107,6 +108,12 @@ export class ConfigService {
   setHistory(history: HistorySettings): Promise<AppConfig> {
     return this.update((c) => {
       c.history = history
+    })
+  }
+
+  setClientCertificates(list: ClientCertificate[]): Promise<AppConfig> {
+    return this.update((c) => {
+      c.clientCertificates = list
     })
   }
 

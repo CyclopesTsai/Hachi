@@ -17,6 +17,7 @@ export const runner = {
     TOO_LARGE: '回應太大',
     FILE_NOT_FOUND: '檔案不存在',
     TOO_MANY_REDIRECTS: '重新導向過多',
+    CLIENT_CERT: '用戶端憑證',
     HTTP_VERSION: 'HTTP 版本',
     CANCELLED: '已取消',
     UNKNOWN: '其他'

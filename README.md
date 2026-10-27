@@ -19,7 +19,7 @@ Hachi is in the spirit of Postman and Bruno: no account, no cloud, no database. 
 
 ## Features
 
-- **HTTP requests**: params, headers, five body types (JSON, raw, form-data, x-www-form-urlencoded, none), HTTP/1.1 and HTTP/2 (auto or forced), timeouts, proxy, redirects, SSL options, response viewer with Pretty / Raw / JSON tree / HTML preview
+- **HTTP requests**: params, headers, five body types (JSON, raw, form-data, x-www-form-urlencoded, none), HTTP/1.1 and HTTP/2 (auto or forced), client certificates (mTLS), timeouts, proxy, redirects, SSL options, response viewer with Pretty / Raw / JSON tree / HTML preview
 - **WebSocket**: text / JSON / binary messages, message templates, ping and heartbeats, a searchable message log
 - **Variables**: environments, collection variables, secret values kept out of git, dynamic variables (`{{$guid}}`, `{{$timestamp}}`…), `{{$file:base64:…}}` for file contents
 - **Auth**: Bearer, Basic, API key, OAuth 2.0, Digest, AWS Signature v4

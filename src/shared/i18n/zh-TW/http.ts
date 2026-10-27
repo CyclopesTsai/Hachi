@@ -73,6 +73,7 @@ export const http = {
       TOO_MANY_REDIRECTS: '重新導向次數超過上限（可在 Workspace 設定調整）',
       SCRIPT: '腳本錯誤，請求沒有發送',
       AUTH: '驗證失敗，請求沒有發送',
+      CLIENT_CERT: '用戶端憑證錯誤',
       HTTP_VERSION: 'HTTP 版本不符（可在請求的 Settings 調整 HTTP 版本）',
       UNKNOWN: '發送失敗'
     },
@@ -85,6 +86,8 @@ export const http = {
     large: (size: string) => `回應內容較大（${size}），預設不顯示以免畫面卡頓。`,
     noCookies: '這個回應沒有設定 Cookie。',
     unresolved: '找不到變數，已照原樣送出：',
+    clientCert: (host: string, files: string) => `已送出用戶端憑證：${host}（${files}）`,
+    clientCertSettings: '用戶端憑證設定…',
     sending: '發送中…',
     idle: '按下「發送」查看回應',
     checkPlatforms: '檢查各平台（macOS / iOS、Windows、Mozilla）…',

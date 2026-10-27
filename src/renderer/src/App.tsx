@@ -15,6 +15,7 @@ import { FileTrustDialog } from '@renderer/features/http/FileTrustDialog'
 import { ScriptTrustDialog } from '@renderer/features/http/ScriptTrustDialog'
 import { WelcomeScreen } from '@renderer/features/onboarding/WelcomeScreen'
 import { AppSettingsDialog } from '@renderer/features/settings/SettingsDialogs'
+import { ClientCertsDialog } from '@renderer/features/settings/ClientCertsDialog'
 import { ShortcutsDialog } from '@renderer/features/settings/ShortcutsDialog'
 import { useShortcutsDialog } from '@renderer/stores/shortcuts-store'
 import { SaveAsDialog } from '@renderer/features/tabs/SaveAsDialog'
@@ -260,6 +261,7 @@ export function App() {
         <WorkspaceShell workspace={currentWorkspace} />
       )}
       <AppSettingsDialog />
+      <ClientCertsDialog />
       <UnsavedChangesDialog />
       <SaveAsDialog />
       <ScriptTrustDialog />

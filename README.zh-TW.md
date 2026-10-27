@@ -19,7 +19,7 @@ Hachi 的定位類似 Postman / Bruno：不需要帳號、不上雲、不用資�
 
 ## 功能
 
-- **HTTP 請求**：Params、Headers、五種 Body（JSON、Raw、Form-data、x-www-form-urlencoded、none）、HTTP/1.1 與 HTTP/2（自動或指定）、逾時、Proxy、重新導向、SSL 設定；回應可用 Pretty / Raw / JSON 樹狀 / HTML 預覽檢視
+- **HTTP 請求**：Params、Headers、五種 Body（JSON、Raw、Form-data、x-www-form-urlencoded、none）、HTTP/1.1 與 HTTP/2（自動或指定）、用戶端憑證（mTLS）、逾時、Proxy、重新導向、SSL 設定；回應可用 Pretty / Raw / JSON 樹狀 / HTML 預覽檢視
 - **WebSocket**：Text / JSON / Binary 訊息、訊息範本、Ping 與心跳、可搜尋的訊息紀錄
 - **變數**：環境、Collection 變數、不會進 git 的機密值、動態變數（`{{$guid}}`、`{{$timestamp}}`…）、讀取檔案內容的 `{{$file:base64:…}}`
 - **驗證**：Bearer、Basic、API Key、OAuth 2.0、Digest、AWS Signature v4

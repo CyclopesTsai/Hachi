@@ -186,6 +186,8 @@ export interface BrunoCollectionData {
    * settings of the folders above it are missing.
    */
   partial?: boolean
+  /** bruno.json sets client certificates: not imported (they are App settings, decision 147). */
+  clientCertificates?: boolean
 }
 
 export type Json = Record<string, unknown>

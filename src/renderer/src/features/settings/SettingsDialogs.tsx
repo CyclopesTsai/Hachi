@@ -11,6 +11,7 @@ import {
   PROXY_MODES,
   WS_MESSAGE_LIMIT_MAX,
   WS_MESSAGE_LIMIT_MIN,
+  type ClientCertificate,
   type ProxySettings,
   type Theme
 } from '@shared/schemas/app-config'
@@ -296,6 +297,8 @@ function ThemeRow() {
   )
 }
 
+const NO_CERTS: ClientCertificate[] = []
+
 function AppSettingsForm({
   initial,
   initialHistoryLimit,
@@ -308,6 +311,8 @@ function AppSettingsForm({
   onDone: () => void
 }) {
   const updateConfig = useAppStore((s) => s.updateConfig)
+  const setClientCertsOpen = useAppStore((s) => s.setClientCertsOpen)
+  const certs = useAppStore((s) => s.config?.clientCertificates) ?? NO_CERTS
   const usage = useHistoryStore((s) => s.usage)
   const [proxy, setProxy] = useState(initial)
   const [bypassText, setBypassText] = useState(initial.bypass.join('\n'))
@@ -443,6 +448,20 @@ function AppSettingsForm({
           <span className="text-xs text-muted-foreground">
             {m.wsMessagesHint(WS_MESSAGE_LIMIT_MIN, WS_MESSAGE_LIMIT_MAX)}
           </span>
+        </Row>
+        <Row label={m.clientCerts}>
+          <span className="text-sm" data-testid="client-certs-count">
+            {m.clientCertsCount(certs.filter((c) => c.enabled).length, certs.length)}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="client-certs-manage"
+            onClick={() => setClientCertsOpen(true)}
+          >
+            {m.clientCertsManage}
+          </Button>
         </Row>
       </div>
       <Footer busy={busy} error={error} />

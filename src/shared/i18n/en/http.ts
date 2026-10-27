@@ -76,6 +76,7 @@ export const http: Messages['http'] = {
       TOO_MANY_REDIRECTS: 'Too many redirects (the limit is in the Workspace settings)',
       SCRIPT: 'Script error; the request was not sent',
       AUTH: 'Authentication failed; the request was not sent',
+      CLIENT_CERT: 'Client certificate problem',
       HTTP_VERSION: 'HTTP version mismatch (you can change it in the request’s Settings)',
       UNKNOWN: 'Sending failed'
     },
@@ -88,6 +89,8 @@ export const http: Messages['http'] = {
       `The response is large (${size}), so it is not shown by default to keep things responsive.`,
     noCookies: 'This response sets no cookies.',
     unresolved: 'Variables not found, sent as they are: ',
+    clientCert: (host, files) => `Client certificate presented: ${host} (${files})`,
+    clientCertSettings: 'Client Certificate Settings…',
     sending: 'Sending…',
     idle: 'Press “Send” to see the response',
     checkPlatforms: 'Check every platform (macOS / iOS, Windows, Mozilla)…',

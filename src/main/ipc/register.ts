@@ -27,6 +27,7 @@ import type { MockStore } from '../services/mock/mock-store'
 import type { RunnerService } from '../services/runner-service'
 import { DataFileError, parseDataFile } from '@shared/runner'
 import { readFile, stat } from 'node:fs/promises'
+import { ClientCertError, loadClientCertificate } from '../services/http/client-certs'
 import { createHandler, forbidden, type Handler } from './handler'
 import { msg } from '@shared/i18n'
 
@@ -108,7 +109,17 @@ export function registerIpcHandlers(ctx: IpcContext): void {
         await ctx.history.applyLimit(ctx.workspaces.getCurrent()?.path ?? null)
       }
       if (input.websocket) await ctx.config.setWebsocket(input.websocket)
+      if (input.clientCertificates) await ctx.config.setClientCertificates(input.clientCertificates)
       return ctx.config.get()
+    },
+    [INVOKE.configCheckClientCertificate]: async (input) => {
+      try {
+        await loadClientCertificate(input, (p) => readFile(p))
+        return { error: null }
+      } catch (error) {
+        if (error instanceof ClientCertError) return { error: error.message }
+        throw error
+      }
     },
     [INVOKE.workspaceGetCurrent]: () => ctx.workspaces.getCurrent(),
     [INVOKE.workspaceCreate]: (input) => ctx.workspaces.create(input),

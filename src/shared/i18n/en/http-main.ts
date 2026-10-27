@@ -10,6 +10,26 @@ export const httpMain: Messages['httpMain'] = {
     noH2c:
       'http:// cannot use HTTP/2 (Hachi does not support h2c): use https://, or set the HTTP version to “Auto”'
   },
+  clientCert: {
+    noFile: (host) => `No file chosen for the client certificate (${host})`,
+    notFound: (host, file) => `File of the client certificate (${host}) not found: ${file}`,
+    cannotRead: (host, file, reason) =>
+      `Cannot read the file ${file} of the client certificate (${host}): ${reason}`,
+    wrongPassphrase: (host) => `Wrong passphrase for the client certificate (${host})`,
+    keyMismatch: (host) =>
+      `The private key and the certificate of the client certificate (${host}) do not belong together`,
+    badFile: (host, reason) =>
+      `The client certificate (${host}) cannot be used; check its format (PEM or PKCS#12): ${reason}`,
+    required: (host) =>
+      `The server asks for a client certificate, but none is set up for ${host} (App Settings → Client Certificates)`,
+    likelyRequired: (host) =>
+      `The server ended the connection during the TLS handshake; it probably asks for a client certificate (none is set up for ${host})`,
+    rejected: (host, files) =>
+      `The server does not accept the client certificate “${host}” (${files})`,
+    likelyRejected: (host, files) =>
+      `The server ended the connection after the TLS handshake; it probably does not accept the client certificate “${host}” (${files})`,
+    detail: (message, original) => `${message}. Original error: ${original}`
+  },
   oauth2: {
     empty: (label) => `The OAuth 2.0 ${label} is empty`,
     invalidUrl: (label, text) => `The OAuth 2.0 ${label} is not a valid URL: ${text}`,

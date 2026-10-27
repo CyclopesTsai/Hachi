@@ -40,7 +40,49 @@ export const settings = {
     historyConfirm: (limit: number, remove: number) =>
       `歷史紀錄上限改為 ${limit} 筆後，會刪除所有 Workspace 中最舊的 ${remove} 筆紀錄。要繼續嗎？`,
     wsMessages: 'WebSocket 訊息',
-    wsMessagesHint: (min: number, max: number) => `則／分頁（${min}–${max}，超過時刪除最舊的）`
+    wsMessagesHint: (min: number, max: number) => `則／分頁（${min}–${max}，超過時刪除最舊的）`,
+    clientCerts: '用戶端憑證',
+    clientCertsCount: (enabled: number, total: number) =>
+      total === 0
+        ? '沒有設定'
+        : enabled === total
+          ? `${total} 個`
+          : `${total} 個（${enabled} 個啟用）`,
+    clientCertsManage: '管理…'
+  },
+  clientCerts: {
+    title: '用戶端憑證',
+    description:
+      '送出 https:// 與 wss:// 請求時，依主機帶上憑證（mTLS）。只記錄檔案路徑，存在這台電腦，不會寫進 Workspace。',
+    empty: '還沒有用戶端憑證。',
+    add: '新增憑證',
+    addTitle: '新增用戶端憑證',
+    editTitle: (host: string) => `編輯用戶端憑證：${host}`,
+    edit: '編輯',
+    remove: '刪除',
+    removeConfirm: (host: string) => `要刪除 ${host} 的用戶端憑證設定嗎？（不會刪除憑證檔案）`,
+    enabled: '啟用',
+    anyPort: '所有連接埠',
+    host: '主機',
+    hostHint: 'api.example.com，或 *.example.com（只比對子網域）',
+    badHost: '主機格式不正確',
+    port: '連接埠',
+    portPlaceholder: '全部',
+    badPort: '連接埠需為 1–65535，或留空',
+    type: '類型',
+    types: { pem: 'PEM（憑證＋私鑰）', pfx: 'PKCS#12（.p12 / .pfx）' },
+    certFile: '憑證檔',
+    keyFile: '私鑰檔',
+    pfxFile: '.p12 / .pfx 檔',
+    choose: '選擇…',
+    noFile: '未選擇',
+    passphrase: '密碼',
+    passphraseHint:
+      '私鑰有加密或 PKCS#12 有密碼時填寫；以明文存在這台電腦的設定檔（app-config.json）。',
+    checking: '檢查中…',
+    done: '完成',
+    pickTitle: { cert: '選擇憑證檔', key: '選擇私鑰檔', pfx: '選擇 PKCS#12 檔' },
+    rule: '多個符合時用最明確的：完整主機名稱優先於 *.，有指定連接埠的優先。'
   },
   legal: {
     notice: (name: string, license: string) =>

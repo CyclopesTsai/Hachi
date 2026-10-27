@@ -49,7 +49,8 @@ describe('ConfigService', () => {
       history: { maxEntries: 200 },
       websocket: { messageLimit: 100 },
       scripts: { trustedWorkspaces: [] },
-      fileAccess: { trustedWorkspaces: [] }
+      fileAccess: { trustedWorkspaces: [] },
+      clientCertificates: []
     })
     expect(await readDisk()).toEqual(config)
   })

@@ -3,7 +3,12 @@
  * before any handler runs (renderer input is never trusted).
  */
 import { z } from 'zod'
-import { proxySettingsSchema, themeSchema } from '../schemas/app-config'
+import {
+  CLIENT_CERTS_MAX,
+  clientCertificateSchema,
+  proxySettingsSchema,
+  themeSchema
+} from '../schemas/app-config'
 import {
   REQUEST_TYPES,
   SCRIPT_FLOWS,
@@ -102,8 +107,10 @@ export const inputSchemas = {
       })
       .optional(),
     history: historySettingsSchema.optional(),
-    websocket: websocketSettingsSchema.optional()
+    websocket: websocketSettingsSchema.optional(),
+    clientCertificates: z.array(clientCertificateSchema).max(CLIENT_CERTS_MAX).optional()
   }),
+  [INVOKE.configCheckClientCertificate]: clientCertificateSchema,
   [INVOKE.workspaceGetCurrent]: noInput,
   [INVOKE.workspaceCreate]: z.strictObject({
     name: workspaceNameSchema,
