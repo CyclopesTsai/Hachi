@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { msg } from '../i18n'
 import type { HttpRequest } from '../schemas/http-request'
 import { parseBru, serializeBru } from './bru-lang'
 import { exportBrunoCollection, importBrunoFolder, importBrunoJson, isBrunoJson } from './bruno'
@@ -442,6 +443,23 @@ describe('exportBrunoCollection', () => {
       JSON.parse(JSON.stringify(v, (key, value: unknown) => (key === 'id' ? undefined : value)))
     expect(strip(again.collection)).toEqual(strip(collection))
     expect(strip(again.environments)).toEqual(strip(environments))
+  })
+
+  it('warns that Bruno has no HTTP version setting (decision 146)', () => {
+    const { collection } = importBrunoFolder(folderFiles, id)
+    expect(exportBrunoCollection(collection, []).warnings.join()).not.toMatch(/HTTP 版本/)
+    const request = collection.children.find(
+      (c): c is PortableRequest => c.kind === 'request' && c.request.type === 'http'
+    ) as PortableRequest
+    const http2 = {
+      ...request,
+      request: {
+        ...request.request,
+        settings: { ...(request.request as HttpRequest).settings, httpVersion: 'http2' }
+      }
+    } as PortableRequest
+    const out = exportBrunoCollection({ ...collection, children: [http2] }, [])
+    expect(out.warnings.join()).toContain(msg().transferMain.bruno.httpVersion)
   })
 })
 

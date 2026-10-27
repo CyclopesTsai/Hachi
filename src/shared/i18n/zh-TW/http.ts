@@ -46,7 +46,18 @@ export const http = {
     proxyNow: (mode: 'none' | 'system' | 'custom') =>
       `目前：${mode === 'none' ? '未設定' : mode === 'system' ? '系統 Proxy' : '自訂'}`,
     useCookieJar: '使用 Workspace 的 Cookie Jar',
-    cookieJarHint: '自動帶上並保存 Cookie'
+    cookieJarHint: '自動帶上並保存 Cookie',
+    httpVersion: 'HTTP 版本',
+    httpVersions: {
+      auto: '自動',
+      http1: '只用 HTTP/1.1',
+      http2: '只用 HTTP/2'
+    },
+    httpVersionHint: {
+      auto: '伺服器支援就用 HTTP/2，否則用 HTTP/1.1',
+      http1: '',
+      http2: '不退回 HTTP/1.1；只能用 https://'
+    }
   },
   response: {
     errors: {
@@ -62,6 +73,7 @@ export const http = {
       TOO_MANY_REDIRECTS: '重新導向次數超過上限（可在 Workspace 設定調整）',
       SCRIPT: '腳本錯誤，請求沒有發送',
       AUTH: '驗證失敗，請求沒有發送',
+      HTTP_VERSION: 'HTTP 版本不符（可在請求的 Settings 調整 HTTP 版本）',
       UNKNOWN: '發送失敗'
     },
     download: '下載',

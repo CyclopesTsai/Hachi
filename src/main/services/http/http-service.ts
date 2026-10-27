@@ -318,7 +318,8 @@ export class HttpService {
             statusText: result.statusText,
             headers: result.headers,
             contentType: result.contentType,
-            timeMs: result.timings.totalMs
+            timeMs: result.timings.totalMs,
+            httpVersion: result.httpVersion
           },
           secrets: secretValues(variables, (text) => resolver.resolve(text))
         }
@@ -409,7 +410,8 @@ export class HttpService {
         validateSSL: workspace.validateSSL,
         followRedirects: false,
         maxRedirects: 0,
-        useProxy: true
+        useProxy: true,
+        httpVersion: 'auto'
       }
     }
     const proxyUrl = await this.proxyFor(built)
@@ -440,7 +442,8 @@ export class HttpService {
         validateSSL: true,
         followRedirects: true,
         maxRedirects: 3,
-        useProxy: true
+        useProxy: true,
+        httpVersion: 'auto'
       }
     }
     const proxyUrl = await this.proxyFor(built)

@@ -223,24 +223,40 @@ describe('buildRequest', () => {
     expect(built.body).toBeNull()
   })
 
+  it('reads unknown HTTP versions as Auto (decision 146)', () => {
+    const parse = (settings: unknown) =>
+      httpRequestSchema.parse({ version: 1, id: 'r', type: 'http', name: 'R', settings }).settings
+    expect(parse({}).httpVersion).toBe('auto')
+    expect(parse({ httpVersion: 'http3' }).httpVersion).toBe('auto')
+    expect(parse({ httpVersion: 'http1' }).httpVersion).toBe('http1')
+  })
+
   it('uses Workspace settings unless the request overrides them', async () => {
     expect((await build(request())).options).toEqual({
       timeoutMs: 30000,
       validateSSL: true,
       followRedirects: true,
       maxRedirects: 3,
-      useProxy: true
+      useProxy: true,
+      httpVersion: 'auto'
     })
     const custom = await build(
       request({
-        settings: { timeoutMs: 0, validateSSL: false, followRedirects: false, useProxy: false }
+        settings: {
+          timeoutMs: 0,
+          validateSSL: false,
+          followRedirects: false,
+          useProxy: false,
+          httpVersion: 'http2'
+        }
       })
     )
     expect(custom.options).toMatchObject({
       timeoutMs: 0,
       validateSSL: false,
       followRedirects: false,
-      useProxy: false
+      useProxy: false,
+      httpVersion: 'http2'
     })
   })
 })
@@ -301,7 +317,8 @@ describe('buildCodegenRequest', () => {
       validateSSL: false,
       followRedirects: true,
       maxRedirects: 4,
-      timeoutMs: 5000
+      timeoutMs: 5000,
+      httpVersion: 'auto'
     })
     const form = buildCodegenRequest({
       request: req({

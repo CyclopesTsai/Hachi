@@ -1,6 +1,13 @@
 /** Sending requests in main: auth, file variables, request scripts, mock servers. */
 export const httpMain = {
   hidden: '（已隱藏）',
+  version: {
+    noHttp2: '伺服器不支援 HTTP/2（請求的 HTTP 版本設為「只用 HTTP/2」）',
+    onlyHttp2: '伺服器只接受 HTTP/2（請求的 HTTP 版本設為「只用 HTTP/1.1」）',
+    noProtocol: '伺服器不接受 HTTP/1.1，也不接受 HTTP/2',
+    noH2c:
+      'http:// 不能使用 HTTP/2（Hachi 不支援 h2c）：請改用 https://，或把 HTTP 版本改成「自動」'
+  },
   oauth2: {
     empty: (label: string) => `OAuth 2.0 的 ${label} 是空的`,
     invalidUrl: (label: string, text: string) => `OAuth 2.0 的 ${label} 不是有效的網址：${text}`,

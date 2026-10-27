@@ -4,6 +4,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
+import http2 from 'node:http2'
 import https from 'node:https'
 import net, { type AddressInfo } from 'node:net'
 import path from 'node:path'
@@ -129,7 +130,10 @@ export interface TestServer {
   close(): Promise<void>
 }
 
-function listen(server: http.Server | https.Server, scheme: string): Promise<TestServer> {
+function listen(
+  server: http.Server | https.Server | http2.Http2SecureServer,
+  scheme: string
+): Promise<TestServer> {
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo
@@ -137,7 +141,7 @@ function listen(server: http.Server | https.Server, scheme: string): Promise<Tes
         url: `${scheme}://127.0.0.1:${port}`,
         close: () =>
           new Promise((done) => {
-            server.closeAllConnections?.()
+            if ('closeAllConnections' in server) server.closeAllConnections()
             server.close(() => done())
           })
       })
@@ -157,6 +161,40 @@ export function startHttpsServer(): Promise<TestServer> {
     https.createServer(tlsOptions, (req, res) => void handle(req, res)),
     'https'
   )
+}
+
+/**
+ * HTTPS server speaking HTTP/2 (decision 146), and HTTP/1.1 too unless `h2Only`.
+ * `/version` answers with the HTTP version the server saw; `/redirect?to=<url>` → 302.
+ */
+export function startHttp2Server(options: { h2Only?: boolean } = {}): Promise<TestServer> {
+  const server = http2.createSecureServer(
+    { ...tlsOptions, allowHTTP1: !options.h2Only },
+    (req, res) => {
+      const url = new URL(req.url, 'https://x')
+      if (url.pathname === '/redirect') {
+        res.writeHead(302, { location: url.searchParams.get('to') ?? '/version' })
+        res.end()
+        return
+      }
+      res.setHeader('content-type', 'application/json')
+      res.setHeader('x-test', 'A')
+      res.end(JSON.stringify({ version: req.httpVersion }))
+    }
+  )
+  // Close open HTTP/2 sessions too, or close() waits for them.
+  const sessions = new Set<http2.ServerHttp2Session>()
+  server.on('session', (session) => {
+    sessions.add(session)
+    session.on('close', () => sessions.delete(session))
+  })
+  return listen(server, 'https').then((s) => ({
+    ...s,
+    close: () => {
+      for (const session of sessions) session.destroy()
+      return s.close()
+    }
+  }))
 }
 
 export interface TestProxy extends TestServer {

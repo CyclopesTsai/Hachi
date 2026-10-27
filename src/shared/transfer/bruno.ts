@@ -992,7 +992,8 @@ function requestPart(
     warnings.add(msg().transferMain.bruno.hachiScript, where)
   }
   part.docs = request.docs
-  const { timeoutMs, validateSSL, followRedirects } = request.settings
+  const { timeoutMs, validateSSL, followRedirects, httpVersion } = request.settings
+  if (httpVersion !== 'auto') warnings.add(msg().transferMain.bruno.httpVersion, where)
   if (format === 'yaml') {
     if (timeoutMs !== null || followRedirects !== null) {
       part.settings = {

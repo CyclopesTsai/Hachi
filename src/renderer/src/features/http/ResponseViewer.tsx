@@ -1,6 +1,12 @@
 import { AlertTriangle, Download, Eye, Loader2, Send } from 'lucide-react'
 import { useState } from 'react'
-import { formatBytes, formatDuration, type HttpResponseData, type HttpResult } from '@shared/http'
+import {
+  formatBytes,
+  formatDuration,
+  httpVersionLabel,
+  type HttpResponseData,
+  type HttpResult
+} from '@shared/http'
 import { Button } from '@renderer/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
 import { cn } from '@renderer/lib/utils'
@@ -253,6 +259,9 @@ export function ResponseViewer({ tab }: { tab: RequestTab }) {
           )}
         </TabsList>
         <div className="flex-1" />
+        <span className="font-mono text-xs text-muted-foreground" data-testid="response-protocol">
+          {httpVersionLabel(result.httpVersion)}
+        </span>
         <span
           className={cn(
             'rounded px-1.5 py-0.5 font-mono text-xs font-semibold',

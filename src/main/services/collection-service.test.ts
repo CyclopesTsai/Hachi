@@ -767,7 +767,8 @@ describe('createRequest (save as)', () => {
         validateSSL: null,
         followRedirects: null,
         useProxy: true,
-        useCookieJar: true
+        useCookieJar: true,
+        httpVersion: 'auto'
       },
       scripts: { preRequest: '', postResponse: '' },
       assertions: [],

@@ -36,6 +36,7 @@ export const transferMain: Messages['transferMain'] = {
     hachiScript:
       'The script uses hachi.* calls, which Bruno cannot run; change them to bru / req / res',
     ssl: 'Bruno has no counterpart for the request’s SSL setting; not exported',
+    httpVersion: 'Bruno has no counterpart for the request’s HTTP version setting; not exported',
     settings:
       'Bruno’s .bru files have no counterpart for the request’s timeout / SSL / redirect settings; not exported',
     secretCollectionVars: 'Values of secret Collection variables are not exported (left empty)',

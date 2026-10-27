@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { RESPONSE_HTTP_VERSIONS } from '../http'
 import { itemNameSchema } from './collection'
 import { httpRequestSchema } from './http-request'
 import type { VersionedFormat } from './versioned'
@@ -63,7 +64,9 @@ export const exampleResponseSchema = z.looseObject({
     .prefault({}),
   /** Decoded body size in bytes. */
   bodyBytes: z.number().int().min(0).default(0),
-  timeMs: z.number().min(0).default(0)
+  timeMs: z.number().min(0).default(0),
+  /** "1.1" / "2" (decision 146); null for imported examples and ones saved before. */
+  httpVersion: z.enum(RESPONSE_HTTP_VERSIONS).nullable().catch(null).default(null)
 })
 export type ExampleResponse = z.infer<typeof exampleResponseSchema>
 

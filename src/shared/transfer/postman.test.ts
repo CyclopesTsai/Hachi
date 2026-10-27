@@ -58,7 +58,11 @@ const sample = {
             { listen: 'test', script: { exec: ['pm.test("ok", () => {', '})'] } },
             { listen: 'prerequest', script: { exec: [''] } }
           ],
-          protocolProfileBehavior: { disableStrictSSL: true, followRedirects: false }
+          protocolProfileBehavior: {
+            disableStrictSSL: true,
+            followRedirects: false,
+            protocolVersion: 'http2'
+          }
         },
         {
           name: 'Create user',
@@ -173,7 +177,11 @@ describe('importPostmanCollection', () => {
     ])
     expect(get.headers[1]).toMatchObject({ key: 'X-Off', enabled: false, description: 'not sent' })
     expect(get.auth).toEqual({ type: 'inherit' })
-    expect(get.settings).toMatchObject({ validateSSL: false, followRedirects: false })
+    expect(get.settings).toMatchObject({
+      validateSSL: false,
+      followRedirects: false,
+      httpVersion: 'http2'
+    })
     expect(get.scripts).toEqual({ preRequest: '', postResponse: 'pm.test("ok", () => {\n})' })
     // Examples become saved results (decision 140), with the item's request when the
     // example has no request of its own.
@@ -367,6 +375,7 @@ describe('exportPostmanCollection', () => {
       name: 'Shop API',
       schema: POSTMAN_SCHEMA_V21
     })
+    expect(JSON.stringify(exported.json)).toContain('"protocolVersion":"http2"')
     const again = importPostmanCollection(exported.json, ctx).collection
 
     const strip = (c: PortableCollection) =>

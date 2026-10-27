@@ -13,6 +13,7 @@ import { X509Certificate } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
+import http2 from 'node:http2'
 import https from 'node:https'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -152,6 +153,33 @@ const fullChainServer = await new Promise((resolve) => {
     resolve({ url: `https://localhost:${server.address().port}/`, close: () => server.close() })
   )
 })
+
+// Decision 146: HTTP/2 servers (one also speaks HTTP/1.1), with the chain Hachi trusts.
+const startHttp2 = (allowHTTP1) =>
+  new Promise((resolve) => {
+    const server = http2.createSecureServer(
+      { ...chainCert, cert: Buffer.concat([chainCert.cert, chainIntermediate]), allowHTTP1 },
+      (req, res) => {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ version: req.httpVersion }))
+      }
+    )
+    const sessions = new Set()
+    server.on('session', (s) => {
+      sessions.add(s)
+      s.on('close', () => sessions.delete(s))
+    })
+    server.listen(0, '127.0.0.1', () =>
+      resolve({
+        url: `https://localhost:${server.address().port}/`,
+        close: () => {
+          for (const s of sessions) s.destroy()
+          server.close()
+        }
+      })
+    )
+  })
+const [h2Server, h2OnlyServer] = await Promise.all([startHttp2(true), startHttp2(false)])
 
 // Local WebSocket echo server for the Phase 4 checks.
 const wsSeen = []
@@ -2278,6 +2306,44 @@ try {
   )
   step('app proxy setting (userData) is used; a request can opt out of the proxy')
 
+  // ---- Decision 146: HTTP version ----
+  const httpVersion = page.getByTestId('http-version')
+  const protocol = () => page.getByTestId('response-protocol').innerText()
+  const sendAndWait = async (url, testId) => {
+    await page.getByTestId('url-input').fill(url)
+    await sendButton().click()
+    // The previous response stays until the new one arrives: wait for this URL's result.
+    await waitUntil(
+      async () =>
+        (await page.getByTestId(testId).isVisible()) &&
+        (testId === 'response-protocol' ||
+          (await page.getByTestId(testId).innerText()).includes(url)),
+      `result of ${url}`,
+      30_000
+    )
+  }
+  assert.equal(await httpVersion.inputValue(), 'auto')
+  await sendAndWait(h2Server.url, 'response-protocol')
+  await waitUntil(async () => (await protocol()) === 'HTTP/2', 'HTTP/2 response')
+  assert.match(await page.getByTestId('response-status').innerText(), /^200/)
+  await page.screenshot({ path: path.join(shots, '35-http-version.png') })
+  await httpVersion.selectOption('http1')
+  await sendButton().click()
+  await waitUntil(async () => (await protocol().catch(() => '')) === 'HTTP/1.1', 'HTTP/1.1')
+  await sendAndWait(h2OnlyServer.url, 'response-error')
+  const versionError = await page.getByTestId('response-error').innerText()
+  assert.ok(
+    versionError.includes('HTTP 版本不符') && versionError.includes('伺服器只接受 HTTP/2'),
+    versionError
+  )
+  await httpVersion.selectOption('http2')
+  await sendAndWait(h2OnlyServer.url, 'response-protocol')
+  await waitUntil(async () => (await protocol().catch(() => '')) === 'HTTP/2', 'HTTP/2 only')
+  await sendAndWait(api('/json'), 'response-error')
+  assert.ok((await page.getByTestId('response-error').innerText()).includes('h2c'))
+  await httpVersion.selectOption('auto')
+  step('HTTP version: Auto uses HTTP/2, HTTP/1.1 only / HTTP/2 only, mismatch errors')
+
   // ---- Sidebar "+" menu, Bruno / OpenAPI export and import (decisions 103–106) ----
   // "+" adds into the selected place: the selected Collection here.
   await page.locator('[data-testid="tree-row"][title="collections/shop"]').click()
@@ -3003,6 +3069,8 @@ try {
   testServer.close()
   brokenChainServer.close()
   fullChainServer.close()
+  h2Server.close()
+  h2OnlyServer.close()
   wsServer.close()
   // Killed (SIGKILL), not closed: with unsaved tabs a close or SIGTERM waits for the save prompt.
   const proc = lastProcess

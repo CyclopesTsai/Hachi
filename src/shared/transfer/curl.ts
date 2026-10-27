@@ -14,7 +14,8 @@ import {
   httpRequestSchema,
   type FormDataField,
   type HttpBody,
-  type HttpRequest
+  type HttpRequest,
+  type HttpVersionSetting
 } from '../schemas/http-request'
 import { msg } from '../i18n'
 
@@ -359,10 +360,6 @@ const IGNORED = new Set([
   'write-out',
   'dump-header',
   'stderr',
-  'http1.0',
-  'http1.1',
-  'http2',
-  'http2-prior-knowledge',
   'http3',
   'ipv4',
   'ipv6',
@@ -404,6 +401,7 @@ interface Parsed {
   form: { key: string; value: string; file: boolean }[]
   auth: Auth | null
   insecure: boolean
+  httpVersion: HttpVersionSetting
   timeoutMs: number | null
   cookies: string[]
   warnings: string[]
@@ -525,6 +523,17 @@ function applyOption(p: Parsed, name: string, value: string | undefined): void {
     case 'insecure':
       p.insecure = true
       return
+    // --http2 means "try HTTP/2, else HTTP/1.1": Hachi's Auto (decision 146).
+    case 'http1.0':
+    case 'http1.1':
+      p.httpVersion = 'http1'
+      return
+    case 'http2':
+      p.httpVersion = 'auto'
+      return
+    case 'http2-prior-knowledge':
+      p.httpVersion = 'http2'
+      return
     case 'get':
       p.get = true
       return
@@ -645,6 +654,7 @@ export function parseCurl(
     form: [],
     auth: null,
     insecure: false,
+    httpVersion: 'auto',
     timeoutMs: null,
     cookies: [],
     warnings: []
@@ -772,7 +782,8 @@ export function parseCurl(
     auth: p.auth ?? { type: 'inherit' },
     settings: {
       timeoutMs: p.timeoutMs,
-      validateSSL: p.insecure ? false : null
+      validateSSL: p.insecure ? false : null,
+      httpVersion: p.httpVersion
     }
   })
   return { request, warnings: p.warnings }

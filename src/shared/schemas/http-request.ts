@@ -53,6 +53,13 @@ export const httpBodySchema = z.looseObject({
 })
 export type HttpBody = z.infer<typeof httpBodySchema>
 
+/**
+ * HTTP version (decision 146): `auto` negotiates with TLS ALPN (HTTP/2 when the server
+ * offers it, else HTTP/1.1); `http2` fails instead of falling back. No h2c.
+ */
+export const HTTP_VERSIONS = ['auto', 'http1', 'http2'] as const
+export type HttpVersionSetting = (typeof HTTP_VERSIONS)[number]
+
 /** Per-request overrides; `null` = use the Workspace setting. */
 export const httpRequestSettingsSchema = z.looseObject({
   timeoutMs: z.number().int().min(0).max(3_600_000).nullable().default(null),
@@ -61,7 +68,9 @@ export const httpRequestSettingsSchema = z.looseObject({
   /** Turn off to send this request directly even if an app proxy is configured. */
   useProxy: z.boolean().default(true),
   /** Send and keep cookies with the Workspace's cookie jar (decision 129). */
-  useCookieJar: z.boolean().default(true)
+  useCookieJar: z.boolean().default(true),
+  /** Unknown values (from a newer build) fall back to `auto`. */
+  httpVersion: z.enum(HTTP_VERSIONS).catch('auto').default('auto')
 })
 export type HttpRequestSettings = z.infer<typeof httpRequestSettingsSchema>
 

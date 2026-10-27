@@ -1,4 +1,8 @@
-import type { HttpRequestSettings } from '@shared/schemas/http-request'
+import {
+  HTTP_VERSIONS,
+  type HttpRequestSettings,
+  type HttpVersionSetting
+} from '@shared/schemas/http-request'
 import { Input } from '@renderer/components/ui/input'
 import { Label } from '@renderer/components/ui/label'
 import { CheckboxLabel, NativeSelect } from '@renderer/components/ui/native-select'
@@ -88,6 +92,23 @@ export function RequestSettingsTab({
         {ws && (
           <span className="text-xs text-muted-foreground">{m.maxRedirects(ws.maxRedirects)}</span>
         )}
+      </Row>
+      <Row label={m.httpVersion}>
+        <NativeSelect
+          aria-label={m.httpVersion}
+          data-testid="http-version"
+          value={settings.httpVersion}
+          onChange={(e) => set({ httpVersion: e.target.value as HttpVersionSetting })}
+        >
+          {HTTP_VERSIONS.map((v) => (
+            <option key={v} value={v}>
+              {m.httpVersions[v]}
+            </option>
+          ))}
+        </NativeSelect>
+        <span className="text-xs text-muted-foreground">
+          {m.httpVersionHint[settings.httpVersion]}
+        </span>
       </Row>
       <Row label="Proxy">
         <CheckboxLabel

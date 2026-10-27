@@ -115,7 +115,11 @@ describe('HttpService.savedResult', () => {
     expect(sentHeaders.authorization).toBe('（已隱藏）')
     expect(sentHeaders.cookie).toBe('（已隱藏）')
     // The echo puts the secret into the response body: it is masked there too.
-    expect(saved.response).toMatchObject({ status: 200, body: { encoding: 'text' } })
+    expect(saved.response).toMatchObject({
+      status: 200,
+      body: { encoding: 'text' },
+      httpVersion: '1.1'
+    })
     expect(saved.response.body.data).toContain('{{token}}')
   })
 

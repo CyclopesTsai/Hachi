@@ -1,13 +1,25 @@
 import { STATUS_CODES } from 'node:http'
 import { performance } from 'node:perf_hooks'
-import { Agent, ProxyAgent, interceptors, request, type Dispatcher } from 'undici'
+import type { TLSSocket } from 'node:tls'
+import {
+  Agent,
+  Pool,
+  ProxyAgent,
+  buildConnector,
+  interceptors,
+  request,
+  type Dispatcher
+} from 'undici'
 import {
   DISPLAY_LIMIT_BYTES,
   MAX_RESPONSE_BYTES,
   type HttpErrorCode,
   type HttpResult,
-  type ResponseBody
+  type ResponseBody,
+  type ResponseHttpVersion
 } from '@shared/http'
+import { msg } from '@shared/i18n'
+import type { HttpVersionSetting } from '@shared/schemas/http-request'
 import type { BuiltRequest } from './build-request'
 import {
   BodyTooLargeError,
@@ -93,11 +105,53 @@ const TIMEOUT_CODES = new Set([
   'UND_ERR_BODY_TIMEOUT'
 ])
 
+/** The connection's protocol does not match the request's HTTP version (decision 146). */
+export class HttpVersionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'HttpVersionError'
+  }
+}
+
+/** Origin key shared by connections (undici's connect options) and response URLs. */
+function originKey(protocol: string, hostname: string, port: string): string {
+  return `${protocol}//${hostname}:${port || (protocol === 'https:' ? '443' : '80')}`
+}
+
+/**
+ * Wraps a connector: records each connection's protocol (TLS ALPN) and, for `http2`,
+ * refuses connections that did not negotiate h2 (plain http:// included: no h2c).
+ */
+function versionedConnector(
+  connect: buildConnector.connector,
+  version: HttpVersionSetting,
+  seen: Map<string, ResponseHttpVersion>
+): buildConnector.connector {
+  return (options, callback) =>
+    connect(options, (...args) => {
+      const [error, socket] = args
+      if (error) return callback(error, null)
+      const h2 = (socket as TLSSocket).alpnProtocol === 'h2'
+      if (version === 'http2' && !h2) {
+        socket.destroy()
+        const text = msg().httpMain.version
+        callback(
+          new HttpVersionError(options.protocol === 'https:' ? text.noHttp2 : text.noH2c),
+          null
+        )
+        return
+      }
+      seen.set(originKey(options.protocol, options.hostname, options.port), h2 ? '2' : '1.1')
+      callback(null, socket)
+    })
+}
+
 /** Maps any error thrown while sending to an error code + readable message. */
 export function classifyError(
   error: unknown,
   cancelled: boolean,
-  timedOut: boolean
+  timedOut: boolean,
+  httpVersion: HttpVersionSetting = 'auto'
 ): { code: HttpErrorCode; message: string } {
   if (error instanceof BodyTooLargeError) {
     return {
@@ -115,6 +169,21 @@ export function classifyError(
     if (e.message && !messages.includes(e.message)) messages.push(e.message)
     const code = e.code ?? ''
     const name = e.name ?? ''
+    if (current instanceof HttpVersionError)
+      return { code: 'HTTP_VERSION', message: current.message }
+    // The server accepts none of the protocols offered in TLS ALPN.
+    if (code.endsWith('NO_APPLICATION_PROTOCOL')) {
+      const text = msg().httpMain.version
+      return {
+        code: 'HTTP_VERSION',
+        message:
+          httpVersion === 'http1'
+            ? text.onlyHttp2
+            : httpVersion === 'http2'
+              ? text.noHttp2
+              : text.noProtocol
+      }
+    }
     if (TIMEOUT_CODES.has(code) || /Timeout/.test(name)) {
       return { code: 'TIMEOUT', message: messages.join(': ') }
     }
@@ -147,12 +216,20 @@ function flattenHeaders(raw: Record<string, string | string[] | undefined>): [st
 /** Sends a built request with undici. Never throws: failures come back as `kind: 'error'`. */
 export async function sendHttp(built: BuiltRequest, options: SendOptions): Promise<SendOutcome> {
   const started = performance.now()
-  const { timeoutMs, validateSSL, followRedirects, maxRedirects } = built.options
+  const { timeoutMs, validateSSL, followRedirects, maxRedirects, httpVersion } = built.options
   const maxBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES
   const displayLimit = options.displayLimitBytes ?? DISPLAY_LIMIT_BYTES
   const tls = { rejectUnauthorized: validateSSL }
   // 0 disables undici's own idle timeouts; the overall timeout is enforced by the signal below.
   const idle = { headersTimeout: timeoutMs, bodyTimeout: timeoutMs }
+  // HTTP version (decision 146): ALPN offers h2 unless `http1`; `http2` asks for it first.
+  const alpn = { allowH2: httpVersion !== 'http1', preferH2: httpVersion === 'http2' }
+  const seen = new Map<string, ResponseHttpVersion>()
+  // Every connection (direct, or the TLS session inside a proxy tunnel) goes through here.
+  const factory = (origin: string | URL, opts: object) => {
+    const o = opts as { connect: buildConnector.connector }
+    return new Pool(origin, { ...o, connect: versionedConnector(o.connect, httpVersion, seen) })
+  }
 
   const agent: Dispatcher = options.proxyUrl
     ? new ProxyAgent({
@@ -165,11 +242,13 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
               ).toString('base64')}`
             }
           : {}),
-        requestTls: tls,
+        requestTls: { ...tls, preferH2: alpn.preferH2 },
         proxyTls: tls,
+        allowH2: alpn.allowH2,
+        factory,
         ...idle
       })
-    : new Agent({ connect: tls, ...idle })
+    : new Agent({ connect: buildConnector({ ...tls, ...alpn }), factory, ...idle })
   const manual = options.cookies !== undefined
   const dispatcher =
     followRedirects && maxRedirects > 0 && !manual
@@ -182,6 +261,9 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
   const signal = timeoutSignal ? AbortSignal.any([options.signal, timeoutSignal]) : options.signal
 
   try {
+    if (httpVersion === 'http2' && new URL(built.url).protocol === 'http:') {
+      throw new HttpVersionError(msg().httpMain.version.noH2c)
+    }
     let hop = { url: built.url, method: built.method, headers: built.headers, body: built.body }
     let sentHeaders: [string, string][] | null = null
     let hops = 0
@@ -259,7 +341,10 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
     else body = { kind: 'text', text: decodeText(decoded, contentType) }
 
     const statusText = response.statusText || STATUS_CODES[response.statusCode] || ''
-    const history = (response.context as { history?: unknown[] } | undefined)?.history
+    const history = (response.context as { history?: URL[] } | undefined)?.history
+    const finalUrl = new URL(manual ? hop.url : (history?.at(-1)?.toString() ?? built.url))
+    const protocol: ResponseHttpVersion =
+      seen.get(originKey(finalUrl.protocol, finalUrl.hostname, finalUrl.port)) ?? '1.1'
     return {
       result: {
         kind: 'response',
@@ -273,9 +358,13 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
         contentType,
         body,
         bodyBytes: decoded.length,
+        httpVersion: protocol,
+        // HTTP/2 has no status line and compresses headers (HPACK): count the fields as is.
         headerBytes:
-          `HTTP/1.1 ${response.statusCode} ${statusText}\r\n`.length +
-          headers.reduce((sum, [k, v]) => sum + k.length + v.length + 4, 2),
+          protocol === '2'
+            ? headers.reduce((sum, [k, v]) => sum + k.length + v.length, ':status'.length + 3)
+            : `HTTP/1.1 ${response.statusCode} ${statusText}\r\n`.length +
+              headers.reduce((sum, [k, v]) => sum + k.length + v.length + 4, 2),
         timings: { headersMs, totalMs },
         url: built.url,
         requestHeaders: sentHeaders ?? built.headers,
@@ -288,7 +377,8 @@ export async function sendHttp(built: BuiltRequest, options: SendOptions): Promi
     const { code, message } = classifyError(
       error,
       options.signal.aborted,
-      timeoutSignal?.aborted ?? false
+      timeoutSignal?.aborted ?? false,
+      httpVersion
     )
     return {
       result: {

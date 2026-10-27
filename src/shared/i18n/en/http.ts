@@ -49,7 +49,18 @@ export const http: Messages['http'] = {
     proxyNow: (mode) =>
       `Now: ${mode === 'none' ? 'not set' : mode === 'system' ? 'system proxy' : 'custom'}`,
     useCookieJar: 'Use the Workspace’s cookie jar',
-    cookieJarHint: 'Sends and keeps cookies automatically'
+    cookieJarHint: 'Sends and keeps cookies automatically',
+    httpVersion: 'HTTP version',
+    httpVersions: {
+      auto: 'Auto',
+      http1: 'HTTP/1.1 only',
+      http2: 'HTTP/2 only'
+    },
+    httpVersionHint: {
+      auto: 'HTTP/2 when the server supports it, else HTTP/1.1',
+      http1: '',
+      http2: 'No fallback to HTTP/1.1; https:// only'
+    }
   },
   response: {
     errors: {
@@ -65,6 +76,7 @@ export const http: Messages['http'] = {
       TOO_MANY_REDIRECTS: 'Too many redirects (the limit is in the Workspace settings)',
       SCRIPT: 'Script error; the request was not sent',
       AUTH: 'Authentication failed; the request was not sent',
+      HTTP_VERSION: 'HTTP version mismatch (you can change it in the request’s Settings)',
       UNKNOWN: 'Sending failed'
     },
     download: 'Download',

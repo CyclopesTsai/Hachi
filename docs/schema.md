@@ -324,7 +324,8 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（新增欄位一律附預設�
     "validateSSL": null, // null = 沿用 Workspace
     "followRedirects": null, // null = 沿用 Workspace（次數上限一律用 Workspace 的 maxRedirects）
     "useProxy": true, // false = 這個請求不使用 App 的 Proxy 設定
-    "useCookieJar": true // false = 不帶上、也不保存 Workspace Cookie Jar 的 Cookie
+    "useCookieJar": true, // false = 不帶上、也不保存 Workspace Cookie Jar 的 Cookie
+    "httpVersion": "auto" // auto（TLS 協商：伺服器支援就用 HTTP/2，否則 HTTP/1.1）| http1（只用 HTTP/1.1）| http2（只用 HTTP/2，不退回；只能用 https://，不支援 h2c）；不認得的值視為 auto
   },
   "scripts": {
     "preRequest": "", // 發送前執行的 JavaScript（最多約 1 MB）；可用的 API 見 App 內 Scripts 分頁的「可用的 API」
@@ -471,7 +472,7 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（新增欄位一律附預設�
 | `auth`：`oauth2`（`grant_type`：`client_credentials` / `password_credentials` / `authorization_code` / `authorization_code_with_pkce`；`accessTokenUrl`、`authUrl`、`redirect_uri`、`clientId`、`clientSecret`、`scope`、`username`、`password`、`client_authentication`、`headerPrefix`） | OAuth 2.0；`implicit` → None（提示）；Token 本身不匯入；`addTokenTo: queryParams` 改用 Header（提示）                                            |
 | 其他 auth（`ntlm`、`hawk`…）                                                                                                                                                                                                                                                               | None（提示）                                                                                                                                     |
 | `event[]` `prerequest` / `test`                                                                                                                                                                                                                                                            | `scripts.preRequest` / `scripts.postResponse`（停用的腳本不匯入）；Collection / 資料夾的腳本也會執行，Collection 的 `scriptFlow` 為 `sequential` |
-| `protocolProfileBehavior.disableStrictSSL` / `followRedirects: false`                                                                                                                                                                                                                      | `settings.validateSSL: false` / `settings.followRedirects: false`                                                                                |
+| `protocolProfileBehavior.disableStrictSSL` / `followRedirects: false` / `protocolVersion`（`http1` / `http2` / `auto`）                                                                                                                                                                    | `settings.validateSSL: false` / `settings.followRedirects: false` / `settings.httpVersion`                                                       |
 | `variable[]`                                                                                                                                                                                                                                                                               | Collection 變數（`type: "secret"` → 機密）                                                                                                       |
 | `response[]`（Examples）                                                                                                                                                                                                                                                                   | 儲存的結果：`originalRequest`（沒有時用項目自己的請求）、`code` / `status`、`header[]`、`body`；超過 1 MB 的略過（提示）                         |
 
@@ -481,19 +482,19 @@ HTTP 與 WebSocket 的完整欄位見下面兩節（新增欄位一律附預設�
 
 ### Hachi → Postman Collection v2.1
 
-| Hachi                                                 | Postman                                                                                                                          |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Collection / 資料夾 / HTTP 請求                       | `info` + `item[]`（依顯示順序）；WebSocket 請求略過並列出                                                                        |
-| Collection / 資料夾的共用 Headers                     | Postman 沒有共用 Headers：併入每個請求（請求自己已有同名的啟用 Header 時不加；提示）                                             |
-| URL + Params                                          | `url.raw`（含啟用的 query）+ `protocol` / `host` / `port` / `path` / `query[]`（停用的標 `disabled`）                            |
-| Auth 沿用上層 / None                                  | 不寫 `auth`（Postman 視為沿用）/ `{ "type": "noauth" }`（Collection 層級的 None 不寫）                                           |
-| Bearer / Basic / API Key                              | `bearer` / `basic` / `apikey` 屬性陣列                                                                                           |
-| JSON / Raw Body                                       | `raw` + `options.raw.language`；Raw 的 Content-Type 不是 language 預設值時另加 `Content-Type` Header                             |
-| `scripts`                                             | `event[]`（`prerequest` / `test`）                                                                                               |
-| `settings.validateSSL` / `followRedirects` 為 `false` | `protocolProfileBehavior`；請求的 timeout 與「不使用 App 的 Proxy」無法對應（提示）                                              |
-| Collection 變數                                       | `variable[]`（`type: "string"`）；**機密變數的值留空**                                                                           |
-| 儲存的結果                                            | `response[]`：`originalRequest`、`code`、`status`、`header[]`、`body`、`_postman_previewlanguage`；二進位內容不匯出 Body（提示） |
-| 損毀的項目                                            | 略過並列出                                                                                                                       |
+| Hachi                                                                            | Postman                                                                                                                                         |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collection / 資料夾 / HTTP 請求                                                  | `info` + `item[]`（依顯示順序）；WebSocket 請求略過並列出                                                                                       |
+| Collection / 資料夾的共用 Headers                                                | Postman 沒有共用 Headers：併入每個請求（請求自己已有同名的啟用 Header 時不加；提示）                                                            |
+| URL + Params                                                                     | `url.raw`（含啟用的 query）+ `protocol` / `host` / `port` / `path` / `query[]`（停用的標 `disabled`）                                           |
+| Auth 沿用上層 / None                                                             | 不寫 `auth`（Postman 視為沿用）/ `{ "type": "noauth" }`（Collection 層級的 None 不寫）                                                          |
+| Bearer / Basic / API Key                                                         | `bearer` / `basic` / `apikey` 屬性陣列                                                                                                          |
+| JSON / Raw Body                                                                  | `raw` + `options.raw.language`；Raw 的 Content-Type 不是 language 預設值時另加 `Content-Type` Header                                            |
+| `scripts`                                                                        | `event[]`（`prerequest` / `test`）                                                                                                              |
+| `settings.validateSSL` / `followRedirects` 為 `false`、`httpVersion` 不是 `auto` | `protocolProfileBehavior`（`disableStrictSSL`、`followRedirects`、`protocolVersion`）；請求的 timeout 與「不使用 App 的 Proxy」無法對應（提示） |
+| Collection 變數                                                                  | `variable[]`（`type: "string"`）；**機密變數的值留空**                                                                                          |
+| 儲存的結果                                                                       | `response[]`：`originalRequest`、`code`、`status`、`header[]`、`body`、`_postman_previewlanguage`；二進位內容不匯出 Body（提示）                |
+| 損毀的項目                                                                       | 略過並列出                                                                                                                                      |
 
 ### Bruno → Hachi（`src/shared/transfer/bruno*.ts`、`bru-lang.ts`）
 
@@ -549,7 +550,7 @@ Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: 
 
 匯出時可選 **YAML**（OpenCollection：`opencollection.yml`、`folder.yml`、`<名稱>.yml`、`environments/<環境>.yml`，會寫出請求的逾時 / 轉址設定）或 **.bru**（如下）。環境名稱開頭的「Collection 名稱 / 」會去掉。
 
-`bruno.json`、`collection.bru`（Headers、Auth、Collection 變數）、每個資料夾的 `folder.bru`、每個 HTTP 請求一個 `<名稱>.bru`（檔名去掉不合法字元，重名加數字）、`environments/<環境>.bru`（Workspace 的所有環境；**機密變數只寫名稱**）。擷取表格 → `vars:post-response`（Regex 擷取改為整個 Body、存到環境的擷取變成暫存變數，提示）；斷言 → `assert`；腳本原樣寫出（用了 `hachi.*` 時提示）；請求的逾時 / SSL 設定無法對應（提示）。WebSocket 略過。
+`bruno.json`、`collection.bru`（Headers、Auth、Collection 變數）、每個資料夾的 `folder.bru`、每個 HTTP 請求一個 `<名稱>.bru`（檔名去掉不合法字元，重名加數字）、`environments/<環境>.bru`（Workspace 的所有環境；**機密變數只寫名稱**）。擷取表格 → `vars:post-response`（Regex 擷取改為整個 Body、存到環境的擷取變成暫存變數，提示）；斷言 → `assert`；腳本原樣寫出（用了 `hachi.*` 時提示）；請求的逾時 / SSL / HTTP 版本設定無法對應（提示）。WebSocket 略過。
 
 ### Hachi → OpenAPI 3.0（`src/shared/transfer/openapi.ts`）
 
@@ -571,6 +572,7 @@ Bruno 的回應範例（`.bru` 的 `example { name / request: {…} / response: 
 
 - 斷詞：POSIX shell（單 / 雙引號、`$'…'`、`\` 跳脫與換行接續、`#` 註解）；含 `^"` 或 `^` 換行時改用 Windows cmd 規則（瀏覽器的「Copy as cURL (cmd)」）。開頭的 `$ ` 提示字元與 `curl.exe` 也接受。
 - 支援：`-X`、`-H`、`-d` / `--data` / `--data-raw` / `--data-binary` / `--data-ascii` / `--data-urlencode`、`--json`、`-F` / `--form` / `--form-string`、`-u`、`--oauth2-bearer`、`-A`、`-e`、`-b`（Cookie 字串）、`-G`、`-I`、`-k`、`-m`、`--url`，以及合併的短選項（`-sSL`、`-XPOST`）。
+- HTTP 版本：`--http1.1` / `--http1.0` / `-0` → 只用 HTTP/1.1；`--http2` → 自動（curl 的 `--http2` 也會退回 HTTP/1.1）；`--http2-prior-knowledge` → 只用 HTTP/2；`--http3` 忽略。
 - 方法：`-X` > `-I`（HEAD）> 有 Body 時 POST > GET。`-G` 把 data 放進 Params。
 - Body：有 `-F` → Form-data；Content-Type 含 json 或內容是 JSON → JSON；`a=1&b=2` 形式（且沒有其他 Content-Type）→ x-www-form-urlencoded（值會解碼）；其餘 → Raw（Content-Type 預設 `application/x-www-form-urlencoded`，同 curl）。與 Body 模式重複的 Content-Type Header 會移除。
 - URL 照原樣放進 URL 欄位（含 query）；請求名稱為「方法 + 網址（不含 scheme 與 query）」。沒有指定 Auth 時為「沿用上層」。
@@ -738,7 +740,8 @@ Workspace 的 Cookie Jar，只存在這台電腦（不在 Workspace 資料夾，
     "contentType": "application/json",
     "body": { "encoding": "text", "data": "{\"id\":1}" }, // 非文字內容：encoding "base64"
     "bodyBytes": 8,
-    "timeMs": 12
+    "timeMs": 12,
+    "httpVersion": "2" // 實際使用的協定："1.1" | "2"；匯入的結果與較早儲存的結果為 null
   }
 }
 ```

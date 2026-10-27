@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { HttpErrorData, HttpResponseData, HttpResult } from '@shared/http'
 import type { BuiltRequest, EffectiveOptions } from './build-request'
+import { msg } from '@shared/i18n'
 import { classifyError, sendHttp, type SendOptions } from './http-client'
 import {
+  startHttp2Server,
   startHttpServer,
   startHttpsServer,
   startProxy,
@@ -31,7 +33,8 @@ const defaults: EffectiveOptions = {
   validateSSL: true,
   followRedirects: true,
   maxRedirects: 3,
-  useProxy: true
+  useProxy: true,
+  httpVersion: 'auto'
 }
 
 function req(
@@ -201,6 +204,77 @@ describe('sendHttp', () => {
   })
 })
 
+describe('HTTP version (decision 146)', () => {
+  let h2: TestServer
+  let h2Only: TestServer
+  beforeAll(async () => {
+    ;[h2, h2Only] = await Promise.all([startHttp2Server(), startHttp2Server({ h2Only: true })])
+  })
+  afterAll(async () => {
+    await Promise.all([h2.close(), h2Only.close()])
+  })
+  const insecure = (url: string, httpVersion: EffectiveOptions['httpVersion']) =>
+    req(url, { options: { validateSSL: false, httpVersion } })
+  const version = (r: HttpResponseData) => (JSON.parse(text(r)) as { version: string }).version
+  const v = () => msg().httpMain.version
+
+  it('Auto uses HTTP/2 when the server offers it, else HTTP/1.1', async () => {
+    const r = ok(await send(insecure(`${h2.url}/version`, 'auto')))
+    expect([r.httpVersion, version(r)]).toEqual(['2', '2.0'])
+    expect(r.statusText).toBe('OK')
+    expect(r.headers).toContainEqual(['x-test', 'A'])
+    expect(r.headers.some(([k]) => k.startsWith(':'))).toBe(false)
+    // No status line: just the fields (":status" + 3 digits included).
+    expect(r.headerBytes).toBe(r.headers.reduce((n, [k, v]) => n + k.length + v.length, 10))
+    expect(ok(await send(insecure(`${tlsServer.url}/json`, 'auto'))).httpVersion).toBe('1.1')
+    expect(ok(await send(req(`${server.url}/json`))).httpVersion).toBe('1.1')
+  })
+
+  it('HTTP/1.1 only does not offer h2', async () => {
+    const r = ok(await send(insecure(`${h2.url}/version`, 'http1')))
+    expect([r.httpVersion, version(r)]).toEqual(['1.1', '1.1'])
+    const e = failed(await send(insecure(`${h2Only.url}/version`, 'http1')))
+    expect([e.code, e.message]).toEqual(['HTTP_VERSION', v().onlyHttp2])
+  })
+
+  it('HTTP/2 only fails instead of falling back', async () => {
+    const r = ok(await send(insecure(`${h2Only.url}/version`, 'http2')))
+    expect([r.httpVersion, version(r)]).toEqual(['2', '2.0'])
+    const e = failed(await send(insecure(`${tlsServer.url}/json`, 'http2')))
+    expect([e.code, e.message]).toEqual(['HTTP_VERSION', v().noHttp2])
+    const plain = failed(
+      await send(req(`${server.url}/json`, { options: { httpVersion: 'http2' } }))
+    )
+    expect([plain.code, plain.message]).toEqual(['HTTP_VERSION', v().noH2c])
+  })
+
+  it('works through the proxy tunnel', async () => {
+    const r = ok(await send(insecure(`${h2Only.url}/version`, 'http2'), { proxyUrl: proxy.url }))
+    expect(r.httpVersion).toBe('2')
+    const auto = ok(await send(insecure(`${h2.url}/version`, 'auto'), { proxyUrl: proxy.url }))
+    expect(auto.httpVersion).toBe('2')
+    const e = failed(
+      await send(insecure(`${h2Only.url}/version`, 'http1'), { proxyUrl: proxy.url })
+    )
+    expect(e.code).toBe('HTTP_VERSION')
+    const old = failed(
+      await send(insecure(`${tlsServer.url}/json`, 'http2'), { proxyUrl: proxy.url })
+    )
+    expect([old.code, old.message]).toEqual(['HTTP_VERSION', v().noHttp2])
+  })
+
+  it('reports the protocol of the final response after redirects', async () => {
+    const to = encodeURIComponent(`${tlsServer.url}/json`)
+    const hooks = { header: () => null, store: () => undefined }
+    for (const cookies of [undefined, hooks]) {
+      const r = ok(await send(insecure(`${h2.url}/redirect?to=${to}`, 'auto'), { cookies }))
+      expect([r.redirects, r.httpVersion]).toEqual([1, '1.1'])
+    }
+    const e = failed(await send(insecure(`${h2.url}/redirect?to=${to}`, 'http2')))
+    expect(e.code).toBe('HTTP_VERSION')
+  })
+})
+
 describe('classifyError', () => {
   it('walks the cause chain', () => {
     const error = new Error('fetch failed', {
@@ -210,6 +284,19 @@ describe('classifyError', () => {
       code: 'NETWORK',
       message: 'fetch failed: refused'
     })
+  })
+
+  it('explains ALPN failures by the HTTP version setting', () => {
+    const alpn = Object.assign(new Error('alert'), {
+      code: 'ERR_SSL_TLSV1_ALERT_NO_APPLICATION_PROTOCOL'
+    })
+    const v = msg().httpMain.version
+    expect(classifyError(alpn, false, false, 'http1')).toEqual({
+      code: 'HTTP_VERSION',
+      message: v.onlyHttp2
+    })
+    expect(classifyError(alpn, false, false, 'http2').message).toBe(v.noHttp2)
+    expect(classifyError(alpn, false, false).message).toBe(v.noProtocol)
   })
 
   it('prefers cancel / timeout flags', () => {

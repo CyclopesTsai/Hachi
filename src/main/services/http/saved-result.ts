@@ -11,6 +11,7 @@ import {
   EXAMPLE_BODY_MAX_BYTES,
   type ExampleSentBody
 } from '@shared/schemas/example'
+import type { ResponseHttpVersion } from '@shared/http'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import type { PortableExample } from '@shared/transfer/portable'
 import type { VariableMap } from '@shared/variables'
@@ -40,6 +41,7 @@ export interface Exchange {
     headers: [string, string][]
     contentType: string
     timeMs: number
+    httpVersion: ResponseHttpVersion
   }
   secrets: SecretValue[]
 }
@@ -137,7 +139,8 @@ export function exampleFromExchange(
         ? { encoding: 'text', data: maskSecrets(decodeText(body, response.contentType), secrets) }
         : { encoding: 'base64', data: body.toString('base64') },
       bodyBytes: body.length,
-      timeMs: Math.round(response.timeMs)
+      timeMs: Math.round(response.timeMs),
+      httpVersion: response.httpVersion
     }
   }
 }

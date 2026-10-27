@@ -3,6 +3,7 @@
  * (variables, inherited headers / auth) into a CodegenRequest via `http:resolve`, the
  * renderer turns it into code for the chosen language.
  */
+import type { HttpVersionSetting } from './schemas/http-request'
 
 export const CODEGEN_LANGUAGES = [
   { id: 'curl', label: 'cURL', editorLanguage: 'text' },
@@ -38,6 +39,7 @@ export interface CodegenRequest {
     maxRedirects: number
     /** 0 = no timeout. */
     timeoutMs: number
+    httpVersion: HttpVersionSetting
   }
 }
 
@@ -65,6 +67,8 @@ function parseJsonSafely(text: string): unknown {
     return undefined
   }
 }
+
+const HTTP_VERSION_TEXT = { http1: 'HTTP/1.1 only', http2: 'HTTP/2 only' } as const
 
 const basename = (p: string) => p.split(/[\\/]/).pop() ?? p
 
@@ -109,6 +113,8 @@ function curl(r: CodegenRequest): string {
   if (!r.options.validateSSL) lines.push('--insecure')
   if (r.options.followRedirects) lines.push(`-L --max-redirs ${r.options.maxRedirects}`)
   if (r.options.timeoutMs > 0) lines.push(`--max-time ${r.options.timeoutMs / 1000}`)
+  if (r.options.httpVersion === 'http1') lines.push('--http1.1')
+  if (r.options.httpVersion === 'http2') lines.push('--http2-prior-knowledge')
   return lines.join(' \\\n  ')
 }
 
@@ -224,6 +230,11 @@ function fetchCode(r: CodegenRequest): string {
       '// (Node.js: NODE_TLS_REJECT_UNAUTHORIZED=0 turns it off for the whole process).'
     )
   }
+  if (r.options.httpVersion !== 'auto') {
+    comments.push(
+      `// Hachi sends this request with ${HTTP_VERSION_TEXT[r.options.httpVersion]}; fetch picks the HTTP version itself.`
+    )
+  }
   const body = options.map(([k, v]) => `  ${k}: ${v}`).join(',\n')
   return [
     ...imports,
@@ -282,6 +293,9 @@ function axiosCode(r: CodegenRequest): string {
   return [
     ...imports,
     '',
+    ...(r.options.httpVersion === 'http2'
+      ? ['// Hachi sends this request with HTTP/2 only; axios in Node.js sends HTTP/1.1.', '']
+      : []),
     ...setup,
     ...(setup.length > 0 ? [''] : []),
     `const response = await axios({\n${body}\n});`,
@@ -324,7 +338,15 @@ function pyPairs(pairs: [string, string][], valueOf: (v: string) => string = pyS
 }
 
 function pythonCode(r: CodegenRequest): string {
-  const lines = ['import requests', '', `url = ${pyString(r.url)}`]
+  const lines = ['import requests', '']
+  if (r.options.httpVersion === 'http2') {
+    lines.push(
+      '# Hachi sends this request with HTTP/2 only; requests speaks HTTP/1.1',
+      '# (httpx with http2=True supports HTTP/2).',
+      ''
+    )
+  }
+  lines.push(`url = ${pyString(r.url)}`)
   const args = [pyString(r.method), 'url']
   if (r.headers.length > 0) {
     lines.push(`headers = ${pyPairs(headerObject(r.headers))}`)

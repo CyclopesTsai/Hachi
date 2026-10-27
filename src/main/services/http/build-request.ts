@@ -5,7 +5,7 @@
 import path from 'node:path'
 import { FormData } from 'undici'
 import type { Auth, KeyValue, RequestScripts, ScriptFlow } from '@shared/schemas/collection'
-import type { HttpBody, HttpRequest } from '@shared/schemas/http-request'
+import type { HttpBody, HttpRequest, HttpVersionSetting } from '@shared/schemas/http-request'
 import type { WorkspaceSettings } from '@shared/schemas/workspace'
 import type { HttpErrorCode, InheritedHeader, InheritedSettings } from '@shared/http'
 import type { CodegenBody, CodegenRequest } from '@shared/codegen'
@@ -38,6 +38,7 @@ export interface EffectiveOptions {
   followRedirects: boolean
   maxRedirects: number
   useProxy: boolean
+  httpVersion: HttpVersionSetting
 }
 
 export interface BuiltRequest {
@@ -242,7 +243,8 @@ export async function buildRequest(input: BuildInput): Promise<BuiltRequest> {
       validateSSL: s.validateSSL ?? workspace.validateSSL,
       followRedirects: s.followRedirects ?? workspace.followRedirects,
       maxRedirects: workspace.maxRedirects,
-      useProxy: s.useProxy
+      useProxy: s.useProxy,
+      httpVersion: s.httpVersion
     }
   }
 }
@@ -335,7 +337,8 @@ export function buildCodegenRequest(input: {
         validateSSL: s.validateSSL ?? workspace.validateSSL,
         followRedirects: s.followRedirects ?? workspace.followRedirects,
         maxRedirects: workspace.maxRedirects,
-        timeoutMs: s.timeoutMs ?? workspace.timeoutMs
+        timeoutMs: s.timeoutMs ?? workspace.timeoutMs,
+        httpVersion: s.httpVersion
       }
     },
     urlError

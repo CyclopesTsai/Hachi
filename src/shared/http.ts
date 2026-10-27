@@ -31,6 +31,11 @@ export type ResponseBody =
   | { kind: 'large' }
   | { kind: 'empty' }
 
+export const RESPONSE_HTTP_VERSIONS = ['1.1', '2'] as const
+export type ResponseHttpVersion = (typeof RESPONSE_HTTP_VERSIONS)[number]
+/** "HTTP/1.1" / "HTTP/2", as the response bar shows it. */
+export const httpVersionLabel = (version: ResponseHttpVersion) => `HTTP/${version}`
+
 export interface HttpResponseData {
   kind: 'response'
   runId: string
@@ -43,7 +48,9 @@ export interface HttpResponseData {
   body: ResponseBody
   /** Decoded (decompressed) body size in bytes. */
   bodyBytes: number
-  /** Approximate size of the response headers in bytes. */
+  /** Protocol of the final response, from the connection's TLS ALPN (decision 146). */
+  httpVersion: ResponseHttpVersion
+  /** Approximate size of the response headers in bytes (HTTP/2: uncompressed fields). */
   headerBytes: number
   /** Time until the response headers arrived / until the body was fully read. */
   timings: { headersMs: number; totalMs: number }
@@ -74,6 +81,8 @@ export const HTTP_ERROR_CODES = [
   'AUTH',
   /** {{$file:…}}: a file outside the Workspace not allowed yet, too large, bad format (decision 134). */
   'FILE_ACCESS',
+  /** The server and the request's HTTP version setting do not match (decision 146). */
+  'HTTP_VERSION',
   'UNKNOWN'
 ] as const
 export type HttpErrorCode = (typeof HTTP_ERROR_CODES)[number]

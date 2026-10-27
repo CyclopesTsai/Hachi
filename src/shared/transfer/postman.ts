@@ -461,7 +461,9 @@ function parseRequest(
     auth: parseAuth(req.auth, { type: 'inherit' }, where, warnings),
     settings: {
       validateSSL: behavior.disableStrictSSL === true ? false : null,
-      followRedirects: behavior.followRedirects === false ? false : null
+      followRedirects: behavior.followRedirects === false ? false : null,
+      // Postman: http1 / http2 / auto, the same three choices (decision 146).
+      httpVersion: behavior.protocolVersion
     },
     scripts: parseScripts(item.event, where, warnings) ?? {}
   })
@@ -858,6 +860,7 @@ function exportRequest(
   const behavior: Json = {}
   if (s.validateSSL === false) behavior.disableStrictSSL = true
   if (s.followRedirects === false) behavior.followRedirects = false
+  if (s.httpVersion !== 'auto') behavior.protocolVersion = s.httpVersion
 
   const req: Json = {
     method: request.method,

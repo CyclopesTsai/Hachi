@@ -1,6 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
-import { formatBytes, formatDuration } from '@shared/http'
+import { formatBytes, formatDuration, httpVersionLabel } from '@shared/http'
 import type { ExampleFile, ExampleSentBody } from '@shared/schemas/example'
 import type { HttpRequest } from '@shared/schemas/http-request'
 import { findExample } from '@shared/tree'
@@ -139,6 +139,11 @@ function ResponseSide({ example }: { example: ExampleFile }) {
           <TabsTrigger value="headers">Headers ({response.headers.length})</TabsTrigger>
         </TabsList>
         <div className="flex-1" />
+        {response.httpVersion && (
+          <span className="font-mono text-xs text-muted-foreground" data-testid="example-protocol">
+            {httpVersionLabel(response.httpVersion)}
+          </span>
+        )}
         <span
           className={cn(
             'rounded px-1.5 py-0.5 font-mono text-xs font-semibold',

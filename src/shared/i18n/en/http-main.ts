@@ -3,6 +3,13 @@ import { plural } from './plural'
 
 export const httpMain: Messages['httpMain'] = {
   hidden: '(hidden)',
+  version: {
+    noHttp2: 'The server does not support HTTP/2 (the request’s HTTP version is “HTTP/2 only”)',
+    onlyHttp2: 'The server only accepts HTTP/2 (the request’s HTTP version is “HTTP/1.1 only”)',
+    noProtocol: 'The server accepts neither HTTP/1.1 nor HTTP/2',
+    noH2c:
+      'http:// cannot use HTTP/2 (Hachi does not support h2c): use https://, or set the HTTP version to “Auto”'
+  },
   oauth2: {
     empty: (label) => `The OAuth 2.0 ${label} is empty`,
     invalidUrl: (label, text) => `The OAuth 2.0 ${label} is not a valid URL: ${text}`,

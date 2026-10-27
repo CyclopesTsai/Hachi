@@ -16,7 +16,13 @@ const base = (over: Partial<CodegenRequest> = {}): CodegenRequest => ({
   headers: [],
   basicAuth: null,
   body: { kind: 'none' },
-  options: { validateSSL: true, followRedirects: true, maxRedirects: 3, timeoutMs: 0 },
+  options: {
+    validateSSL: true,
+    followRedirects: true,
+    maxRedirects: 3,
+    timeoutMs: 0,
+    httpVersion: 'auto'
+  },
   ...over
 })
 
@@ -60,7 +66,13 @@ describe('generateCode (text)', () => {
   it('cURL: method, headers, basic auth, body and options', () => {
     const code = generateCode('curl', {
       ...jsonPost(),
-      options: { validateSSL: false, followRedirects: true, maxRedirects: 5, timeoutMs: 1500 }
+      options: {
+        validateSSL: false,
+        followRedirects: true,
+        maxRedirects: 5,
+        timeoutMs: 1500,
+        httpVersion: 'auto'
+      }
     })
     expect(code).toBe(
       [
@@ -78,6 +90,19 @@ describe('generateCode (text)', () => {
       generateCode('curl', base({ options: { ...base().options, followRedirects: false } }))
     ).toBe(`curl 'https://api.test/users?q=1'`)
     expect(generateCode('curl', base({ method: 'HEAD' }))).toMatch(/^curl --head /)
+  })
+
+  it('passes the HTTP version on (decision 146)', () => {
+    const at = (httpVersion: CodegenRequest['options']['httpVersion']) =>
+      base({ options: { ...base().options, httpVersion } })
+    expect(generateCode('curl', at('auto'))).not.toContain('--http')
+    expect(generateCode('curl', at('http1'))).toContain('--http1.1')
+    expect(generateCode('curl', at('http2'))).toContain('--http2-prior-knowledge')
+    expect(generateCode('fetch', at('http1'))).toContain('HTTP/1.1 only')
+    expect(generateCode('fetch', at('auto'))).not.toContain('HTTP/')
+    expect(generateCode('axios', at('http2'))).toContain('HTTP/2 only')
+    expect(generateCode('python', at('http2'))).toContain('httpx')
+    expect(generateCode('python', at('http1'))).not.toContain('HTTP/')
   })
 
   it('cURL: urlencoded and multipart fields', () => {
@@ -123,7 +148,13 @@ describe('generateCode (text)', () => {
   it('Python: payload literal, auth tuple, options', () => {
     const code = generateCode('python', {
       ...jsonPost(),
-      options: { validateSSL: false, followRedirects: false, maxRedirects: 3, timeoutMs: 2000 }
+      options: {
+        validateSSL: false,
+        followRedirects: false,
+        maxRedirects: 3,
+        timeoutMs: 2000,
+        httpVersion: 'auto'
+      }
     })
     expect(code).toContain(
       'payload = {\n    "name": "Hachi",\n    "n": 1,\n    "ok": True,\n    "none": None\n}'

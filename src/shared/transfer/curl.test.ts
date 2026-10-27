@@ -105,10 +105,21 @@ describe('parseCurl', () => {
       ['Cookie', 'a=1; b=2']
     ])
     expect(request.settings).toMatchObject({ timeoutMs: 2500, validateSSL: false })
+    expect(request.settings.httpVersion).toBe('auto')
     expect(parse('curl --oauth2-bearer tok https://a.test').request.auth).toEqual({
       type: 'bearer',
       token: 'tok'
     })
+  })
+
+  it('maps HTTP version options (decision 146)', () => {
+    const version = (text: string) => parse(text).request.settings.httpVersion
+    expect(version('curl --http1.1 https://a.test')).toBe('http1')
+    expect(version('curl -0 https://a.test')).toBe('http1')
+    // --http2 falls back to HTTP/1.1 in curl too.
+    expect(version('curl --http2 https://a.test')).toBe('auto')
+    expect(version('curl --http2-prior-knowledge https://a.test')).toBe('http2')
+    expect(parse('curl --http2 --http3 https://a.test').warnings).toEqual([])
   })
 
   it('supports combined short options with values, -G, -I and --json', () => {

@@ -19,6 +19,7 @@ export const runner: Messages['runner'] = {
     TOO_LARGE: 'Response too large',
     FILE_NOT_FOUND: 'File not found',
     TOO_MANY_REDIRECTS: 'Too many redirects',
+    HTTP_VERSION: 'HTTP version',
     CANCELLED: 'Cancelled',
     UNKNOWN: 'Other'
   },
